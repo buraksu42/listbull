@@ -1,14 +1,15 @@
-import { listListsForUser } from "@/lib/db/queries/lists";
-import { requireUser } from "@/lib/server/auth/require-user";
+import { ListChecks } from "lucide-react";
+import { Suspense } from "react";
+
 import { ListRow } from "@/components/lists/list-row";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ListsListSkeleton } from "@/components/shared/list-skeleton";
+import { listListsForUser } from "@/lib/db/queries/lists";
+import { requireUser } from "@/lib/server/auth/require-user";
 
 export const dynamic = "force-dynamic";
 
-export default async function ListsPage() {
-  const user = await requireUser();
-  const lists = await listListsForUser(user.id);
-
+export default function ListsPage() {
   return (
     <main style={{ paddingBottom: "var(--lg-sp-12)" }}>
       <header
@@ -31,20 +32,34 @@ export default async function ListsPage() {
         </h1>
       </header>
 
-      {lists.length === 0 ? (
-        <EmptyState
-          title="No lists yet"
-          description="Send /start to the bot to create your Inbox."
-        />
-      ) : (
-        <ul role="list" style={{ listStyle: "none", margin: 0, padding: 0 }}>
-          {lists.map((list) => (
-            <li key={list.id}>
-              <ListRow list={list} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <Suspense fallback={<ListsListSkeleton />}>
+        <ListsContent />
+      </Suspense>
     </main>
+  );
+}
+
+async function ListsContent() {
+  const user = await requireUser();
+  const lists = await listListsForUser(user.id);
+
+  if (lists.length === 0) {
+    return (
+      <EmptyState
+        icon={<ListChecks className="h-6 w-6" aria-hidden />}
+        title="No lists yet"
+        description="Send /start to the bot to create your Inbox."
+      />
+    );
+  }
+
+  return (
+    <ul role="list" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+      {lists.map((list) => (
+        <li key={list.id}>
+          <ListRow list={list} />
+        </li>
+      ))}
+    </ul>
   );
 }

@@ -15,6 +15,42 @@ export type TelegramThemeParams = {
 
 export type TelegramColorScheme = "light" | "dark";
 
+/**
+ * Telegram WebApp MainButton — the system button at the bottom of the
+ * Mini App viewport. We use it as the form-save affordance on the
+ * Settings and Item-Edit screens (see design.md "Telegram MainButton").
+ */
+export type TelegramMainButton = {
+  text?: string;
+  isVisible?: boolean;
+  isActive?: boolean;
+  isProgressVisible?: boolean;
+  show?: () => void;
+  hide?: () => void;
+  enable?: () => void;
+  disable?: () => void;
+  showProgress?: (leaveActive?: boolean) => void;
+  hideProgress?: () => void;
+  setText?: (text: string) => void;
+  onClick?: (cb: () => void) => void;
+  offClick?: (cb: () => void) => void;
+  setParams?: (params: {
+    text?: string;
+    color?: string;
+    text_color?: string;
+    is_active?: boolean;
+    is_visible?: boolean;
+  }) => void;
+};
+
+export type TelegramBackButton = {
+  isVisible?: boolean;
+  show?: () => void;
+  hide?: () => void;
+  onClick?: (cb: () => void) => void;
+  offClick?: (cb: () => void) => void;
+};
+
 export type TelegramWebApp = {
   initData?: string;
   themeParams?: TelegramThemeParams;
@@ -23,6 +59,8 @@ export type TelegramWebApp = {
   expand?: () => void;
   onEvent?: (event: "themeChanged", handler: () => void) => void;
   offEvent?: (event: "themeChanged", handler: () => void) => void;
+  MainButton?: TelegramMainButton;
+  BackButton?: TelegramBackButton;
 };
 
 declare global {

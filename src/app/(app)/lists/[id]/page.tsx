@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 
-import { ItemRow } from "@/components/lists/item-row";
-import { EmptyState } from "@/components/shared/empty-state";
+import { ItemList } from "@/components/lists/item-list";
+import { ListSkeleton } from "@/components/shared/list-skeleton";
 import {
   getList,
   listItemsInList,
@@ -16,21 +17,31 @@ export default async function ListDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const user = await requireUser();
   const { id } = await params;
 
-  const canRead = await userCanReadList(user.id, id);
+  return (
+    <main style={{ paddingBottom: "var(--lg-sp-12)" }}>
+      <Suspense fallback={<ListDetailHeaderSkeleton />}>
+        <ListDetail listId={id} />
+      </Suspense>
+    </main>
+  );
+}
+
+async function ListDetail({ listId }: { listId: string }) {
+  const user = await requireUser();
+  const canRead = await userCanReadList(user.id, listId);
   if (!canRead) notFound();
 
-  const list = await getList(id);
+  const list = await getList(listId);
   if (!list) notFound();
 
-  const items = await listItemsInList(id);
+  const items = await listItemsInList(listId);
   const emoji = list.emoji ?? (list.isInbox ? "📥" : "📋");
   const title = list.isInbox ? "Inbox" : list.name;
 
   return (
-    <main style={{ paddingBottom: "var(--lg-sp-12)" }}>
+    <>
       <header
         style={{
           height: "var(--lg-header-h)",
@@ -55,18 +66,25 @@ export default async function ListDetailPage({
         </h1>
       </header>
 
-      {items.length === 0 ? (
-        <EmptyState
-          title="Empty list"
-          description="Send a message to the bot to add an item."
-        />
-      ) : (
-        <div role="list" aria-label={`${title} items`}>
-          {items.map((item) => (
-            <ItemRow key={item.id} item={item} />
-          ))}
-        </div>
-      )}
-    </main>
+      <ItemList listId={listId} initialItems={items} />
+    </>
+  );
+}
+
+function ListDetailHeaderSkeleton() {
+  return (
+    <>
+      <header
+        style={{
+          height: "var(--lg-header-h)",
+          padding: "0 var(--lg-sp-4)",
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--lg-sp-3)",
+          borderBottom: "1px solid var(--lg-border)",
+        }}
+      />
+      <ListSkeleton />
+    </>
   );
 }

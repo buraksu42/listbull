@@ -1,0 +1,252 @@
+/**
+ * Bot LLM router. Wired in `src/lib/server/bot/index.ts` after slash
+ * command handlers (commands take priority — grammY routes them first
+ * because `bot.command()` filters on the leading `/foo` and we register
+ * `bot.on("message:text", handleMessage)` AFTER all `bot.command(...)`
+ * calls).
+ *
+ * Flow:
+ *   1. Resolve the calling user; require BYOK key configured.
+ *   2. Persist the inbound user message.
+ *   3. Load last 30 messages for (user, chat); slice via AI's
+ *      sliceForContext.
+ *   4. Append the new user message to the sliced history; call respond().
+ *   5. Persist the assistant + tool messages produced this turn.
+ *   6. Send the final assistant text back to Telegram. Chunk on word
+ *      boundaries when >4096 chars.
+ *
+ * Phase 2 awaits the LLM inline (test scale; webhook still ack-200s
+ * within Telegram's 60s budget). Phase 4 will defer via setImmediate
+ * for production scale.
+ */
+import "server-only";
+
+import type { Context } from "grammy";
+
+import { getRecentMessages, insertMessages } from "@/lib/db/queries/messages";
+import { getUserByTelegramId } from "@/lib/db/queries/users";
+import { sliceForContext } from "@/lib/ai/conversation";
+import {
+  NO_KEY_SENTINEL,
+  ROUNDTRIP_CAP_SENTINEL,
+  respond,
+} from "@/lib/ai/respond";
+import { decrypt } from "@/lib/server/encryption";
+import { createToolDispatcher } from "@/lib/server/tools/dispatcher";
+import { pickLocale } from "@/lib/server/bot/i18n";
+
+import type {
+  ConversationMessage,
+  NewMessage,
+  ToolCall,
+} from "@/lib/types";
+
+/** Telegram caps outgoing messages at 4096 chars. */
+const TG_MAX_MESSAGE_LEN = 4096;
+
+/**
+ * Hardcoded UI copy. Bot-side i18n.ts has a small dict; we extend
+ * inline here rather than mutate that file (frontend conventions —
+ * shared dict gets larger in Phase 4 with E1+E3 work).
+ */
+const COPY = {
+  tr: {
+    noKey:
+      "AI özelliklerini kullanmak için Mini App ayarlarından OpenRouter API anahtarınızı ekleyin.",
+    keyDecryptError:
+      "API anahtarınız okunamadı. Mini App ayarlarından yeniden ekleyin.",
+    transientError: "Bir şeyler ters gitti, tekrar dener misin?",
+  },
+  en: {
+    noKey:
+      "Add your OpenRouter API key in Mini App settings to use AI features.",
+    keyDecryptError:
+      "Couldn't read your API key. Re-enter it in Mini App settings.",
+    transientError: "Something went wrong — try again?",
+  },
+} as const;
+
+export async function handleMessage(ctx: Context): Promise<void> {
+  const from = ctx.from;
+  const message = ctx.message;
+  if (!from || !message) return;
+
+  const text = message.text ?? "";
+  if (!text || text.startsWith("/")) {
+    // Slash commands are handled by `bot.command()` registrations;
+    // defensive guard for empty text.
+    return;
+  }
+
+  const user = await getUserByTelegramId(from.id);
+  if (!user) {
+    // No /start has been run yet.
+    await ctx.reply("Run /start first.");
+    return;
+  }
+
+  const locale = pickLocale(user.locale);
+  const copy = COPY[locale];
+  const chatId = message.chat.id;
+
+  // BYOK gate — fast path, no DB write if key is missing.
+  if (!user.openrouterApiKeyEncrypted) {
+    await ctx.reply(copy.noKey);
+    return;
+  }
+
+  let apiKey: string;
+  try {
+    apiKey = decrypt(user.openrouterApiKeyEncrypted);
+  } catch {
+    // Key blob is unreadable — most likely ENV_KEY rotated.
+    await ctx.reply(copy.keyDecryptError);
+    return;
+  }
+
+  // Persist the inbound user message immediately. This way `/reset`
+  // and audit log have a stable record even if the LLM call fails.
+  const userMessageRow: NewMessage = {
+    userId: user.id,
+    chatId,
+    role: "user",
+    content: text,
+    toolCalls: null,
+    toolCallId: null,
+  };
+
+  // Load history (newest first) and slice.
+  const recent = await getRecentMessages(user.id, chatId, 30);
+  const history = sliceForContext(recent);
+
+  // Append the new user turn to the sliced history before calling LLM.
+  const messagesForLlm: ConversationMessage[] = [
+    ...history,
+    { role: "user", content: text },
+  ];
+
+  // Persist user message + invoke LLM.
+  await insertMessages([userMessageRow]);
+
+  let assistantText = "";
+  let persisted: ConversationMessage[] = [];
+  let toolCalls: ToolCall[] = [];
+
+  try {
+    const result = await respond({
+      messages: messagesForLlm,
+      user: {
+        locale: user.locale,
+        firstName: user.telegramFirstName,
+        timezone: user.timezone,
+      },
+      apiKey,
+      model: user.llmModel,
+      toolDispatcher: createToolDispatcher({ userId: user.id }),
+    });
+    assistantText = result.assistantText;
+    persisted = result.persistedMessages;
+    toolCalls = result.toolCalls;
+  } catch (error) {
+    console.error("[bot/handle-message] respond() threw", error);
+    await ctx.reply(copy.transientError);
+    return;
+  }
+
+  // Sentinel handling — surface user-friendly copy in user's locale.
+  let userFacingText = assistantText;
+  if (assistantText === NO_KEY_SENTINEL) userFacingText = copy.noKey;
+  if (assistantText === ROUNDTRIP_CAP_SENTINEL)
+    userFacingText = copy.transientError;
+
+  // Persist assistant + tool messages produced this turn (batch insert
+  // via the shared helper — chronological order preserved by `persisted`).
+  if (persisted.length > 0) {
+    const rowsToInsert: NewMessage[] = persisted.map((m) =>
+      conversationMessageToRow(m, user.id, chatId),
+    );
+    await insertMessages(rowsToInsert);
+  }
+
+  // Reply via Telegram. Phase 2: plain text (no parse_mode) to avoid
+  // MarkdownV2 escape edge cases; the system prompt explicitly tells
+  // the model to avoid markdown.
+  await sendChunked(ctx, userFacingText);
+
+  // Telemetry hook (no-op for now): toolCalls is the per-turn dispatch
+  // log. Sentry breadcrumb in Phase 4.
+  void toolCalls;
+}
+
+function conversationMessageToRow(
+  msg: ConversationMessage,
+  userId: string,
+  chatId: number,
+): NewMessage {
+  switch (msg.role) {
+    case "user":
+      return {
+        userId,
+        chatId,
+        role: "user",
+        content: msg.content,
+        toolCalls: null,
+        toolCallId: null,
+      };
+    case "assistant":
+      return {
+        userId,
+        chatId,
+        role: "assistant",
+        content: msg.content,
+        toolCalls:
+          msg.toolCalls && msg.toolCalls.length > 0
+            ? (msg.toolCalls as unknown as object)
+            : null,
+        toolCallId: null,
+      };
+    case "tool":
+      return {
+        userId,
+        chatId,
+        role: "tool",
+        content: msg.content,
+        toolCalls: null,
+        toolCallId: msg.toolCallId,
+      };
+  }
+}
+
+/**
+ * Chunk on word boundaries when text exceeds Telegram's 4096-char cap.
+ * Sends sequentially so messages arrive in order.
+ */
+async function sendChunked(ctx: Context, text: string): Promise<void> {
+  if (text.length <= TG_MAX_MESSAGE_LEN) {
+    await ctx.reply(text);
+    return;
+  }
+
+  const chunks = splitOnWordBoundary(text, TG_MAX_MESSAGE_LEN);
+  for (const chunk of chunks) {
+    await ctx.reply(chunk);
+  }
+}
+
+export function splitOnWordBoundary(text: string, maxLen: number): string[] {
+  const out: string[] = [];
+  let remaining = text;
+  while (remaining.length > maxLen) {
+    // Look for the last whitespace within the cap window.
+    const slice = remaining.slice(0, maxLen);
+    const lastSpace = Math.max(
+      slice.lastIndexOf(" "),
+      slice.lastIndexOf("\n"),
+    );
+    const cut = lastSpace > Math.floor(maxLen * 0.5) ? lastSpace : maxLen;
+    out.push(remaining.slice(0, cut));
+    remaining = remaining.slice(cut).trimStart();
+  }
+  if (remaining.length > 0) out.push(remaining);
+  return out;
+}

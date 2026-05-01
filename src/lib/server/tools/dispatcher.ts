@@ -1,0 +1,65 @@
+/**
+ * Tool dispatcher: routes a `ToolCall` from `respond.ts` to the right
+ * executor for the given user context.
+ *
+ * The dispatcher MUST return successfully — even tool failures travel
+ * back as `output` envelopes so the LLM can recover. Throwing is
+ * reserved for unrecoverable infra issues; `respond.ts`'s `safeDispatch`
+ * catches those and converts them to internal_error envelopes.
+ */
+import "server-only";
+
+import type { ToolCall, ToolResult } from "@/lib/types";
+import type { ToolDispatcher } from "@/lib/ai/types";
+import type { ToolName } from "@/lib/ai/tools";
+
+import { executeCreateItem } from "./create-item";
+import { executeSearchItems } from "./search-items";
+import { executeUpdateItem } from "./update-item";
+import { executeCompleteItem } from "./complete-item";
+import { executeDeleteItem } from "./delete-item";
+import { executeListLists } from "./list-lists";
+import { ERR } from "./_shared";
+
+/**
+ * Build a per-user dispatcher. Backend's bot router calls this once per
+ * Telegram update and passes the dispatcher into `respond()`.
+ */
+export function createToolDispatcher(ctx: {
+  userId: string;
+}): ToolDispatcher {
+  return async function dispatch(call: ToolCall): Promise<ToolResult> {
+    const { id, name, input } = call;
+    const output = await routeCall(name as ToolName, input, ctx);
+    return { toolCallId: id, output };
+  };
+}
+
+async function routeCall(
+  name: ToolName | string,
+  input: unknown,
+  ctx: { userId: string },
+): Promise<unknown> {
+  switch (name) {
+    case "create_item":
+      return await executeCreateItem(input, ctx);
+    case "search_items":
+      return await executeSearchItems(input, ctx);
+    case "update_item":
+      return await executeUpdateItem(input, ctx);
+    case "complete_item":
+      return await executeCompleteItem(input, ctx);
+    case "delete_item":
+      return await executeDeleteItem(input, ctx);
+    case "list_lists":
+      return await executeListLists(input, ctx);
+    default:
+      return {
+        ok: false,
+        error: {
+          code: ERR.bad_input,
+          message: `Unknown tool: ${name}`,
+        },
+      };
+  }
+}
