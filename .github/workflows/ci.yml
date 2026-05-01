@@ -1,0 +1,42 @@
+name: CI
+
+# Minimal CI gate — matches CLAUDE.md L70 documented spec.
+# Safe for fresh `create-next-app` scaffolds: lint + tsc are present by default,
+# test runs only `--if-present` so missing test script does not fail CI.
+# Add stricter steps (format:check, build, etc.) per-project as project matures.
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  lint-typecheck-test:
+    name: Lint, Type check, Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Run tests (if any)
+        run: npm test --if-present

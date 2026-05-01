@@ -1,0 +1,25 @@
+title = "Project gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Allow placeholder secrets in example env files"
+paths = [
+  '''\.env\.example$''',
+  '''\.env\.production\.example$''',
+  '''\.env\.development\.example$''',
+  '''\.env\.test\.example$''',
+  '''\.env\.staging\.example$''',
+]
+
+[[allowlists]]
+description = "Allow short, obviously-fake placeholder values across the repo"
+regexes = [
+  '''sk-or-v1-(xxx+|your[-_]?key|placeholder|changeme|todo|fillme|here|example)''',
+  '''re_(xxx+|your[-_]?key|placeholder|changeme|todo|fillme|here|example)''',
+  '''apify_api_(xxx+|your[-_]?key|placeholder|changeme|todo|fillme|here|example)''',
+  '''sntryu_(xxx+|your[-_]?token|placeholder|changeme|todo|fillme|here|example)''',
+  '''ghp_(xxx+|your[-_]?token|placeholder|changeme|todo|fillme|here|example)''',
+  '''github_pat_(xxx+|your[-_]?token|placeholder|changeme|todo|fillme|here|example)''',
+]
