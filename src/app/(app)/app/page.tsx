@@ -1,0 +1,105 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+import "@/lib/telegram/webapp-types";
+
+type Phase = "booting" | "no-telegram" | "auth-failed";
+
+export default function AppBoot() {
+  const [phase, setPhase] = useState<Phase>("booting");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      const tg = window.Telegram?.WebApp;
+
+      if (!tg || !tg.initData) {
+        if (!cancelled) setPhase("no-telegram");
+        return;
+      }
+
+      tg.ready?.();
+      tg.expand?.();
+
+      try {
+        const res = await fetch("/api/auth/telegram", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ initData: tg.initData }),
+        });
+
+        if (!res.ok) {
+          const json = (await res.json().catch(() => null)) as
+            | { error?: { message?: string } }
+            | null;
+          if (!cancelled) {
+            setError(json?.error?.message ?? `HTTP ${res.status}`);
+            setPhase("auth-failed");
+          }
+          return;
+        }
+
+        if (!cancelled) {
+          // Cookie is set; navigate to the list-of-lists view.
+          window.location.replace("/lists");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+          setPhase("auth-failed");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <main
+      style={{
+        minHeight: "100dvh",
+        display: "grid",
+        placeItems: "center",
+        padding: "var(--lg-sp-6)",
+        textAlign: "center",
+      }}
+    >
+      {phase === "booting" && (
+        <p style={{ color: "var(--lg-muted-fg)" }}>Loading…</p>
+      )}
+      {phase === "no-telegram" && (
+        <div>
+          <p style={{ color: "var(--lg-fg)", marginBottom: "var(--lg-sp-3)" }}>
+            listgram works inside Telegram.
+          </p>
+          <p style={{ color: "var(--lg-muted-fg)" }}>
+            Open this app via the bot button on Telegram.
+          </p>
+        </div>
+      )}
+      {phase === "auth-failed" && (
+        <div>
+          <p style={{ color: "var(--lg-destructive)" }}>
+            Authentication failed.
+          </p>
+          {error && (
+            <p
+              style={{
+                color: "var(--lg-muted-fg)",
+                fontSize: "var(--lg-fs-sm)",
+                marginTop: "var(--lg-sp-2)",
+              }}
+            >
+              {error}
+            </p>
+          )}
+        </div>
+      )}
+    </main>
+  );
+}

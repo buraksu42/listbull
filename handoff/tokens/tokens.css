@@ -1,0 +1,145 @@
+/* listgram · design tokens · v1
+ * Direction C "Sent" — chat-bubble mark
+ * Theme tokens are scoped on [data-theme] / [data-theme="dark"].
+ * Telegram Mini Apps expose CSS vars via tg-theme-*; bridge them in app code.
+ */
+
+:root {
+  /* ─── Brand ─── */
+  --lg-accent:           #00D9C0;
+  --lg-accent-cobalt:    #3D7DFF;
+  --lg-accent-marigold:  #F0A020;
+  --lg-accent-rose:      #E5466F;
+
+  --lg-ink-deep:  #0A1419;
+  --lg-ink:       #0A0A0A;
+  --lg-paper:     #FFFFFF;
+
+  /* ─── Type ─── */
+  --lg-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --lg-font-brand: var(--lg-font-sans);
+
+  --lg-fs-xs:  11px;
+  --lg-fs-sm:  12px;
+  --lg-fs-md:  14px;
+  --lg-fs-lg:  16px;
+  --lg-fs-xl:  18px;
+  --lg-fs-2xl: 22px;
+  --lg-fs-3xl: 28px;
+  --lg-fs-4xl: 34px;
+
+  --lg-fw-regular:  400;
+  --lg-fw-medium:   500;
+  --lg-fw-semibold: 600;
+  --lg-fw-bold:     700;
+
+  --lg-tracking-wordmark: -0.02em;
+  --lg-tracking-title:    -0.01em;
+  --lg-tracking-body:     0;
+
+  /* ─── Radius ─── */
+  --lg-r-sm:   6px;
+  --lg-r-md:   10px;
+  --lg-r-lg:   14px;
+  --lg-r-xl:   22px;
+  --lg-r-full: 9999px;
+
+  /* ─── Spacing (4px base) ─── */
+  --lg-sp-1:  4px;
+  --lg-sp-2:  8px;
+  --lg-sp-3:  12px;
+  --lg-sp-4:  16px;
+  --lg-sp-5:  20px;
+  --lg-sp-6:  24px;
+  --lg-sp-8:  32px;
+  --lg-sp-10: 40px;
+  --lg-sp-12: 48px;
+
+  /* ─── Elevation ─── */
+  --lg-shadow-card:    0 1px 2px rgba(10,20,25,0.04), 0 2px 8px rgba(10,20,25,0.04);
+  --lg-shadow-popover: 0 8px 24px rgba(10,20,25,0.16);
+  --lg-shadow-sheet:   0 -8px 24px rgba(10,20,25,0.18);
+
+  /* ─── Motion ─── */
+  --lg-dur-fast:   120ms;
+  --lg-dur-normal: 200ms;
+  --lg-dur-slow:   320ms;
+  --lg-ease-std:   cubic-bezier(0.2, 0, 0, 1);
+  --lg-ease-emph:  cubic-bezier(0.3, 0, 0, 1);
+
+  /* ─── Sizes ─── */
+  --lg-checkbox:    22px;
+  --lg-icon-sm:     16px;
+  --lg-icon-md:     18px;
+  --lg-icon-lg:     24px;
+  --lg-avatar:      28px;
+  --lg-tap-target:  44px;
+  --lg-header-h:    52px;
+}
+
+/* ─── Light theme (default) ─── */
+:root,
+[data-theme="light"] {
+  --lg-bg:          #FFFFFF;
+  --lg-fg:          #0A0A0A;
+  --lg-card:        #F4F4F5;
+  --lg-card-fg:     #0A0A0A;
+  --lg-muted:       #F4F4F5;
+  --lg-muted-fg:    #707579;
+  --lg-border:      #E1E4E8;
+  --lg-input-bg:    #FFFFFF;
+  --lg-subtle:      #FAFAFA;
+  --lg-destructive: #E53935;
+  --lg-success:     #2EB872;
+  --lg-accent-fg:   #FFFFFF; /* on top of --lg-accent */
+}
+
+/* ─── Dark theme (Telegram default) ─── */
+[data-theme="dark"] {
+  --lg-bg:          #17212B;
+  --lg-fg:          #F5F5F5;
+  --lg-card:        #232E3C;
+  --lg-card-fg:     #F5F5F5;
+  --lg-muted:       #232E3C;
+  --lg-muted-fg:    #708499;
+  --lg-border:      #2C3A4D;
+  --lg-input-bg:    #1B2735;
+  --lg-subtle:      #1C2734;
+  --lg-destructive: #FF5252;
+  --lg-success:     #4DD18C;
+  --lg-accent-fg:   #0A1419;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --lg-bg:          #17212B;
+    --lg-fg:          #F5F5F5;
+    --lg-card:        #232E3C;
+    --lg-card-fg:     #F5F5F5;
+    --lg-muted:       #232E3C;
+    --lg-muted-fg:    #708499;
+    --lg-border:      #2C3A4D;
+    --lg-input-bg:    #1B2735;
+    --lg-subtle:      #1C2734;
+    --lg-destructive: #FF5252;
+    --lg-success:     #4DD18C;
+    --lg-accent-fg:   #0A1419;
+  }
+}
+
+/* ─── Base resets that match the design ─── */
+html, body {
+  font-family: var(--lg-font-sans);
+  font-size: var(--lg-fs-md);
+  background: var(--lg-bg);
+  color: var(--lg-fg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Wordmark utility */
+.lg-wordmark {
+  font-family: var(--lg-font-brand);
+  font-weight: var(--lg-fw-bold);
+  letter-spacing: var(--lg-tracking-wordmark);
+}
