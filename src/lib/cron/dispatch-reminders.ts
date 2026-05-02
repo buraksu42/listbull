@@ -176,7 +176,7 @@ export async function dispatchReminders(): Promise<{
     return { picked: 0, sent: 0, failed: 0 };
   }
 
-  const bot = getBot();
+  const bot = await getBot();
   let sent = 0;
   let failed = 0;
 

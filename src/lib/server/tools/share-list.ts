@@ -198,7 +198,7 @@ export async function executeShareList(
   // started the bot and can only paste the link from the inviter.
   if (invitee?.telegramId) {
     try {
-      const bot = getBot();
+      const bot = await getBot();
       const locale = pickLocale(invitee.locale);
       const inviterName = callerRow?.telegramFirstName ?? "Someone";
       const listEmoji = listRow.emoji ?? "📋";

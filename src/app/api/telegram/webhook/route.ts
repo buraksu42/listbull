@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const bot = getBot();
+  const bot = await getBot();
 
   // Telegram retries on 5xx — never throw out of the handler.
   // Phase 1: handlers are fast; we await inline. Phase 2 will defer LLM work.
