@@ -2,7 +2,6 @@ import type { Context } from "grammy";
 
 import { ensureInbox } from "@/lib/db/queries/lists";
 import { upsertUserFromTelegram } from "@/lib/db/queries/users";
-import { escapeMarkdownV2 } from "@/lib/server/bot/escape-markdown";
 import { pickLocale, t } from "@/lib/server/bot/i18n";
 
 export async function handleStart(ctx: Context): Promise<void> {
@@ -22,7 +21,11 @@ export async function handleStart(ctx: Context): Promise<void> {
 
   const locale = pickLocale(user.locale);
   const tr = t(locale);
-  const text = tr.welcome(escapeMarkdownV2(user.telegramFirstName));
+  // Plain text (no parse_mode) — MarkdownV2 reserved characters (!, ., -, etc.)
+  // would all need escaping which makes the welcome copy unreadable in source.
+  // Phase 2 LLM router (handle-message.ts) already settled on plain text;
+  // /start now matches that convention.
+  const text = tr.welcome(user.telegramFirstName);
 
-  await ctx.reply(text, { parse_mode: "MarkdownV2" });
+  await ctx.reply(text);
 }
