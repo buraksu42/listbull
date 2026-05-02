@@ -34,7 +34,8 @@ import type {
   ToolResult,
 } from "@/lib/types";
 
-import { systemPromptV1 } from "@/lib/ai/prompts/system.v1";
+// rollback: systemPromptV1 from "@/lib/ai/prompts/system.v1"
+import { systemPromptV2 } from "@/lib/ai/prompts/system.v2";
 import { tools as toolRegistry } from "@/lib/ai/tools";
 import type { RespondInput, RespondOutput } from "@/lib/ai/types";
 
@@ -79,7 +80,7 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
     // the SDK's default is fine.
   });
 
-  const system = systemPromptV1({
+  const system = systemPromptV2({
     userLocale: user.locale,
     userFirstName: user.firstName,
     userTimezone: user.timezone,

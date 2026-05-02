@@ -10,6 +10,11 @@ import {
   ItemEditSheet,
   type ItemEditPatch,
 } from "@/components/lists/item-edit-sheet";
+import {
+  membersById,
+  membersKey,
+  type MemberRow,
+} from "@/components/lists/member-list";
 import { EmptyState } from "@/components/shared/empty-state";
 import { toast } from "@/components/ui/sonner";
 import { apiDelete, ApiError, apiFetch, apiPatch } from "@/lib/api-client";
@@ -32,18 +37,30 @@ import type {
  * useOptimistic's split-state confusion when the polling response races
  * against an in-flight mutation. The same cache invalidation step also
  * handles concurrent mutations (sharing list users editing simultaneously).
+ *
+ * Phase 3: also reads the members cache (populated by <MemberList /> on
+ * the same screen) to feed assignee badges into <DraggableItemList />.
+ * The members list is a small parallel query (5s polling, same as items)
+ * so badges stay in sync when members are added/removed.
  */
 
 type ItemsResponse = { items: Item[] };
+type MembersResponse = { members: MemberRow[] };
 
 const itemsKey = (listId: string) => ["items", listId] as const;
 
 export function ItemList({
   listId,
   initialItems,
+  initialMembers = [],
 }: {
   listId: string;
   initialItems: Item[];
+  /**
+   * Phase 3: parent passes members fetched server-side so assignee
+   * badges render on first paint without a client-side flash.
+   */
+  initialMembers?: MemberRow[];
 }) {
   const queryClient = useQueryClient();
 
@@ -58,7 +75,22 @@ export function ItemList({
     initialData: initialItems,
   });
 
+  const membersQuery = useQuery<MemberRow[]>({
+    queryKey: membersKey(listId),
+    queryFn: async () => {
+      const data = await apiFetch<MembersResponse>(
+        `/api/lists/${listId}/members`,
+      );
+      return data.members;
+    },
+    initialData: initialMembers,
+  });
+
   const items = itemsQuery.data ?? [];
+  const memberLookup = React.useMemo(
+    () => membersById(membersQuery.data),
+    [membersQuery.data],
+  );
 
   // ─── toggle (is_done) ───────────────────────────────────────────────
   const toggleMutation = useMutation<
@@ -217,6 +249,7 @@ export function ItemList({
           editMutation.variables?.id,
           deleteMutation.variables?.id,
         )}
+        membersByUserId={memberLookup}
       />
 
       <ItemEditSheet

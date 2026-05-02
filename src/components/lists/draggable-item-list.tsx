@@ -21,6 +21,7 @@ import { GripVertical } from "lucide-react";
 import * as React from "react";
 
 import { ItemRow } from "@/components/lists/item-row";
+import type { MemberRow } from "@/components/lists/member-list";
 import type { Item } from "@/lib/types";
 
 /**
@@ -32,6 +33,9 @@ import type { Item } from "@/lib/types";
  * neighbour positions (gaps of ~1024 between items at insert time so
  * subsequent reorders rarely cascade). The parent <ItemList /> persists
  * `position` for the moved item only; other rows keep their numbers.
+ *
+ * Phase 3: the parent passes a `membersByUserId` Map so each row can
+ * resolve its assignee's display info without re-fetching.
  */
 export function DraggableItemList({
   items,
@@ -40,6 +44,7 @@ export function DraggableItemList({
   onDelete,
   onReorder,
   pendingIds,
+  membersByUserId,
 }: {
   items: Item[];
   onToggle: (id: string, next: boolean) => void;
@@ -47,6 +52,7 @@ export function DraggableItemList({
   onDelete: (item: Item) => void;
   onReorder: (id: string, newPosition: number, optimistic: Item[]) => void;
   pendingIds: Set<string>;
+  membersByUserId?: Map<string, MemberRow>;
 }) {
   const sensors = useSensors(
     // 8px activation distance keeps tap-to-toggle responsive while still
@@ -92,16 +98,24 @@ export function DraggableItemList({
         strategy={verticalListSortingStrategy}
       >
         <div role="list" aria-label="Items">
-          {items.map((item) => (
-            <SortableItem
-              key={item.id}
-              item={item}
-              onToggle={(next) => onToggle(item.id, next)}
-              onEdit={() => onEdit(item)}
-              onDelete={() => onDelete(item)}
-              pending={pendingIds.has(item.id)}
-            />
-          ))}
+          {items.map((item) => {
+            const assignee =
+              item.assigneeId !== null
+                ? membersByUserId?.get(item.assigneeId)
+                : undefined;
+            return (
+              <SortableItem
+                key={item.id}
+                item={item}
+                onToggle={(next) => onToggle(item.id, next)}
+                onEdit={() => onEdit(item)}
+                onDelete={() => onDelete(item)}
+                pending={pendingIds.has(item.id)}
+                assigneeFirstName={assignee?.user.telegramFirstName ?? null}
+                assigneePhotoUrl={assignee?.user.telegramPhotoUrl ?? null}
+              />
+            );
+          })}
         </div>
       </SortableContext>
     </DndContext>
@@ -114,12 +128,16 @@ function SortableItem({
   onEdit,
   onDelete,
   pending,
+  assigneeFirstName,
+  assigneePhotoUrl,
 }: {
   item: Item;
   onToggle: (next: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
   pending: boolean;
+  assigneeFirstName: string | null;
+  assigneePhotoUrl: string | null;
 }) {
   const {
     attributes,
@@ -161,6 +179,8 @@ function SortableItem({
         onDelete={onDelete}
         pending={pending}
         dragHandle={dragHandle}
+        assigneeFirstName={assigneeFirstName}
+        assigneePhotoUrl={assigneePhotoUrl}
       />
     </div>
   );

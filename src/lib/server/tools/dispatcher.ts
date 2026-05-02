@@ -19,6 +19,9 @@ import { executeUpdateItem } from "./update-item";
 import { executeCompleteItem } from "./complete-item";
 import { executeDeleteItem } from "./delete-item";
 import { executeListLists } from "./list-lists";
+import { executeShareList } from "./share-list";
+import { executeScheduleReminder } from "./schedule-reminder";
+import { executeAssignItem } from "./assign-item";
 import { ERR } from "./_shared";
 
 /**
@@ -53,6 +56,12 @@ async function routeCall(
       return await executeDeleteItem(input, ctx);
     case "list_lists":
       return await executeListLists(input, ctx);
+    case "share_list":
+      return await executeShareList(input, ctx);
+    case "schedule_reminder":
+      return await executeScheduleReminder(input, ctx);
+    case "assign_item":
+      return await executeAssignItem(input, ctx);
     default:
       return {
         ok: false,

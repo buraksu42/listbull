@@ -12,6 +12,11 @@ export async function getUserByTelegramId(
   });
 }
 
+/** Fetch a user row by its primary key. Returns undefined if missing. */
+export async function getUserById(id: string): Promise<User | undefined> {
+  return db.query.users.findFirst({ where: eq(users.id, id) });
+}
+
 export async function upsertUserFromTelegram(input: {
   telegramId: number;
   telegramUsername: string | null;

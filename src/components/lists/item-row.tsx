@@ -4,20 +4,30 @@ import { GripVertical } from "lucide-react";
 import * as React from "react";
 
 import { ItemActions } from "@/components/lists/item-actions";
+import { Avatar } from "@/components/lists/member-list";
 import type { Item } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /**
- * Phase 2 interactive item row.
+ * Phase 2 interactive item row + Phase 3 assignee badge.
  *
  * - Circular checkbox (22×22) toggles `isDone` via `onToggle`.
  * - Row body (text) is its own button — tapping opens edit.
- * - Trailing cluster: drag handle (when reorder mode) + edit + delete actions.
+ * - Trailing cluster: assignee avatar pill (when assigned) + drag
+ *   handle (when reorder mode) + edit + delete actions.
  * - Pending state (network call in flight) drops the row to 60% opacity.
  *
  * Mutation orchestration (debounce, rollback, toast) lives one level up
  * in <ItemList />; this component is purely presentational + dispatches
  * intents.
+ *
+ * Phase 3: when `item.assigneeId !== null`, we render a 28×28 avatar
+ * pill before the action cluster. The parent <ItemList /> resolves the
+ * assignee's first name + photo from its `members` Map and passes them
+ * via `assigneeFirstName` / `assigneePhotoUrl`. If the member dropped
+ * out of the list mid-cycle the badge falls back to a "?" monogram and
+ * still renders the assignee_id (the row is functionally still
+ * assigned). The aria-label includes "assigned to <name>".
  */
 export type ItemRowProps = {
   item: Item;
@@ -28,6 +38,13 @@ export type ItemRowProps = {
   pending?: boolean;
   /** Render slot for the drag handle wired to dnd-kit listeners. */
   dragHandle?: React.ReactNode;
+  /**
+   * Phase 3 — denormalized assignee info supplied by the parent
+   * <ItemList /> from its members lookup. Optional: when null the badge
+   * is hidden.
+   */
+  assigneeFirstName?: string | null;
+  assigneePhotoUrl?: string | null;
 };
 
 export function ItemRow({
@@ -37,8 +54,18 @@ export function ItemRow({
   onDelete,
   pending = false,
   dragHandle,
+  assigneeFirstName = null,
+  assigneePhotoUrl = null,
 }: ItemRowProps) {
-  const ariaLabel = `${item.isDone ? "completed " : ""}${item.text}`;
+  const assignedTo =
+    item.assigneeId !== null ? assigneeFirstName ?? "?" : null;
+  const ariaLabel = [
+    item.isDone ? "completed " : "",
+    item.text,
+    assignedTo ? `, assigned to ${assignedTo}` : "",
+  ]
+    .join("")
+    .trim();
 
   return (
     <div
@@ -85,6 +112,20 @@ export function ItemRow({
       >
         {item.text}
       </button>
+
+      {item.assigneeId !== null && (
+        <span
+          aria-hidden
+          title={assignedTo ?? undefined}
+          className="shrink-0"
+        >
+          <Avatar
+            name={assigneeFirstName}
+            photoUrl={assigneePhotoUrl}
+            size={28}
+          />
+        </span>
+      )}
 
       <ItemActions
         onEdit={onEdit}

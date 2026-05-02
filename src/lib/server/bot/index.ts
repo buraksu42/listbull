@@ -2,6 +2,8 @@ import { Bot } from "grammy";
 
 import { handleHelp } from "@/lib/server/bot/commands/help";
 import { handleLists } from "@/lib/server/bot/commands/lists";
+import { handleReset } from "@/lib/server/bot/commands/reset";
+import { handleShare } from "@/lib/server/bot/commands/share";
 import { handleStart } from "@/lib/server/bot/commands/start";
 import { handleMessage } from "@/lib/server/bot/handle-message";
 import { env } from "@/lib/env";
@@ -26,6 +28,9 @@ export function getBot(): Bot {
   bot.command("start", handleStart);
   bot.command("help", handleHelp);
   bot.command("lists", handleLists);
+  // Phase 3 commands.
+  bot.command("share", handleShare);
+  bot.command("reset", handleReset);
 
   // Phase 2 LLM router: any plain-text message that isn't a slash command.
   bot.on("message:text", handleMessage);

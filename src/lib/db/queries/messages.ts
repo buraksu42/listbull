@@ -64,6 +64,22 @@ export async function insertMessages(
 }
 
 /**
+ * Phase 3 `/reset` command: delete every conversation row for a
+ * (user, chat) pair. This is the ONLY DELETE-WHERE on `messages`
+ * (Inv-7). Returns the number of rows actually deleted.
+ */
+export async function clearConversation(
+  userId: string,
+  chatId: number,
+): Promise<number> {
+  const rows = await db
+    .delete(messages)
+    .where(and(eq(messages.userId, userId), eq(messages.chatId, chatId)))
+    .returning({ id: messages.id });
+  return rows.length;
+}
+
+/**
  * Convert a raw Drizzle row (with jsonb `toolCalls: unknown`) into the
  * public `MessageWithToolCalls` shape. Defensive — bad jsonb yields
  * `null` rather than throwing, matching the AI-side rowToConversationMessage

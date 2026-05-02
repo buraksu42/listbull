@@ -1,5 +1,5 @@
 /**
- * LLM tool registry for listgram Phase 2.
+ * LLM tool registry for listgram Phase 2 + Phase 3.
  *
  * Each tool exports:
  *   - input zod schema  → `<tool>InputSchema`
@@ -10,7 +10,9 @@
  * `respond.ts` (this file's neighbor) and re-validated defensively by
  * Backend executors in `src/lib/server/tools/**`. Both sides treat the
  * zod schemas as the immovable contract — see
- * `docs/architecture-pass-phase-2.md` for the canonical description.
+ * `docs/architecture-pass-phase-2.md` (tools 1-6) and
+ * `docs/architecture-pass-phase-3.md` (tools 7-9: share_list,
+ * schedule_reminder, assign_item) for the canonical descriptions.
  *
  * Field names are exact per contract; do not improvise. Adding a tool
  * or field requires an Architect-agent invocation, not in-flight edits.
@@ -210,6 +212,123 @@ export const listListsOutputSchema = z.object({
 export type ListListsInput = z.infer<typeof listListsInputSchema>;
 export type ListListsOutput = z.infer<typeof listListsOutputSchema>;
 
+// ─── 7. share_list (Phase 3) ────────────────────────────────────────
+//
+// Field names match `docs/architecture-pass-phase-3.md` § "share_list"
+// exactly. Caller passes `username` (with or without leading @ — the
+// executor lowers + strips). At least one of `list_id` or `list_name`
+// must be present; Inbox fallback does NOT apply (sharing your Inbox
+// is nonsensical, and the executor returns `cannot_share_inbox`).
+
+export const shareListInputSchema = z
+  .object({
+    username: z
+      .string()
+      .trim()
+      .min(1, "username is required")
+      .max(33, "username must be ≤32 chars (plus optional leading @)"),
+    list_id: z.string().uuid().optional(),
+    list_name: z.string().min(1).max(200).optional(),
+    role: z.enum(["editor", "viewer"]).default("editor"),
+  })
+  .refine((v) => v.list_id !== undefined || v.list_name !== undefined, {
+    message: "one of list_id or list_name must be supplied",
+    path: ["list_id"],
+  });
+
+export const shareListOutputSchema = z.object({
+  invite: z.object({
+    token: z.string(),
+    /** ISO 8601, default now + 7 days. */
+    expiresAt: z.string().datetime({ offset: true }),
+    /** e.g. "https://t.me/<bot>?startapp=invite_<token>". */
+    deeplink: z.string(),
+    role: z.enum(["editor", "viewer"]),
+  }),
+  list: listLiteSchema,
+  /** Lowered, leading-@ stripped — what was actually stored. */
+  invitedUsername: z.string(),
+  /**
+   * True when the invitee is already a member of this list. Phrase
+   * the reply as "X zaten üye"; do NOT include the deeplink even
+   * though `invite` is populated for shape consistency.
+   */
+  alreadyMember: z.boolean().optional(),
+});
+
+export type ShareListInput = z.infer<typeof shareListInputSchema>;
+export type ShareListOutput = z.infer<typeof shareListOutputSchema>;
+
+// ─── 8. schedule_reminder (Phase 3) ─────────────────────────────────
+//
+// Thin semantic wrapper over `update_item` for the due_at column.
+// Per Architect's contract (§ schedule_reminder), the input is just
+// `item_id` + `due_at` — no list/text resolution path. If the user's
+// reference is fuzzy ("Sapiens'i pazartesi 09:00'da hatırlatsın"),
+// the LLM is expected to call `search_items` first to obtain the
+// `item_id`, then call this tool. `due_at: null` (explicit) clears
+// the reminder; omission → `invalid_input`.
+
+export const scheduleReminderInputSchema = z.object({
+  item_id: z.string().uuid(),
+  /**
+   * ISO 8601 with offset to set; explicit null to clear. Required
+   * (omission → `invalid_input`) — the difference between "set" and
+   * "clear" must be explicit so we don't conflate them.
+   */
+  due_at: z.string().datetime({ offset: true }).nullable(),
+});
+
+export const scheduleReminderOutputSchema = z.object({
+  /** Post-update snapshot; reminder_sent reset to false on set. */
+  item: itemSnapshotSchema,
+  /** True when the call cleared a previously-set due_at. */
+  cleared: z.boolean(),
+  /** Soft warnings (e.g. due_at_in_past). */
+  warnings: z.array(z.string()).optional(),
+});
+
+export type ScheduleReminderInput = z.infer<typeof scheduleReminderInputSchema>;
+export type ScheduleReminderOutput = z.infer<typeof scheduleReminderOutputSchema>;
+
+// ─── 9. assign_item (Phase 3) ───────────────────────────────────────
+//
+// Field name `assignee_username` matches Architect's contract (§
+// assign_item) — it accepts BOTH a Telegram handle ("@ali", "ali")
+// and a bare first-name token ("Ali"). The executor — not the LLM —
+// resolves: lower(telegram_username) exact match, falling back to
+// lower(telegram_first_name) prefix match, scoped to the item's
+// list members. Pass `null` (explicit) to unassign.
+
+export const assignItemInputSchema = z.object({
+  item_id: z.string().uuid(),
+  /**
+   * Username (with or without leading @) OR bare first-name token.
+   * Executor resolves against the list's members only. `null`
+   * unassigns. Required (omission → `invalid_input`) — see
+   * `schedule_reminder` for the "set vs clear must be explicit" rationale.
+   */
+  assignee_username: z.string().trim().min(1).max(64).nullable(),
+});
+
+export const assignItemOutputSchema = z.object({
+  /** Post-update snapshot. */
+  item: itemSnapshotSchema,
+  /** Resolved assignee user; null when unassigned. */
+  assignee: z
+    .object({
+      id: z.string().uuid(),
+      telegramUsername: z.string().nullable(),
+      telegramFirstName: z.string(),
+    })
+    .nullable(),
+  /** Previous assignee_id, or null if previously unassigned. */
+  previousAssigneeId: z.string().uuid().nullable(),
+});
+
+export type AssignItemInput = z.infer<typeof assignItemInputSchema>;
+export type AssignItemOutput = z.infer<typeof assignItemOutputSchema>;
+
 // ─── tool registry (LLM-facing) ─────────────────────────────────────
 
 /**
@@ -231,6 +350,9 @@ export const TOOL_NAMES = [
   "complete_item",
   "delete_item",
   "list_lists",
+  "share_list",
+  "schedule_reminder",
+  "assign_item",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -314,6 +436,78 @@ export const tools: readonly ToolDefinition[] = [
       "Read-only; no mutations.",
     inputSchema: listListsInputSchema,
     outputSchema: listListsOutputSchema,
+  },
+  {
+    name: "share_list",
+    description:
+      "Invite another Telegram user to one of the OWNER's lists as " +
+      "an editor (default) or viewer — the bot DMs the invitee a " +
+      "deeplink that opens the Mini App accept screen. Pass " +
+      "`username` (with or without leading @ — case is normalized). " +
+      "Pass `list_id` when known; else `list_name` (resolved with the " +
+      "same rules as `create_item` EXCEPT no Inbox fallback — sharing " +
+      "the Inbox is rejected with `cannot_share_inbox`). Caller must " +
+      "be the list `owner` (editors and viewers cannot share — " +
+      "`forbidden`). The invitee must have started the bot at least " +
+      "once for the DM to land; if not, the executor returns warning " +
+      "`invitee_dm_failed` but the invite row is still valid (user " +
+      "can paste the deeplink manually). If the user is already a " +
+      "member, the tool returns `alreadyMember: true` with NO new " +
+      "invite — phrase the reply as 'X zaten üye' and skip the " +
+      "deeplink. Common error envelopes: `forbidden` (caller not " +
+      "owner), `invalid_input` (self-invite or `cannot_share_inbox`), " +
+      "`ambiguous_list`, `not_found`. For multi-list ambiguity " +
+      "(\"share my list\" with multiple lists), ask the user which " +
+      "list before calling.",
+    inputSchema: shareListInputSchema,
+    outputSchema: shareListOutputSchema,
+  },
+  {
+    name: "schedule_reminder",
+    description:
+      "Set, change, or clear the due_at on an EXISTING item — does " +
+      "NOT create new items. Pass `item_id` (resolve via `search_items` " +
+      "first if you only have item text) plus either `due_at` (ISO " +
+      "8601 with timezone offset, in the future) to schedule, or " +
+      "`due_at: null` (explicit) to clear. The reminder fires as a " +
+      "Telegram DM at the given time (UTC-aligned within ±60 s); if " +
+      "the item has an assignee, the DM goes to the assignee, " +
+      "otherwise to the item's creator. Past `due_at` values are " +
+      "silently dropped with warning `due_at_in_past` — surface the " +
+      "correction gently and re-prompt the user for a future time, " +
+      "do not refuse. Notes (`is_checkable=false`) cannot be " +
+      "scheduled (`cannot_schedule_note`). Re-arming an already-fired " +
+      "reminder works — the executor resets `reminder_sent` to false. " +
+      "If you want to create a fresh item WITH a reminder, call " +
+      "`create_item` with `due_at` instead — `schedule_reminder` is " +
+      "for already-existing items only. Common error envelopes: " +
+      "`not_found`, `forbidden`, `invalid_input` " +
+      "(`cannot_schedule_note`).",
+    inputSchema: scheduleReminderInputSchema,
+    outputSchema: scheduleReminderOutputSchema,
+  },
+  {
+    name: "assign_item",
+    description:
+      "Assign an item to one of the LIST's members, or unassign it. " +
+      "Pass `item_id` and either `assignee_username` (with or " +
+      "without leading @) to assign — accepts BOTH a Telegram handle " +
+      "(\"@ali\") and a bare first-name token (\"ali\", \"Ali\") — or " +
+      "`assignee_username: null` (explicit) to unassign. The " +
+      "executor resolves the username against the item's list " +
+      "members ONLY (exact `lower(telegram_username)`, then prefix " +
+      "match on `lower(telegram_first_name)`); pass the raw token " +
+      "the user typed and let the executor do the matching. " +
+      "Self-assign is allowed. Notes (`is_checkable=false`) CAN be " +
+      "assigned. Common error envelopes: `not_a_member` (assignee " +
+      "isn't on the list — call `share_list` first to invite, then " +
+      "retry once they accept), `assignee_ambiguous` (multiple " +
+      "candidates resolve — the error includes a `candidates` list; " +
+      "ask the user \"Ali'lerden hangisi?\" with the candidate names " +
+      "and re-call with the disambiguating handle), `forbidden`, " +
+      "`not_found`, `invalid_input`.",
+    inputSchema: assignItemInputSchema,
+    outputSchema: assignItemOutputSchema,
   },
 ] as const;
 
