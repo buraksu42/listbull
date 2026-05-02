@@ -239,6 +239,16 @@ export async function handleMessage(ctx: Context): Promise<void> {
   if (assistantText === NO_KEY_SENTINEL) userFacingText = copy.noKey;
   if (assistantText === ROUNDTRIP_CAP_SENTINEL)
     userFacingText = copy.transientError;
+  // Empty-string guard. respond() can land here when the model returns
+  // no content blocks at all (defensive splitContent path) — Telegram
+  // 400s on empty sendMessage bodies, so substitute the transient copy.
+  if (!userFacingText.trim()) {
+    console.warn(
+      "[bot/handle-message] empty assistantText from respond()",
+      { toolCalls: toolCalls.length, persisted: persisted.length },
+    );
+    userFacingText = copy.transientError;
+  }
 
   // Persist assistant + tool messages produced this turn (batch insert
   // via the shared helper — chronological order preserved by `persisted`).
