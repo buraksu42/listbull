@@ -118,19 +118,6 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
       messages: buffer,
     });
 
-    // Diagnostic log for OpenRouter response shape investigation. Remove
-    // after the empty-content issue is root-caused.
-    try {
-      console.log(
-        "[ai/respond] round",
-        round,
-        "FULL response:",
-        JSON.stringify(response).slice(0, 2000),
-      );
-    } catch {
-      console.log("[ai/respond] response not JSON-serializable", typeof response);
-    }
-
     const { textParts, toolUseBlocks } = splitContent(response.content);
     const assistantText = textParts.join("\n").trim();
     lastAssistantText = assistantText;
