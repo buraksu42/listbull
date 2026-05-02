@@ -48,7 +48,11 @@ import type { RespondInput, RespondOutput } from "@/lib/ai/types";
 export const MAX_TOOL_ROUNDTRIPS = 5;
 
 /** OpenRouter's Anthropic-compatible endpoint. */
-const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+// Anthropic SDK appends `/v1/messages` to this base. OpenRouter's
+// Anthropic-compat endpoint is `https://openrouter.ai/api/v1/messages`,
+// so we use `/api` (no /v1) here — the SDK adds the /v1 itself.
+// Wrong: "https://openrouter.ai/api/v1" → request hits /api/v1/v1/messages (404, empty body).
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api";
 
 /** Default `max_tokens` for the assistant message. */
 const DEFAULT_MAX_TOKENS = 2048;
