@@ -12,6 +12,10 @@ import { NextResponse } from "next/server";
 import { getSessionUserId } from "@/lib/auth/session";
 import { removeMember, updateMemberRole } from "@/lib/db/queries/members";
 import { patchMemberRoleBodySchema } from "@/lib/validators/invites";
+import type {
+  RemoveMemberResponse,
+  UpdateMemberRoleResponse,
+} from "@/lib/validators/members";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,10 +49,8 @@ export async function DELETE(_request: Request, { params }: RouteCtx) {
     );
   }
 
-  return NextResponse.json({
-    ok: true,
-    data: { removedItemCount: result.removedItemCount },
-  });
+  const data: RemoveMemberResponse = { removedItemCount: result.removedItemCount };
+  return NextResponse.json({ ok: true, data });
 }
 
 export async function PATCH(request: Request, { params }: RouteCtx) {
@@ -96,7 +98,8 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
       { status },
     );
   }
-  return NextResponse.json({ ok: true, data: { member: result.member } });
+  const data: UpdateMemberRoleResponse = { member: result.member };
+  return NextResponse.json({ ok: true, data });
 }
 
 function errorCodeToStatus(code: string): number {

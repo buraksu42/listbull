@@ -9,6 +9,7 @@ import { toast } from "@/components/ui/sonner";
 import { useTelegramMainButton } from "@/hooks/use-telegram-main-button";
 import { ApiError, apiPost } from "@/lib/api-client";
 import type { InviteTokenInfo } from "@/lib/types";
+import type { AcceptInviteResponse } from "@/lib/validators/invites";
 
 /**
  * Invite-accept card — Phase 3 client surface.
@@ -32,10 +33,8 @@ type Props = {
   usernameMismatch: boolean;
 };
 
-type AcceptResponse = {
-  listId: string;
-  alreadyAccepted?: boolean;
-};
+/** P2-2: consume Backend-published response shape directly. */
+type AcceptResponse = AcceptInviteResponse;
 
 export function InviteAcceptCard({
   invite,

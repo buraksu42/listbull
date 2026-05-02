@@ -138,11 +138,15 @@ export async function acceptInvite(
     }
 
     // Caller's current telegram_username (lowered) must match the
-    // invited_username on file.
+    // invited_username on file. Phase 4 · P2-6: consolidated the prior
+    // two SELECTs on `users` (one for the username check, one for the
+    // snapshot enrichment) into a single round-trip.
     const [caller] = await tx
       .select({
         id: users.id,
         telegramUsername: users.telegramUsername,
+        telegramFirstName: users.telegramFirstName,
+        telegramPhotoUrl: users.telegramPhotoUrl,
       })
       .from(users)
       .where(eq(users.id, callerId))
@@ -201,6 +205,8 @@ export async function acceptInvite(
       .where(eq(listInvites.id, inviteRow.id));
 
     if (!existingMember) {
+      // Phase 4 · P2-6: build snapshot directly from the consolidated
+      // `caller` row above — no second SELECT.
       const snapshot: MemberSnapshot = {
         id: memberRow.id,
         listId: memberRow.listId,
@@ -211,29 +217,11 @@ export async function acceptInvite(
         createdAt: memberRow.createdAt.toISOString(),
         updatedAt: memberRow.updatedAt.toISOString(),
         user: {
-          telegramFirstName: caller.telegramUsername ?? "",
+          telegramFirstName: caller.telegramFirstName,
           telegramUsername: caller.telegramUsername,
-          telegramPhotoUrl: null,
+          telegramPhotoUrl: caller.telegramPhotoUrl,
         },
       };
-
-      // Refine `user` snapshot with the actual joined values.
-      const [callerProfile] = await tx
-        .select({
-          telegramFirstName: users.telegramFirstName,
-          telegramUsername: users.telegramUsername,
-          telegramPhotoUrl: users.telegramPhotoUrl,
-        })
-        .from(users)
-        .where(eq(users.id, callerId))
-        .limit(1);
-      if (callerProfile) {
-        snapshot.user = {
-          telegramFirstName: callerProfile.telegramFirstName,
-          telegramUsername: callerProfile.telegramUsername,
-          telegramPhotoUrl: callerProfile.telegramPhotoUrl,
-        };
-      }
 
       await tx.insert(activityLog).values({
         listId: memberRow.listId,

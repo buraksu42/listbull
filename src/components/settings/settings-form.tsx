@@ -110,6 +110,7 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
       toast.success("Settings saved.");
       // Reset form so isDirty tracks subsequent edits, and the API key
       // field collapses back to the configured view.
+      const localeChanged = data.locale !== initial.locale;
       reset({
         llmModel: data.llmModel,
         timezone: data.timezone,
@@ -117,6 +118,16 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
         notificationsEnabled: data.notificationsEnabled,
         apiKey: "",
       });
+      // E1: when the user switches language, reload the route so the
+      // next-intl request handler picks up the new `users.locale` and
+      // re-renders all server-side strings. The cookie hint helps any
+      // pre-session paths (setup wizard) align until the DB read lands.
+      if (localeChanged && typeof document !== "undefined") {
+        document.cookie = `NEXT_LOCALE=${data.locale}; path=/; max-age=31536000; samesite=lax`;
+        if (typeof window !== "undefined") {
+          window.setTimeout(() => window.location.reload(), 200);
+        }
+      }
     },
     onError: (err) => {
       toast.error(err.message || "Couldn't save settings — try again.");

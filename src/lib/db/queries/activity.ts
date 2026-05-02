@@ -22,7 +22,9 @@ export async function getActivityFeed(
   limit: number,
   beforeIso?: string | null,
 ): Promise<ActivityFeedRow[]> {
-  const safeLimit = Math.max(1, Math.min(200, Math.trunc(limit) || 50));
+  // Phase 4 · P2-4: clamp to 100 to match the route handler + Phase 3
+  // contract (Phase 3 review noted the 200 ceiling as code/contract drift).
+  const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit) || 50));
   const conds = [eq(activityLog.listId, listId)];
   if (beforeIso) {
     const beforeDate = new Date(beforeIso);

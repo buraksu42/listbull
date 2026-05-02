@@ -4,8 +4,10 @@ import { handleHelp } from "@/lib/server/bot/commands/help";
 import { handleLists } from "@/lib/server/bot/commands/lists";
 import { handleReset } from "@/lib/server/bot/commands/reset";
 import { handleShare } from "@/lib/server/bot/commands/share";
+import { handleSnapshot } from "@/lib/server/bot/commands/snapshot";
 import { handleStart } from "@/lib/server/bot/commands/start";
 import { handleMessage } from "@/lib/server/bot/handle-message";
+import { handleInlineQuery } from "@/lib/server/bot/handlers/inline-query";
 import { env } from "@/lib/env";
 
 let cached: Bot | null = null;
@@ -31,8 +33,15 @@ export function getBot(): Bot {
   // Phase 3 commands.
   bot.command("share", handleShare);
   bot.command("reset", handleReset);
+  // Phase 4 — D2 shareable list snapshot.
+  bot.command("snapshot", handleSnapshot);
+
+  // Phase 4 — D1 inline mode (`@listgram_bot <query>`).
+  bot.on("inline_query", handleInlineQuery);
 
   // Phase 2 LLM router: any plain-text message that isn't a slash command.
+  // Phase 4 extension: handleMessage detects forwarded messages and
+  // routes them through the A3 forwarded-message extraction path.
   bot.on("message:text", handleMessage);
 
   cached = bot;

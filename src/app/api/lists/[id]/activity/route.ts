@@ -8,6 +8,7 @@ import { NextResponse } from "next/server";
 import { getSessionUserId } from "@/lib/auth/session";
 import { getActivityFeed } from "@/lib/db/queries/activity";
 import { userCanReadList } from "@/lib/db/queries/lists";
+import type { ActivityFeedResponse } from "@/lib/validators/activity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +16,8 @@ export const dynamic = "force-dynamic";
 type RouteCtx = { params: Promise<{ id: string }> };
 
 const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 200;
+// Phase 4 · P2-4: clamp to 100 to match the Phase 3 contract.
+const MAX_LIMIT = 100;
 
 export async function GET(request: Request, { params }: RouteCtx) {
   const userId = await getSessionUserId();
@@ -57,8 +59,6 @@ export async function GET(request: Request, { params }: RouteCtx) {
   const nextCursor =
     rows.length === limit ? rows[rows.length - 1]?.createdAt ?? null : null;
 
-  return NextResponse.json({
-    ok: true,
-    data: { rows, nextCursor },
-  });
+  const data: ActivityFeedResponse = { rows, nextCursor };
+  return NextResponse.json({ ok: true, data });
 }

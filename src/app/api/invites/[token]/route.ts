@@ -12,6 +12,7 @@ import { getSessionUserId } from "@/lib/auth/session";
 import { getInviteContextByToken } from "@/lib/db/queries/invites";
 import { getUserById } from "@/lib/db/queries/users";
 import type { InviteTokenInfo, ListRole } from "@/lib/types";
+import type { InviteTokenResponse } from "@/lib/validators/invites";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,8 +63,6 @@ export async function GET(_request: Request, { params }: RouteCtx) {
     isAccepted,
   };
 
-  return NextResponse.json({
-    ok: true,
-    data: { invite: info, currentUserCanAccept },
-  });
+  const data: InviteTokenResponse = { invite: info, currentUserCanAccept };
+  return NextResponse.json({ ok: true, data });
 }

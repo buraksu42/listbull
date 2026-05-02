@@ -11,7 +11,15 @@ import { and, eq, ilike, inArray, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { listMembers, lists } from "@/lib/db/schema";
-import type { Item, ListRole } from "@/lib/types";
+import { toItemSnapshot } from "@/lib/db/snapshots";
+import type { ListRole } from "@/lib/types";
+
+/**
+ * `toItemSnapshot` is re-exported from the layer-neutral `db/snapshots.ts`
+ * (Phase 4 · P2-7). Existing executor imports (`from "./_shared"`) keep
+ * working unchanged; the canonical home is now `@/lib/db/snapshots`.
+ */
+export { toItemSnapshot };
 
 /**
  * Discriminated union returned by every executor. Mirrors the tool's
@@ -38,32 +46,6 @@ export const ERR = {
   ambiguous_list: "ambiguous_list",
   internal_error: "internal_error",
 } as const;
-
-/**
- * Convert an `Item` row into the JSON-safe `ItemSnapshot` shape that
- * `activity_log.payload_*` columns store. Per Inv-5, every Date becomes
- * an ISO 8601 string; Drizzle would otherwise serialize Date objects
- * via `JSON.stringify`'s default `toJSON`, which works but loses round-
- * trip stability.
- */
-export function toItemSnapshot(row: Item) {
-  return {
-    id: row.id,
-    listId: row.listId,
-    text: row.text,
-    isCheckable: row.isCheckable,
-    isDone: row.isDone,
-    assigneeId: row.assigneeId,
-    dueAt: row.dueAt ? row.dueAt.toISOString() : null,
-    reminderSent: row.reminderSent,
-    position: row.position,
-    createdBy: row.createdBy,
-    completedAt: row.completedAt ? row.completedAt.toISOString() : null,
-    archivedAt: row.archivedAt ? row.archivedAt.toISOString() : null,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
-}
 
 /** Roles allowed to mutate items in a list. */
 export const WRITE_ROLES: ListRole[] = ["owner", "editor"];

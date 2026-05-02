@@ -11,6 +11,18 @@ import { cn } from "@/lib/utils";
 /**
  * Phase 2 interactive item row + Phase 3 assignee badge.
  *
+ * a11y (Phase 4 audit pass):
+ *   - Row is `role="listitem"` with composite `aria-label` = "[completed]
+ *     <text>[, assigned to <name>]"; screen readers announce state +
+ *     content + assignment in one pass.
+ *   - Circular checkbox is `role="checkbox"` with `aria-checked`. The
+ *     visible disc is 22×22 inside a 44×44 tap target (WCAG 2.1).
+ *   - Edit button (full row body) and the kebab actions both expose
+ *     focus rings via `focus-visible:ring-2`. Strikethrough + opacity
+ *     drop on completion = color-independent state signal.
+ *   - Drag handle (when present) is parent-controlled by dnd-kit; the
+ *     list provides keyboard reorder via Space + arrows on focus.
+ *
  * - Circular checkbox (22×22) toggles `isDone` via `onToggle`.
  * - Row body (text) is its own button — tapping opens edit.
  * - Trailing cluster: assignee avatar pill (when assigned) + drag

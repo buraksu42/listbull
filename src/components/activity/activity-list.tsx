@@ -13,6 +13,7 @@ import {
   type SupportedLocale,
 } from "@/lib/i18n/relative-time";
 import type { ActivityFeedRow } from "@/lib/types";
+import type { ActivityFeedResponse } from "@/lib/validators/activity";
 
 /**
  * Activity feed — Phase 3.
@@ -33,10 +34,8 @@ import type { ActivityFeedRow } from "@/lib/types";
  */
 const PAGE_SIZE = 50;
 
-type ActivityResponse = {
-  rows: ActivityFeedRow[];
-  nextCursor: string | null;
-};
+/** P2-2: consume Backend-published response shape directly. */
+type ActivityResponse = ActivityFeedResponse;
 
 const activityKey = (listId: string) => ["activity", listId] as const;
 

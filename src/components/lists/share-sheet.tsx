@@ -22,6 +22,19 @@ import { ApiError, apiPost } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
 /**
+ * a11y (Phase 4 audit pass):
+ *   - Sheet has `aria-label="Share list"` + role="dialog" via shadcn
+ *     `<Sheet />` primitive; Escape dismisses; focus trapped inside.
+ *   - Role chips render as `role="radio"` with `aria-checked` so screen
+ *     readers narrate "Editor radio button checked" instead of "button".
+ *   - Username input is associated with a hint via `aria-describedby`.
+ *   - Submit button is disabled while empty; the Telegram MainButton
+ *     mirrors disabled state so iOS/Android voice control hits the
+ *     correct affordance.
+ *   - Success body announces the deeplink in a copyable `<code>`; copy
+ *     action surfaces a sonner toast (announced via `aria-live="polite"`
+ *     on the toaster root from Phase 1).
+ *
  * Share sheet — Phase 3.
  *
  * Two states inside one sheet:

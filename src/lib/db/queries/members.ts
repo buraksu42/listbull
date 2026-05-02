@@ -14,12 +14,12 @@ import {
   listMembers,
   users,
 } from "@/lib/db/schema";
+import { toItemSnapshot, toMemberSnapshot } from "@/lib/db/snapshots";
 import type {
   ListMember,
   ListRole,
   MemberSnapshot,
 } from "@/lib/types";
-import { toItemSnapshot } from "@/lib/server/tools/_shared";
 
 export type MemberWithUser = {
   id: string;
@@ -110,32 +110,11 @@ export async function isListOwner(
 }
 
 /**
- * Build a `MemberSnapshot` from a member row + its joined user info.
+ * `toMemberSnapshot` lives in `@/lib/db/snapshots` (Phase 4 · P2-7
+ * layering hoist). Re-exported here for back-compat with any consumer
+ * still importing from this module.
  */
-export function toMemberSnapshot(
-  member: ListMember,
-  user: {
-    telegramFirstName: string;
-    telegramUsername: string | null;
-    telegramPhotoUrl: string | null;
-  },
-): MemberSnapshot {
-  return {
-    id: member.id,
-    listId: member.listId,
-    userId: member.userId,
-    role: member.role as ListRole,
-    invitedBy: member.invitedBy,
-    acceptedAt: member.acceptedAt.toISOString(),
-    createdAt: member.createdAt.toISOString(),
-    updatedAt: member.updatedAt.toISOString(),
-    user: {
-      telegramFirstName: user.telegramFirstName,
-      telegramUsername: user.telegramUsername,
-      telegramPhotoUrl: user.telegramPhotoUrl,
-    },
-  };
-}
+export { toMemberSnapshot };
 
 export type RemoveMemberResult =
   | { ok: true; removedItemCount: number }

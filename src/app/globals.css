@@ -171,6 +171,41 @@ body {
   letter-spacing: var(--lg-tracking-wordmark);
 }
 
+/* Skip link — visible only on keyboard focus. */
+.lg-skip-link {
+  position: absolute;
+  left: var(--lg-sp-2);
+  top: var(--lg-sp-2);
+  padding: var(--lg-sp-2) var(--lg-sp-3);
+  background: var(--lg-accent);
+  color: var(--lg-accent-fg);
+  border-radius: var(--lg-r-md);
+  font-weight: var(--lg-fw-semibold);
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform 120ms ease-out;
+  z-index: 100;
+}
+.lg-skip-link:focus,
+.lg-skip-link:focus-visible {
+  transform: translateY(0);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--lg-bg), 0 0 0 4px var(--lg-accent);
+}
+
+/* Visually hidden — used by aria-live regions etc. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

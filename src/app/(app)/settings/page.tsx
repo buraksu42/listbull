@@ -1,5 +1,7 @@
 import { headers } from "next/headers";
+import { getTranslations } from "next-intl/server";
 
+import { ExportButton } from "@/components/settings/export-button";
 import {
   SettingsForm,
   type SettingsInitial,
@@ -16,10 +18,13 @@ export const dynamic = "force-dynamic";
  *
  * If the API isn't ready yet (Backend mid-implementation), we fall back
  * to default settings so the form can still render.
+ *
+ * Phase 4 adds the F1 "Download my data" section below the form.
  */
 export default async function SettingsPage() {
   await requireUser();
   const initial = await fetchInitialSettings();
+  const t = await getTranslations("settings");
 
   return (
     <main style={{ paddingBottom: "var(--lg-sp-12)" }}>
@@ -39,10 +44,29 @@ export default async function SettingsPage() {
             letterSpacing: "var(--lg-tracking-title)",
           }}
         >
-          Settings
+          {t("title")}
         </h1>
       </header>
       <SettingsForm initial={initial} />
+
+      <section className="flex flex-col gap-3 px-4 pt-2">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-base font-semibold text-[var(--lg-fg)]">
+            {t("exportTitle")}
+          </h2>
+          <p className="text-xs text-[var(--lg-muted-fg)]">
+            {t("exportDescription")}
+          </p>
+        </div>
+        <div>
+          <ExportButton
+            label={t("exportButton")}
+            pendingLabel={t("exportPending")}
+            successMessage={t("exportSuccess")}
+            failureMessage={t("exportFailed")}
+          />
+        </div>
+      </section>
     </main>
   );
 }

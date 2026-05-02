@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { getSessionUserId } from "@/lib/auth/session";
 import { userCanReadList } from "@/lib/db/queries/lists";
 import { listMembersForList } from "@/lib/db/queries/members";
+import type { MembersListResponse } from "@/lib/validators/members";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,5 +36,6 @@ export async function GET(_request: Request, { params }: RouteCtx) {
   }
 
   const members = await listMembersForList(id);
-  return NextResponse.json({ ok: true, data: { members } });
+  const data: MembersListResponse = { members };
+  return NextResponse.json({ ok: true, data });
 }

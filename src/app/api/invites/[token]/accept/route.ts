@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 
 import { getSessionUserId } from "@/lib/auth/session";
 import { acceptInvite } from "@/lib/db/queries/invites";
+import type { AcceptInviteResponse } from "@/lib/validators/invites";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,13 +46,11 @@ export async function POST(_request: Request, { params }: RouteCtx) {
     // HTTP layer: 200 with the listId so the client can navigate. The
     // error code is preserved in the body for the caller to log/UI.
     if (result.code === "invite_already_accepted" && result.listId) {
-      return NextResponse.json({
-        ok: true,
-        data: {
-          listId: result.listId,
-          alreadyAccepted: true,
-        },
-      });
+      const data: AcceptInviteResponse = {
+        listId: result.listId,
+        alreadyAccepted: true,
+      };
+      return NextResponse.json({ ok: true, data });
     }
     const status = errorCodeToStatus(result.code);
     return NextResponse.json(
@@ -63,10 +62,11 @@ export async function POST(_request: Request, { params }: RouteCtx) {
     );
   }
 
-  return NextResponse.json({
-    ok: true,
-    data: { listId: result.listId, alreadyAccepted: result.alreadyAccepted },
-  });
+  const data: AcceptInviteResponse = {
+    listId: result.listId,
+    alreadyAccepted: result.alreadyAccepted,
+  };
+  return NextResponse.json({ ok: true, data });
 }
 
 function errorCodeToStatus(code: string): number {

@@ -64,6 +64,32 @@ export async function insertMessages(
 }
 
 /**
+ * F1 export — all messages across every chat for one user, ordered
+ * oldest → newest. Used by `src/lib/server/export.ts` to assemble
+ * the user's conversation history for the export bundle.
+ *
+ * Caller-only filter (Inv-20): rows where `user_id = userId`. Other
+ * users' conversation rows never appear, even if they share a chat.
+ */
+export async function getAllMessagesForUser(
+  userId: string,
+): Promise<Array<{
+  role: string;
+  content: string;
+  createdAt: Date;
+}>> {
+  return db
+    .select({
+      role: messages.role,
+      content: messages.content,
+      createdAt: messages.createdAt,
+    })
+    .from(messages)
+    .where(eq(messages.userId, userId))
+    .orderBy(messages.createdAt);
+}
+
+/**
  * Phase 3 `/reset` command: delete every conversation row for a
  * (user, chat) pair. This is the ONLY DELETE-WHERE on `messages`
  * (Inv-7). Returns the number of rows actually deleted.

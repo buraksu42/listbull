@@ -254,6 +254,14 @@ export const shareListOutputSchema = z.object({
    * though `invite` is populated for shape consistency.
    */
   alreadyMember: z.boolean().optional(),
+  /**
+   * Soft warnings from the executor (e.g. `invitee_dm_failed` when the
+   * invitee hasn't started the bot yet — the invite row is still valid
+   * and the user can paste the deeplink manually). Mirrors
+   * `createItemOutputSchema` and `scheduleReminderOutputSchema`.
+   * Added per Architect's Phase 4 contract § P2-1.
+   */
+  warnings: z.array(z.string()).optional(),
 });
 
 export type ShareListInput = z.infer<typeof shareListInputSchema>;

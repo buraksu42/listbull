@@ -170,6 +170,9 @@ export async function dispatchReminders(): Promise<{
 }> {
   const due = await pickDueItems();
   if (due.length === 0) {
+    // Inv-15 still runs even when no fresh due items were picked — a
+    // tick with zero pickups can still surface stuck-row warnings.
+    await detectPersistentFailures();
     return { picked: 0, sent: 0, failed: 0 };
   }
 
@@ -218,9 +221,70 @@ export async function dispatchReminders(): Promise<{
     }
   }
 
+  // Inv-15 (Phase 4 · P2-5): post-hoc persistent-failure detection. Runs
+  // AFTER the per-row dispatch loop. A row that's >5min past due_at and
+  // still reminder_sent=false signals an operator-side issue (revoked
+  // bot token, user blocked the bot, assignee unreachable). We log a
+  // warning per row (cap of 50 to avoid log flood) but do NOT flip the
+  // `reminder_sent` flag — operator must intervene. Defensive try/catch
+  // so a query failure cannot crash the dispatcher.
+  await detectPersistentFailures();
+
   return { picked: due.length, sent, failed };
 }
 
+/**
+ * Inv-15: identify items whose `due_at` is >5 minutes in the past and
+ * still have `reminder_sent = false`. Each row gets a single
+ * `reminder_send_persistent_failure` warning log entry. Capped at 50
+ * to avoid log flood when a bot token has been revoked. The detection
+ * is purely observability — no DB writes, no exceptions thrown.
+ */
+async function detectPersistentFailures(): Promise<void> {
+  try {
+    const stuck = await db
+      .select({
+        id: items.id,
+        listId: items.listId,
+        dueAt: items.dueAt,
+      })
+      .from(items)
+      .where(
+        sql`${items.dueAt} < (now() - interval '5 minutes')
+            AND ${items.reminderSent} = false
+            AND ${items.archivedAt} IS NULL`,
+      )
+      .limit(50);
+
+    for (const row of stuck) {
+      console.warn(
+        "[cron/dispatch-reminders] reminder_send_persistent_failure",
+        {
+          itemId: row.id,
+          listId: row.listId,
+          dueAt: row.dueAt ? row.dueAt.toISOString() : null,
+        },
+      );
+    }
+  } catch (error) {
+    // Inv-15 contract: detection MUST NEVER crash the dispatcher.
+    console.error(
+      "[cron/dispatch-reminders] persistent-failure detection threw",
+      error,
+    );
+  }
+}
+
+/**
+ * Liveness ping — fires whenever the dispatcher loop completes without
+ * throwing, regardless of per-row delivery success. The semantic is
+ * "is the cron container reaching Postgres", not "is delivery healthy".
+ * Per-row failures are observable via the per-item `console.error`
+ * logs + Sentry breadcrumbs; configure separate log-based alarms if
+ * delivery health matters operationally.
+ *
+ * Phase 4 · P2-3 resolution.
+ */
 async function maybePingHeartbeat(): Promise<void> {
   const url = env.LISTGRAM_HEARTBEAT_URL;
   if (!url) return;

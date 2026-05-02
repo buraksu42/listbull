@@ -12,6 +12,10 @@ import {
   apiFetch,
 } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
+import type {
+  MemberRow as MemberRowFromValidator,
+  MembersListResponse,
+} from "@/lib/validators/members";
 
 /**
  * Member management — Phase 3 (read + remove).
@@ -25,26 +29,17 @@ import { cn } from "@/lib/utils";
  *
  * The same query key (`["members", listId]`) is read by `<ItemList />`
  * to render assignee badges; mutating here invalidates both.
+ *
+ * P2-2 (Phase 4): consumes `MembersListResponse` + `MemberRow` types
+ * from `@/lib/validators/members` so Backend stays the single source of
+ * truth for the wire shape.
  */
 export const membersKey = (listId: string) => ["members", listId] as const;
 
-export type MemberRow = {
-  id: string;
-  listId: string;
-  userId: string;
-  role: "owner" | "editor" | "viewer";
-  invitedBy: string | null;
-  acceptedAt: string;
-  createdAt: string;
-  updatedAt: string;
-  user: {
-    telegramFirstName: string;
-    telegramUsername: string | null;
-    telegramPhotoUrl: string | null;
-  };
-};
+/** Re-export for back-compat with existing call sites. */
+export type MemberRow = MemberRowFromValidator;
 
-type MembersResponse = { members: MemberRow[] };
+type MembersResponse = MembersListResponse;
 
 /**
  * Fetch + cache members for a list. Other components (ItemList) consume

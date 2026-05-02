@@ -316,3 +316,128 @@ export type ReminderJobItem = {
   assigneeTelegramId: number | null;
   assigneeLocale: string | null;
 };
+
+// ─── Phase 4 additions (FROZEN after Phase 4 — Phase 5 is launch only) ─
+//
+// Phase 4 ships the OSS-quality features: A3 forwarded messages, D1
+// inline mode, D2 shareable list snapshot, D3 docs-only, F1 export, F2
+// audit/restore, E1/E2/E3 i18n + a11y. The types below pin the JSON
+// shapes that flow across the snapshot page, the export download, the
+// audit/restore UI, and the inline-query result list. After this phase,
+// `src/lib/types/index.ts` is FROZEN — Phase 5 (launch prep) does not
+// alter the type surface.
+
+/**
+ * Public read-only snapshot of a list (D2). Generated on-the-fly from
+ * the list's current state at request time — no DB column stores
+ * snapshots. Expiration is URL-bound via a signed query parameter, not
+ * DB-tracked, which keeps the schema frozen.
+ *
+ * Consumed by `src/app/(marketing)/snapshot/[id]/page.tsx`. The URL
+ * carries `?token=<base64url(hmac)>` + `?exp=<unix-ms>`; the page
+ * verifies HMAC-SHA256 against `ENV_KEY` (or a dedicated
+ * `SNAPSHOT_SIGNING_KEY` if Backend chooses) and rejects expired or
+ * tampered requests.
+ *
+ * Excludes: assignees, due dates, members, activity. The snapshot is a
+ * forwardable read-only artifact, not a fully-functional list view.
+ */
+export type SnapshotPublic = {
+  listId: string;
+  listName: string;
+  listEmoji: string | null;
+  /** ISO 8601 — when the snapshot was generated. */
+  capturedAt: string;
+  /** ISO 8601 — when the signed URL expires (default capturedAt + 30 days). */
+  expiresAt: string;
+  items: Array<{
+    text: string;
+    isDone: boolean;
+    /** ISO 8601 or null — only the date is shown to viewers; assignee not exposed. */
+    dueAt: string | null;
+  }>;
+  /** Owner's display first-name only — no username or photo (light privacy). */
+  ownerFirstName: string;
+};
+
+/**
+ * Full data export bundle (F1). Returned by `GET /api/settings/export`
+ * (caller is the user being exported — never another user's data).
+ *
+ * Excludes per spec: other users' data (only items in lists the caller
+ * OWNS or co-edits where the caller created them are included), the
+ * encrypted OpenRouter API key, the user's session cookies. `messages`
+ * are caller-only by `(user_id)` filter.
+ *
+ * Delivery shape: served as `application/json` directly from the route
+ * (Phase 4 default). If a backing store path emerges later, switch to
+ * a 24h signed Hetzner Object Storage URL — the bundle shape stays the
+ * same.
+ */
+export type ExportBundle = {
+  /** ISO 8601 — when the bundle was generated. */
+  generatedAt: string;
+  user: {
+    telegramId: number;
+    locale: string;
+    timezone: string;
+  };
+  lists: ListSnapshot[];
+  items: ItemSnapshot[];
+  activity: ActivityFeedRow[];
+  messages: Array<{
+    role: MessageRole;
+    content: string;
+    /** ISO 8601 string. */
+    createdAt: string;
+  }>;
+};
+
+/**
+ * Audit-feed row enriched with a derived `canRestore` boolean (F2). The
+ * audit page (`(app)/lists/[id]/audit`) consumes `ActivityFeedRow`
+ * unchanged plus this view-model for the per-row Restore button.
+ *
+ * `canRestore = (action === "item_deleted" AND createdAt > now() - 30d)`.
+ * Phase 4 backend computes the boolean server-side so client and server
+ * never disagree; the 30-day window is enforced again in
+ * `POST /api/lists/[id]/restore` for defense-in-depth.
+ */
+export type AuditEntryWithRestore = ActivityFeedRow & {
+  canRestore: boolean;
+};
+
+/**
+ * One inline-query result row (D1). Bot inline mode lets users type
+ * `@listgram_bot <query>` in any chat to surface item suggestions.
+ * Telegram caps results at 50; per the open question resolution
+ * (handoff/specs/CLAUDE.md), Phase 4 returns up to 10 most-recent
+ * matching items across the user's lists (no LLM ranking — instant
+ * surface, deterministic).
+ *
+ * `deeplink` opens the Mini App at the list containing the item:
+ * `https://t.me/<bot>?startapp=item_<itemId>`. Tap action resolved
+ * during Phase 4 implementation; spec is "open Mini App at the item".
+ */
+export type InlineQueryResult = {
+  id: string;
+  type: "article";
+  /** Shown as the bold first line — the item text. */
+  title: string;
+  /** Shown below the title — list emoji + name + done state. */
+  description: string;
+  /** Mini App deeplink. */
+  deeplink: string;
+  /** Optional list emoji rendered as the result's thumbnail. */
+  thumbUrl?: string;
+};
+
+/**
+ * Sentinel type for next-intl message catalogs. The catalog shape is
+ * deep nested key-value pairs; we type it loosely at the boundary
+ * (next-intl provides its own narrower types per-namespace via
+ * generation). Use this where a catalog is passed around opaquely.
+ *
+ * `messages/{tr,en}.json` are the on-disk canonical sources.
+ */
+export type LocaleMessages = Record<string, unknown>;

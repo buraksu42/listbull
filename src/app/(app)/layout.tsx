@@ -1,4 +1,6 @@
 import Script from "next/script";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 
 import { TelegramBackButton } from "@/components/telegram/back-button";
 import { QueryProvider } from "@/components/telegram/query-provider";
@@ -9,9 +11,13 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function AppLayout({
+export default async function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // Server-resolved locale + catalog from `src/i18n/request.ts`.
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
     <>
       {/* Telegram WebApp SDK — must load before client adapter runs. */}
@@ -19,21 +25,23 @@ export default function AppLayout({
         src="https://telegram.org/js/telegram-web-app.js"
         strategy="beforeInteractive"
       />
-      <QueryProvider>
-        <TelegramThemeProvider>
-          <TelegramBackButton />
-          <div
-            className="min-h-dvh"
-            style={{
-              background: "var(--lg-bg)",
-              color: "var(--lg-fg)",
-            }}
-          >
-            {children}
-          </div>
-          <Toaster />
-        </TelegramThemeProvider>
-      </QueryProvider>
+      <NextIntlClientProvider locale={locale} messages={messages}>
+        <QueryProvider>
+          <TelegramThemeProvider>
+            <TelegramBackButton />
+            <div
+              className="min-h-dvh"
+              style={{
+                background: "var(--lg-bg)",
+                color: "var(--lg-fg)",
+              }}
+            >
+              {children}
+            </div>
+            <Toaster />
+          </TelegramThemeProvider>
+        </QueryProvider>
+      </NextIntlClientProvider>
     </>
   );
 }
