@@ -36,11 +36,12 @@ COPY tsconfig.json ./
 COPY drizzle.config.ts ./
 COPY src ./src
 
-# Non-root runtime.
+# Non-root runtime. Username is 'dispatcher' (not 'cron') to avoid clashing
+# with Alpine's pre-existing system user 'cron' from the cronie package.
 RUN addgroup --system --gid 1001 nodejs \
- && adduser --system --uid 1001 --ingroup nodejs cron \
- && chown -R cron:nodejs /app
-USER cron
+ && adduser --system --uid 1001 --ingroup nodejs dispatcher \
+ && chown -R dispatcher:nodejs /app
+USER dispatcher
 
 # Default = 60s loop, suitable for Dokploy Application mode and any
 # orchestrator that runs containers continuously (compose, k8s
