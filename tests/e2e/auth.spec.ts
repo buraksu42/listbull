@@ -13,7 +13,7 @@ import { LIVE, buildInitData } from "./_utils";
 test.describe("Mini App auth flow", () => {
   test.skip(
     !LIVE,
-    "Skipped: requires LISTGRAM_E2E_LIVE=1 + a running server with TELEGRAM_BOT_TOKEN configured (Phase 5 staging gate).",
+    "Skipped: requires LISTBULL_E2E_LIVE=1 + a running server with TELEGRAM_BOT_TOKEN configured (Phase 5 staging gate).",
   );
 
   test("initData → session → /lists landing", async ({ page }) => {

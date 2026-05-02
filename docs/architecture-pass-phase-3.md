@@ -14,7 +14,7 @@
 
 Phase 3 ships three new LLM tools — `share_list`, `schedule_reminder`,
 `assign_item` — plus the supporting persistence and cron flows that
-bring listgram from "single-user list assistant" to "shared,
+bring listbull from "single-user list assistant" to "shared,
 time-aware, assignable list assistant":
 
 1. **Sharing** — `share_list` tool (LLM path) and `/share` slash
@@ -463,7 +463,7 @@ The cron dispatcher achieves exactly-once-ish DM delivery via the
   intervene. Failure backoff is per-item count tracked in-memory
   for the lifetime of the cron container (no DB column needed for
   Phase 3).
-- Cron run completes → optional GET on `LISTGRAM_HEARTBEAT_URL` env
+- Cron run completes → optional GET on `LISTBULL_HEARTBEAT_URL` env
   var if set, else no-op. (Heartbeat is opt-in; resolves the open
   question in `handoff/specs/CLAUDE.md`. Default-on/public-endpoint
   rejected because it implies a managed dependency.)
@@ -708,11 +708,11 @@ Mini App use `users.timezone` to format display strings).
 
 ### Heartbeat
 
-End-of-tick optional ping to `LISTGRAM_HEARTBEAT_URL` if set:
+End-of-tick optional ping to `LISTBULL_HEARTBEAT_URL` if set:
 
 ```ts
-if (env.LISTGRAM_HEARTBEAT_URL) {
-  await fetch(env.LISTGRAM_HEARTBEAT_URL, { method: 'GET' }).catch(() => {});
+if (env.LISTBULL_HEARTBEAT_URL) {
+  await fetch(env.LISTBULL_HEARTBEAT_URL, { method: 'GET' }).catch(() => {});
 }
 ```
 
@@ -871,7 +871,7 @@ should respond conversationally and decline:
 
 - **A3** Forwarded-message handling — webhook detects `forward_origin`,
   LLM extracts items.
-- **D1** Bot inline mode — `@listgram_bot <query>` in any chat.
+- **D1** Bot inline mode — `@listbull_bot <query>` in any chat.
 - **D2** Shareable list snapshot — forwardable Telegram message +
   public deeplink, snapshot retention column.
 - **D3** Schedule-a-message pickup — documentation only, behavior

@@ -3,7 +3,7 @@
 > Generated 2026-05-02 by orchestrator session.
 > Phase 5 is single-session orchestrator-driven; the heavy lift is **manual user action** (DNS, BotFather, Dokploy env vars). The code-side bits are committed in this phase's commit.
 
-This document is the runbook for taking listgram from `dev` branch on the test server to a public production launch on `prod.listbull.org`.
+This document is the runbook for taking listbull from `dev` branch on the test server to a public production launch on `prod.listbull.org`.
 
 ---
 
@@ -11,9 +11,9 @@ This document is the runbook for taking listgram from `dev` branch on the test s
 
 ### 1. Bot username availability check
 
-`@listgram_bot` may already be taken on Telegram. Open `https://t.me/listgram_bot` in a browser:
-- If it loads to "User not found" or a placeholder bot screen → username is **available**, proceed with `@listgram_bot`.
-- If it loads to an active bot or shows "this username is taken" → fall back to `@listgram_app_bot` and update:
+`@listbull_bot` may already be taken on Telegram. Open `https://t.me/listbull_bot` in a browser:
+- If it loads to "User not found" or a placeholder bot screen → username is **available**, proceed with `@listbull_bot`.
+- If it loads to an active bot or shows "this username is taken" → fall back to `@listbull_app_bot` and update:
   - `.env.example` line `TELEGRAM_BOT_USERNAME`
   - `README.md` Quickstart section
   - Marketing landing's deeplink CTA (`src/app/(marketing)/page.tsx` already pulls from env, no edit needed)
@@ -33,9 +33,9 @@ These are documented in `~/.claude/CLAUDE.md`. Confirm they're still your server
 
 | Subdomain | Purpose | Hosted on |
 |---|---|---|
-| `listbull.org` (apex) | Open-source project info / install docs / GitHub link / "what is listgram" | **Separate static site** (deferred deliverable — see Step 11). NOT this listgram codebase. |
-| `prod.listbull.org` | Production listgram app (Mini App + bot + DB) | This codebase, prod server `46.224.144.255` |
-| `test.listbull.org` | Test/staging listgram app | This codebase, test server `62.238.8.55` |
+| `listbull.org` (apex) | Open-source project info / install docs / GitHub link / "what is listbull" | **Separate static site** (deferred deliverable — see Step 11). NOT this listbull codebase. |
+| `prod.listbull.org` | Production listbull app (Mini App + bot + DB) | This codebase, prod server `46.224.144.255` |
+| `test.listbull.org` | Test/staging listbull app | This codebase, test server `62.238.8.55` |
 | `<tenant>.listbull.org` (e.g. `loyetta`) | Additional tenant deployments (same code, separate DB + bot) | This codebase, deployed per-tenant via Dokploy |
 
 Cloudflare proxy MUST be **OFF** for app subdomains (Let's Encrypt HTTP-01 challenge requires direct origin). The apex `listbull.org` static site can be Cloudflare-proxied since it has no webhook.
@@ -78,13 +78,13 @@ Set the following env vars in Dokploy panel → app → Environment. **Required 
 
 | Var | Value | Notes |
 |---|---|---|
-| `DATABASE_URL` | `postgres://listgram:<pw>@<db-host>:5432/listgram` | Internal Docker network host name. |
+| `DATABASE_URL` | `postgres://listbull:<pw>@<db-host>:5432/listbull` | Internal Docker network host name. |
 | `BETTER_AUTH_SECRET` | `openssl rand -base64 48` | ≥32 chars. |
 | `BETTER_AUTH_URL` | `https://prod.listbull.org` (prod) / `https://test.listbull.org` (test) | Match the domain. |
 | `ENV_KEY` | `openssl rand -base64 32` | AES-256-GCM key for BYOK encryption. **Rotation = all stored keys unreadable; document re-prompt procedure.** |
 | `TELEGRAM_BOT_TOKEN` | From BotFather (Step 3) | Different bots for test vs prod recommended. |
 | `TELEGRAM_WEBHOOK_SECRET` | `openssl rand -hex 32` | Set on `setWebhook` call AND verified on every incoming request. |
-| `TELEGRAM_BOT_USERNAME` | `listgram_bot` (or fallback) | Without `@`. |
+| `TELEGRAM_BOT_USERNAME` | `listbull_bot` (or fallback) | Without `@`. |
 | `NEXT_PUBLIC_APP_URL` | `https://prod.listbull.org` (prod) / `https://test.listbull.org` (test) | Used in deeplinks + invite URLs. |
 | `NEXT_PUBLIC_ENV` | `production` (prod) / `test` (test) | Test gates `<meta noindex>` + robots disallow. |
 
@@ -92,12 +92,12 @@ Set the following env vars in Dokploy panel → app → Environment. **Required 
 | Var | Value | Notes |
 |---|---|---|
 | `OPENROUTER_API_KEY` | `sk-or-…` | Operator-level fallback when user has no BYOK key set. Leave blank to require BYOK from every user. |
-| `LISTGRAM_PER_USER_HOURLY_MSG_LIMIT` | `0` (default) | Per-user runaway cost cap. |
-| `LISTGRAM_HEARTBEAT_URL` | Better Stack URL | Cron liveness ping. **Liveness, NOT delivery health** — fires on tick complete, regardless of per-row send failures. |
+| `LISTBULL_PER_USER_HOURLY_MSG_LIMIT` | `0` (default) | Per-user runaway cost cap. |
+| `LISTBULL_HEARTBEAT_URL` | Better Stack URL | Cron liveness ping. **Liveness, NOT delivery health** — fires on tick complete, regardless of per-row send failures. |
 | `HETZNER_OBJECT_STORAGE_*` (5 vars) | See `.env.example` | F1 export uploads. Without these, F1 falls back to base64 data URLs (works for small installs). |
 | `SNAPSHOT_SIGNING_KEY` | `openssl rand -base64 48` | D2 snapshot URL HMAC. Falls back to `BETTER_AUTH_SECRET` when unset. |
 | `NEXT_PUBLIC_SENTRY_DSN` | Sentry project DSN | Triggers Sentry init at runtime (see Step 6 if you want this). |
-| `NEXT_PUBLIC_UMAMI_WEBSITE_ID` | UUID from `analytics.bullshitapps.com` | Set via `~/scripts/wire-umami.sh listgram` post-deploy. |
+| `NEXT_PUBLIC_UMAMI_WEBSITE_ID` | UUID from `analytics.bullshitapps.com` | Set via `~/scripts/wire-umami.sh listbull` post-deploy. |
 
 **Build args** — for any `NEXT_PUBLIC_*` var, ALSO set it as a build argument in Dokploy (Build Settings → Build Args). Next 16 Turbopack inlines public env at build time, not runtime — without the build arg, the value is absent from the client bundle even if the runtime env is set.
 
@@ -106,8 +106,8 @@ Set the following env vars in Dokploy panel → app → Environment. **Required 
 In Dokploy, create a Postgres service (or reuse an existing shared instance — global CLAUDE.md mentions `umami-db` lives on the same server, your call):
 - Image: `postgres:16-alpine`
 - Volume: persistent, mounted at `/var/lib/postgresql/data`
-- DB: `listgram`, user: `listgram`, password: random
-- Healthcheck: `pg_isready -U listgram`
+- DB: `listbull`, user: `listbull`, password: random
+- Healthcheck: `pg_isready -U listbull`
 
 Note: the `docker-compose.yml` in this repo brings up a self-contained Postgres for self-hosters. Dokploy operators can either use that compose service OR a separate Dokploy-managed Postgres — but NOT both at once.
 
@@ -129,8 +129,8 @@ Open `@BotFather` on Telegram. **Do steps for the prod bot AND a separate test b
 
 ```
 /newbot
-listgram
-listgram_bot          (or listgram_app_bot if taken)
+listbull
+listbull_bot          (or listbull_app_bot if taken)
 ```
 
 Save the bot token → goes into `TELEGRAM_BOT_TOKEN` env var. **Different tokens for test and prod.**
@@ -139,27 +139,27 @@ Save the bot token → goes into `TELEGRAM_BOT_TOKEN` env var. **Different token
 
 ```
 /setdescription
-@listgram_bot
+@listbull_bot
 A Telegram-native AI list assistant with persistent shared list memory. Capture todos in chat, manage in a Mini App. BYOK + open source.
 ```
 
 ```
 /setabouttext
-@listgram_bot
-Telegram-native AI list assistant. Self-host: github.com/buraksu42/listgram
+@listbull_bot
+Telegram-native AI list assistant. Self-host: github.com/buraksu42/listbull
 ```
 
 ```
 /setuserpic
-@listgram_bot
-[upload handoff/brand/listgram-app-icon-1024.svg converted to PNG; or generate via Canva from the SVG]
+@listbull_bot
+[upload handoff/brand/listbull-app-icon-1024.svg converted to PNG; or generate via Canva from the SVG]
 ```
 
 ### 3c. Commands list
 
 ```
 /setcommands
-@listgram_bot
+@listbull_bot
 start - Set up your account and create your Inbox
 help - Show available commands and tips
 lists - Show all your lists
@@ -172,29 +172,29 @@ reset - Clear your conversation history with the bot
 
 ```
 /setdomain
-@listgram_bot
+@listbull_bot
 prod.listbull.org   (or test.listbull.org for the test bot)
 ```
 
 ```
 /setjoingroups
-@listgram_bot
+@listbull_bot
 Disable
 ```
 
 ```
 /setinline
-@listgram_bot
+@listbull_bot
 Enable
 Search items…
 ```
 
 ```
 /setmenubutton
-@listgram_bot
+@listbull_bot
 Web App
 https://prod.listbull.org/app
-listgram        (button label)
+listbull        (button label)
 ```
 
 ### 3e. Webhook (one-time `setWebhook` call)
@@ -238,7 +238,7 @@ After DNS + Dokploy + BotFather are set:
 
 2. **Marketing landing**: open `https://prod.listbull.org` in a browser. See hero + features + footer (light theme, anti-list strict).
 
-3. **Bot `/start`**: open Telegram, search `@listgram_bot`, send `/start`. Expect localized welcome + "Inbox created" copy.
+3. **Bot `/start`**: open Telegram, search `@listbull_bot`, send `/start`. Expect localized welcome + "Inbox created" copy.
 
 4. **DB verification** (optional, via Dokploy Postgres console):
    ```sql
@@ -309,7 +309,7 @@ Per global CLAUDE.md, single shared Umami at `analytics.bullshitapps.com`. Front
 Run on your laptop after first prod deploy:
 
 ```bash
-~/scripts/wire-umami.sh listgram
+~/scripts/wire-umami.sh listbull
 ```
 
 This idempotently:
@@ -339,10 +339,10 @@ Phase 4 README has `![demo](docs/demo.gif)` placeholder. To replace:
 
 ```bash
 # Repo is private by default per global CLAUDE.md; flip when launch-ready:
-gh repo edit buraksu42/listgram --visibility public
+gh repo edit buraksu42/listbull --visibility public
 
 # Add discoverability topics:
-gh repo edit buraksu42/listgram \
+gh repo edit buraksu42/listbull \
   --add-topic telegram \
   --add-topic telegram-bot \
   --add-topic telegram-mini-app \
@@ -355,7 +355,7 @@ gh repo edit buraksu42/listgram \
   --add-topic byok
 ```
 
-Verify on `https://github.com/buraksu42/listgram` — see the README, LICENSE link in sidebar, topics under the description.
+Verify on `https://github.com/buraksu42/listbull` — see the README, LICENSE link in sidebar, topics under the description.
 
 ---
 
@@ -384,7 +384,7 @@ After merge, Dokploy auto-deploys to prod server. Watch logs:
 
 ```bash
 # From your laptop with Dokploy CLI / SSH:
-ssh prod 'docker logs -f $(docker ps --filter name=listgram-app --format "{{.ID}}")'
+ssh prod 'docker logs -f $(docker ps --filter name=listbull-app --format "{{.ID}}")'
 ```
 
 Wait for `Ready on 0.0.0.0:3000`.
@@ -431,10 +431,10 @@ Expected: both match if wired.
 
 ### 9c. Live Playwright E2E
 
-Phase 4 ships 4 E2E specs gated by `LISTGRAM_E2E_LIVE=1` env. To activate:
+Phase 4 ships 4 E2E specs gated by `LISTBULL_E2E_LIVE=1` env. To activate:
 
 ```bash
-LISTGRAM_E2E_LIVE=1 \
+LISTBULL_E2E_LIVE=1 \
   TEST_BOT_TOKEN="<your test bot token>" \
   TEST_DATABASE_URL="postgres://...test_db..." \
   npm run e2e
@@ -447,8 +447,8 @@ Adapt to whatever shape `tests/e2e/*.spec.ts` expects.
 On a fresh Hetzner node (or a clean local VM):
 
 ```bash
-git clone https://github.com/buraksu42/listgram.git
-cd listgram
+git clone https://github.com/buraksu42/listbull.git
+cd listbull
 cp .env.example .env
 # Fill .env with real values (Step 2b above)
 time docker compose up -d
@@ -465,7 +465,7 @@ README claim: <15 min. Wall-clock check: was it <15 min from `git clone` to `/st
 - Add a Discussions tab on GitHub for self-host questions (keep Issues for bugs).
 - Pin two issues: "Self-host setup help" and "Feature requests roadmap".
 - Run `gh repo view --json licenseInfo` — confirm GitHub recognized the LICENSE file (MIT badge appears).
-- Submit listgram to:
+- Submit listbull to:
   - https://github.com/awesome-selfhosted/awesome-selfhosted (PR with one-line entry)
   - r/selfhosted (post once stable for 2 weeks)
   - HN Show / Lobsters (only when 0 known critical bugs)
@@ -474,7 +474,7 @@ README claim: <15 min. Wall-clock check: was it <15 min from `git clone` to `/st
 
 ## Step 11 — Apex site (`listbull.org`) — separate deliverable
 
-**Not built in this codebase.** The apex `listbull.org` is a project-info / open-source landing site explaining "what is listgram, how do I install it, where's the GitHub". It's intentionally decoupled from the listgram app:
+**Not built in this codebase.** The apex `listbull.org` is a project-info / open-source landing site explaining "what is listbull, how do I install it, where's the GitHub". It's intentionally decoupled from the listbull app:
 
 - **Concern separation**: the app deployments (`prod.listbull.org`, `<tenant>.listbull.org`) host the live product. The apex hosts the project narrative.
 - **Independent deploy cadence**: docs change without redeploying the app, and vice versa.
@@ -484,9 +484,9 @@ README claim: <15 min. Wall-clock check: was it <15 min from `git clone` to `/st
 
 A small static site with the following pages/sections:
 
-- `/` — Hero ("listgram — Telegram-native AI list assistant"), short pitch, "Try the live demo" CTA → `prod.listbull.org`, "View on GitHub" CTA.
+- `/` — Hero ("listbull — Telegram-native AI list assistant"), short pitch, "Try the live demo" CTA → `prod.listbull.org`, "View on GitHub" CTA.
 - `/install` — Self-host quickstart (mirror README's Quickstart). Docker Compose, env var template, BotFather setup, DNS, deploy targets (Dokploy, Fly, bare VPS).
-- `/architecture` — High-level diagram (Bot ↔ Webhook ↔ App ↔ DB ↔ OpenRouter), link to `handoff/specs/architecture.md` in the listgram repo for full spec.
+- `/architecture` — High-level diagram (Bot ↔ Webhook ↔ App ↔ DB ↔ OpenRouter), link to `handoff/specs/architecture.md` in the listbull repo for full spec.
 - `/contributing` — Mirror `CONTRIBUTING.md`. Link to issues + Discussions.
 - `/changelog` — Released versions (Phases 1-5 → v0.1, future releases).
 - `/tenants` — (optional) A growing list of `<tenant>.listbull.org` instances, who runs them, their purpose. Validates the tenant pattern publicly.
@@ -512,8 +512,8 @@ npm create astro@latest .
 ```
 
 Until the apex site exists:
-- Park `listbull.org` on a one-page placeholder ("Coming soon — the listgram project. Live demo: prod.listbull.org. Source: github.com/buraksu42/listgram"), OR
-- 308 redirect `listbull.org` → `github.com/buraksu42/listgram`. Cloudflare Page Rule.
+- Park `listbull.org` on a one-page placeholder ("Coming soon — the listbull project. Live demo: prod.listbull.org. Source: github.com/buraksu42/listbull"), OR
+- 308 redirect `listbull.org` → `github.com/buraksu42/listbull`. Cloudflare Page Rule.
 
 ---
 

@@ -5,7 +5,7 @@
 
 ## Status: PASS — code-side complete, awaiting manual launch steps
 
-The code-side scope of Phase 5 is committed. The launch itself is **manual user action** documented in `docs/launch-checklist-phase-5.md` (DNS + Dokploy env vars + BotFather setup + UptimeRobot + GitHub repo public). Until those steps run, listgram remains a local + CI build.
+The code-side scope of Phase 5 is committed. The launch itself is **manual user action** documented in `docs/launch-checklist-phase-5.md` (DNS + Dokploy env vars + BotFather setup + UptimeRobot + GitHub repo public). Until those steps run, listbull remains a local + CI build.
 
 ## Verification gate (pragmatic)
 
@@ -30,13 +30,13 @@ The code-side scope of Phase 5 is committed. The launch itself is **manual user 
 
 ### Documentation
 
-- **`docs/launch-checklist-phase-5.md`** — comprehensive 10-step manual runbook covering pre-flight (bot username availability, server addresses), DNS (Cloudflare proxy OFF), Dokploy domain + env vars (full table) + Postgres + cron container, BotFather setup (newbot, setdescription, setabouttext, setcommands, setdomain, setjoingroups, setinline, setmenubutton, setWebhook curl call), live smoke checklist (8 steps), UptimeRobot keyword check, optional Sentry (Next 16 Turbopack `instrumentation-client.ts` copy-paste-ready) + Umami (`~/scripts/wire-umami.sh listgram`) + demo GIF, GitHub repo public + topics, dev → main merge with PR template, deferred Phase 4 staging gate activation (Lighthouse a11y, bundle scan, live Playwright E2E with `LISTGRAM_E2E_LIVE=1`, docker-compose wall-clock), repository hygiene + rollback plan + sign-off checklist.
+- **`docs/launch-checklist-phase-5.md`** — comprehensive 10-step manual runbook covering pre-flight (bot username availability, server addresses), DNS (Cloudflare proxy OFF), Dokploy domain + env vars (full table) + Postgres + cron container, BotFather setup (newbot, setdescription, setabouttext, setcommands, setdomain, setjoingroups, setinline, setmenubutton, setWebhook curl call), live smoke checklist (8 steps), UptimeRobot keyword check, optional Sentry (Next 16 Turbopack `instrumentation-client.ts` copy-paste-ready) + Umami (`~/scripts/wire-umami.sh listbull`) + demo GIF, GitHub repo public + topics, dev → main merge with PR template, deferred Phase 4 staging gate activation (Lighthouse a11y, bundle scan, live Playwright E2E with `LISTBULL_E2E_LIVE=1`, docker-compose wall-clock), repository hygiene + rollback plan + sign-off checklist.
 - **`docs/review-phase-5.md`** — this file.
 
 ### NOT shipped (deferred to operator action per launch checklist)
 
 - Sentry integration (operator opt-in — install `@sentry/nextjs` + drop `instrumentation-client.ts` per launch checklist § 6a). Avoids dead code + bundle bloat for self-hosters who don't use Sentry. The launch checklist contains the exact copy-paste snippet honoring the Next 16 Turbopack gotcha.
-- Umami wiring (operator runs `~/scripts/wire-umami.sh listgram` post-deploy).
+- Umami wiring (operator runs `~/scripts/wire-umami.sh listbull` post-deploy).
 - Demo GIF (operator records via Telegram screen recorder).
 - Repo public + topics (operator runs `gh repo edit` per launch checklist § 7).
 

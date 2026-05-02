@@ -7,7 +7,7 @@ name: CI
 #   4. SKIP_ENV_VALIDATION build (catches type errors that lint / tsc miss)
 #
 # E2E (Playwright) lives in `e2e.yml` — a separate workflow because
-# it spins up Postgres and is gated behind LISTGRAM_E2E_LIVE.
+# it spins up Postgres and is gated behind LISTBULL_E2E_LIVE.
 
 on:
   push:

@@ -409,7 +409,7 @@ export type AuditEntryWithRestore = ActivityFeedRow & {
 
 /**
  * One inline-query result row (D1). Bot inline mode lets users type
- * `@listgram_bot <query>` in any chat to surface item suggestions.
+ * `@listbull_bot <query>` in any chat to surface item suggestions.
  * Telegram caps results at 50; per the open question resolution
  * (handoff/specs/CLAUDE.md), Phase 4 returns up to 10 most-recent
  * matching items across the user's lists (no LLM ranking — instant

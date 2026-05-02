@@ -1,12 +1,12 @@
-# Contributing to listgram
+# Contributing to listbull
 
-Thanks for taking a look. listgram is OSS, self-host-friendly, and
+Thanks for taking a look. listbull is OSS, self-host-friendly, and
 solo-maintained — contributions are welcome but the project has a
 specific shape worth understanding before you open a PR.
 
 ## Reporting bugs
 
-Please file a [GitHub issue](https://github.com/buraksu42/listgram/issues/new)
+Please file a [GitHub issue](https://github.com/buraksu42/listbull/issues/new)
 with:
 
 - What you tried (a single sentence: "I forwarded a recipe with 30
@@ -40,11 +40,11 @@ to bring up Docker. For local dev WITHOUT Docker:
 
 ```bash
 # 1. Postgres locally (Homebrew, Docker, whatever)
-createdb listgram
+createdb listbull
 
 # 2. Clone + install
-git clone https://github.com/buraksu42/listgram.git
-cd listgram
+git clone https://github.com/buraksu42/listbull.git
+cd listbull
 npm install
 
 # 3. .env.local (chmod 600)
@@ -118,7 +118,7 @@ The strict-gate Phase 4 baseline:
 
 ```bash
 npm test          # Vitest unit suite (fast, no DB)
-npm run e2e       # Playwright (live tests gated behind LISTGRAM_E2E_LIVE=1)
+npm run e2e       # Playwright (live tests gated behind LISTBULL_E2E_LIVE=1)
 ```
 
 Critical-path coverage required for any PR that touches:
@@ -170,5 +170,5 @@ Read the spec before redesigning anything.
 
 ---
 
-Thanks again. listgram is small and opinionated; contributions that
+Thanks again. listbull is small and opinionated; contributions that
 fit the shape are appreciated, and bugs are taken seriously.

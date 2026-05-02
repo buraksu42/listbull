@@ -17,7 +17,7 @@ import { LIVE } from "./_utils";
 test.describe("cross-account share flow", () => {
   test.skip(
     !LIVE,
-    "Skipped: requires LISTGRAM_E2E_LIVE=1 + two seeded test users (Phase 5 staging gate).",
+    "Skipped: requires LISTBULL_E2E_LIVE=1 + two seeded test users (Phase 5 staging gate).",
   );
 
   test("invitee accepts an invite and sees the owner's list", async ({

@@ -1,7 +1,7 @@
 /**
  * D1 — bot inline mode read query (Phase 4).
  *
- * `@listgram_bot <query>` in any Telegram chat surfaces up to 10
+ * `@listbull_bot <query>` in any Telegram chat surfaces up to 10
  * most-recent items across the user's lists. Deterministic + fast — no
  * LLM ranking. ILIKE search over `items.text`, scoped to lists where
  * the caller is a member (any role: owner / editor / viewer can search

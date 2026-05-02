@@ -38,7 +38,7 @@ process.env.TELEGRAM_BOT_TOKEN =
 process.env.TELEGRAM_WEBHOOK_SECRET =
   process.env.TELEGRAM_WEBHOOK_SECRET ?? "x".repeat(32);
 process.env.TELEGRAM_BOT_USERNAME =
-  process.env.TELEGRAM_BOT_USERNAME ?? "listgram_bot";
+  process.env.TELEGRAM_BOT_USERNAME ?? "listbull_bot";
 process.env.NEXT_PUBLIC_APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 process.env.NEXT_PUBLIC_ENV = process.env.NEXT_PUBLIC_ENV ?? "test";

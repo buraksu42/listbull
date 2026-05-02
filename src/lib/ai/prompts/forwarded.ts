@@ -1,5 +1,5 @@
 /**
- * Forwarded-message system prompt for listgram's bot LLM turn.
+ * Forwarded-message system prompt for listbull's bot LLM turn.
  *
  * Phase 4 / A3 — when the user forwards a Telegram message to the bot,
  * the webhook router (`src/lib/server/bot/handle-message.ts`) detects
@@ -14,7 +14,7 @@
  *   await respond({ messages, user, apiKey, model, toolDispatcher,
  *     systemOverride: system, ... });
  *
- * Identity is preserved (the assistant is still listgram), but this
+ * Identity is preserved (the assistant is still listbull), but this
  * turn is a SINGLE-PURPOSE extraction task — emit one `create_item`
  * tool call per detected action item, no conversational Q&A. The
  * standard tool-loop in `respond.ts` then fires the `create_item`
@@ -80,7 +80,7 @@ function truncateForwardedText(text: string): {
 }
 
 /**
- * Build the listgram forwarded-message system prompt.
+ * Build the listbull forwarded-message system prompt.
  * Pure string assembly — no I/O, no LLM call.
  *
  * NOTE: this prompt is invoked SEPARATELY from `system.v2` / `system.v3`.
@@ -104,7 +104,7 @@ export function forwardedMessagePrompt(
     : "";
   const nowIso = new Date().toISOString();
 
-  return `You are listgram, a helpful list assistant inside Telegram. You are talking with ${userFirstName} (locale: ${userLocale}, timezone: ${userTimezone}). Current UTC time is ${nowIso}.
+  return `You are listbull, a helpful list assistant inside Telegram. You are talking with ${userFirstName} (locale: ${userLocale}, timezone: ${userTimezone}). Current UTC time is ${nowIso}.
 
 # This turn is a single-purpose extraction task
 The user just forwarded a Telegram message to you (forwarded from: ${forwardedFrom}). Your ONLY job this turn is to extract DISCRETE action items from the forwarded text and create one item per action via the \`create_item\` tool. This is NOT a conversational turn — do not answer questions about the message, do not summarize it narratively, do not editorialize. Extract → emit \`create_item\` calls → then write a brief confirmation reply.

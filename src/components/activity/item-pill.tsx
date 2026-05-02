@@ -7,12 +7,12 @@ export function ItemPill({ text }: { text: string | null | undefined }) {
   const display = safe.length > 30 ? `${safe.slice(0, 29)}…` : safe;
   return (
     <span
-      className="inline-flex max-w-full items-center rounded-[var(--lg-r-sm)] px-1.5 py-0.5 align-baseline"
+      className="inline-flex max-w-full items-center rounded-[var(--lb-r-sm)] px-1.5 py-0.5 align-baseline"
       style={{
-        background: "var(--lg-muted)",
-        color: "var(--lg-fg)",
-        fontSize: "var(--lg-fs-sm)",
-        fontWeight: "var(--lg-fw-medium)",
+        background: "var(--lb-muted)",
+        color: "var(--lb-fg)",
+        fontSize: "var(--lb-fs-sm)",
+        fontWeight: "var(--lb-fw-medium)",
       }}
       title={safe}
     >

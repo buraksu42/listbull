@@ -139,12 +139,12 @@ export function AuditList({ listId, locale, labels }: AuditListProps) {
               <h2
                 className="sticky top-0 z-10 px-4 py-2"
                 style={{
-                  fontSize: "var(--lg-fs-sm)",
-                  fontWeight: "var(--lg-fw-semibold)",
-                  color: "var(--lg-muted-fg)",
-                  background: "var(--lg-bg)",
-                  borderBottom: "1px solid var(--lg-border)",
-                  letterSpacing: "var(--lg-tracking-title)",
+                  fontSize: "var(--lb-fs-sm)",
+                  fontWeight: "var(--lb-fw-semibold)",
+                  color: "var(--lb-muted-fg)",
+                  background: "var(--lb-bg)",
+                  borderBottom: "1px solid var(--lb-border)",
+                  letterSpacing: "var(--lb-tracking-title)",
                 }}
               >
                 {group.label}
@@ -174,7 +174,7 @@ export function AuditList({ listId, locale, labels }: AuditListProps) {
               style={{
                 display: "flex",
                 justifyContent: "center",
-                padding: "var(--lg-sp-4)",
+                padding: "var(--lb-sp-4)",
               }}
             >
               <Button
@@ -195,15 +195,15 @@ export function AuditList({ listId, locale, labels }: AuditListProps) {
 
 function ListLoading() {
   return (
-    <div role="status" aria-live="polite" style={{ padding: "var(--lg-sp-6) 0" }}>
+    <div role="status" aria-live="polite" style={{ padding: "var(--lb-sp-6) 0" }}>
       {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
           style={{
             display: "flex",
-            gap: "var(--lg-sp-3)",
-            padding: "var(--lg-sp-3) var(--lg-sp-4)",
-            borderBottom: "1px solid var(--lg-border)",
+            gap: "var(--lb-sp-3)",
+            padding: "var(--lb-sp-3) var(--lb-sp-4)",
+            borderBottom: "1px solid var(--lb-border)",
             alignItems: "flex-start",
           }}
         >
@@ -212,8 +212,8 @@ function ListLoading() {
             style={{
               width: 28,
               height: 28,
-              borderRadius: "var(--lg-r-full)",
-              background: "var(--lg-muted)",
+              borderRadius: "var(--lb-r-full)",
+              background: "var(--lb-muted)",
             }}
           />
           <div style={{ flex: 1 }}>
@@ -223,8 +223,8 @@ function ListLoading() {
                 display: "block",
                 width: "70%",
                 height: 12,
-                borderRadius: "var(--lg-r-sm)",
-                background: "var(--lg-muted)",
+                borderRadius: "var(--lb-r-sm)",
+                background: "var(--lb-muted)",
                 marginBottom: 6,
               }}
             />
@@ -234,8 +234,8 @@ function ListLoading() {
                 display: "block",
                 width: "30%",
                 height: 10,
-                borderRadius: "var(--lg-r-sm)",
-                background: "var(--lg-muted)",
+                borderRadius: "var(--lb-r-sm)",
+                background: "var(--lb-muted)",
               }}
             />
           </div>

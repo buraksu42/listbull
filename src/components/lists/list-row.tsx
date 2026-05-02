@@ -11,22 +11,22 @@ export function ListRow({ list }: { list: List }) {
       style={{
         display: "flex",
         alignItems: "center",
-        gap: "var(--lg-sp-3)",
-        padding: "var(--lg-sp-4)",
+        gap: "var(--lb-sp-3)",
+        padding: "var(--lb-sp-4)",
         minHeight: 56,
-        borderBottom: "1px solid var(--lg-border)",
-        color: "var(--lg-fg)",
+        borderBottom: "1px solid var(--lb-border)",
+        color: "var(--lb-fg)",
         textDecoration: "none",
       }}
     >
-      <span style={{ fontSize: "var(--lg-fs-2xl)" }} aria-hidden>
+      <span style={{ fontSize: "var(--lb-fs-2xl)" }} aria-hidden>
         {emoji}
       </span>
       <span
         style={{
-          fontSize: "var(--lg-fs-lg)",
-          fontWeight: "var(--lg-fw-medium)",
-          letterSpacing: "var(--lg-tracking-title)",
+          fontSize: "var(--lb-fs-lg)",
+          fontWeight: "var(--lb-fw-medium)",
+          letterSpacing: "var(--lb-tracking-title)",
         }}
       >
         {list.isInbox ? "Inbox" : list.name}

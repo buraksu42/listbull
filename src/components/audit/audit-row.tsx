@@ -57,7 +57,7 @@ export function AuditRow({
     <li
       style={{
         listStyle: "none",
-        borderBottom: "1px solid var(--lg-border)",
+        borderBottom: "1px solid var(--lb-border)",
       }}
     >
       <div
@@ -72,8 +72,8 @@ export function AuditRow({
         <div style={{ flex: 1, minWidth: 0 }}>
           <p
             style={{
-              fontSize: "var(--lg-fs-md)",
-              color: "var(--lg-fg)",
+              fontSize: "var(--lb-fs-md)",
+              color: "var(--lb-fg)",
               lineHeight: 1.45,
               wordBreak: "break-word",
             }}
@@ -82,8 +82,8 @@ export function AuditRow({
           </p>
           <p
             style={{
-              fontSize: "var(--lg-fs-xs)",
-              color: "var(--lg-muted-fg)",
+              fontSize: "var(--lb-fs-xs)",
+              color: "var(--lb-muted-fg)",
               marginTop: 2,
             }}
           >

@@ -40,7 +40,7 @@ export function ActivitySentence({
   locale: "tr" | "en";
 }) {
   const actor = (
-    <strong style={{ fontWeight: "var(--lg-fw-semibold)" }}>
+    <strong style={{ fontWeight: "var(--lb-fw-semibold)" }}>
       {row.actorFirstName}
     </strong>
   );
@@ -191,7 +191,7 @@ function nameOf(snap: SnapshotList): React.ReactElement {
 function memberOf(snap: SnapshotMember): React.ReactElement {
   const fn = snap?.user?.telegramFirstName ?? snap?.user?.telegramUsername ?? "?";
   return (
-    <strong style={{ fontWeight: "var(--lg-fw-medium)" }}>{fn}</strong>
+    <strong style={{ fontWeight: "var(--lb-fw-medium)" }}>{fn}</strong>
   );
 }
 

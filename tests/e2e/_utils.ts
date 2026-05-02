@@ -6,16 +6,16 @@ import crypto from "node:crypto";
  * The strict-gate Phase 4 contract demands these tests EXIST and the
  * Playwright config compiles. Live execution requires:
  *
- *   - A reachable Next.js server (LISTGRAM_E2E_BASE_URL or default
+ *   - A reachable Next.js server (LISTBULL_E2E_BASE_URL or default
  *     http://127.0.0.1:3000) backed by a real Postgres.
  *   - A real Telegram bot token + webhook secret in the server's env.
- *   - LISTGRAM_E2E_LIVE=1 to flip every spec from `test.skip` to
+ *   - LISTBULL_E2E_LIVE=1 to flip every spec from `test.skip` to
  *     `test.fixme` where unimplemented or `test()` where ready.
  *
  * Phase 5 staging flips that flag on. Until then, the suite is a
  * compile-time + structure baseline.
  */
-export const LIVE = process.env.LISTGRAM_E2E_LIVE === "1";
+export const LIVE = process.env.LISTBULL_E2E_LIVE === "1";
 
 /**
  * Build a Telegram Mini App `initData` query string signed with the

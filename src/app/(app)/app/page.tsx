@@ -65,34 +65,34 @@ export default function AppBoot() {
         minHeight: "100dvh",
         display: "grid",
         placeItems: "center",
-        padding: "var(--lg-sp-6)",
+        padding: "var(--lb-sp-6)",
         textAlign: "center",
       }}
     >
       {phase === "booting" && (
-        <p style={{ color: "var(--lg-muted-fg)" }}>Loading…</p>
+        <p style={{ color: "var(--lb-muted-fg)" }}>Loading…</p>
       )}
       {phase === "no-telegram" && (
         <div>
-          <p style={{ color: "var(--lg-fg)", marginBottom: "var(--lg-sp-3)" }}>
-            listgram works inside Telegram.
+          <p style={{ color: "var(--lb-fg)", marginBottom: "var(--lb-sp-3)" }}>
+            listbull works inside Telegram.
           </p>
-          <p style={{ color: "var(--lg-muted-fg)" }}>
+          <p style={{ color: "var(--lb-muted-fg)" }}>
             Open this app via the bot button on Telegram.
           </p>
         </div>
       )}
       {phase === "auth-failed" && (
         <div>
-          <p style={{ color: "var(--lg-destructive)" }}>
+          <p style={{ color: "var(--lb-destructive)" }}>
             Authentication failed.
           </p>
           {error && (
             <p
               style={{
-                color: "var(--lg-muted-fg)",
-                fontSize: "var(--lg-fs-sm)",
-                marginTop: "var(--lg-sp-2)",
+                color: "var(--lb-muted-fg)",
+                fontSize: "var(--lb-fs-sm)",
+                marginTop: "var(--lb-sp-2)",
               }}
             >
               {error}

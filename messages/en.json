@@ -112,14 +112,14 @@
     "feature6Body": "Optimistic UI on every action. 5-second polling on shared lists. Snappy regardless of network.",
     "howHeading": "How it works",
     "how1Title": "Open the bot",
-    "how1Body": "Start a chat with @listgram_bot. The bot creates your Inbox automatically.",
+    "how1Body": "Start a chat with @listbull_bot. The bot creates your Inbox automatically.",
     "how2Title": "Talk or tap",
     "how2Body": "Type \"süt al\" or open the Mini App and tap. Both stay in sync within 5 seconds.",
     "how3Title": "Share when you want",
     "how3Body": "Invite housemates by @username. They get a one-tap accept link in chat.",
     "footerHosted": "Hosted on Hetzner — Dokploy",
     "footerLicense": "MIT licensed · open source",
-    "footerCopyright": "© 2026 listgram"
+    "footerCopyright": "© 2026 listbull"
   },
   "snapshot": {
     "capturedBy": "Captured by {name}",
@@ -165,7 +165,7 @@
   },
   "setup": {
     "title": "Setup",
-    "description": "Configure listgram on this server.",
+    "description": "Configure listbull on this server.",
     "botToken": "Bot token",
     "botTokenHint": "Get this from @BotFather.",
     "webhookSecret": "Webhook secret",

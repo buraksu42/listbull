@@ -32,8 +32,8 @@ export default async function AppLayout({
             <div
               className="min-h-dvh"
               style={{
-                background: "var(--lg-bg)",
-                color: "var(--lg-fg)",
+                background: "var(--lb-bg)",
+                color: "var(--lb-fg)",
               }}
             >
               {children}

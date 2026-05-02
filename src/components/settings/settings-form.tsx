@@ -187,8 +187,8 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
             id="settings-model"
             {...register("llmModel")}
             className={cn(
-              "h-11 rounded-[var(--lg-r-md)] border border-[var(--lg-border)] bg-[var(--lg-input-bg)] px-3 text-base text-[var(--lg-fg)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lg-accent)]",
+              "h-11 rounded-[var(--lb-r-md)] border border-[var(--lb-border)] bg-[var(--lb-input-bg)] px-3 text-base text-[var(--lb-fg)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)]",
             )}
           >
             {MODEL_OPTIONS.map((opt) => (
@@ -207,8 +207,8 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
             id="settings-locale"
             {...register("locale")}
             className={cn(
-              "h-11 rounded-[var(--lg-r-md)] border border-[var(--lg-border)] bg-[var(--lg-input-bg)] px-3 text-base text-[var(--lg-fg)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lg-accent)]",
+              "h-11 rounded-[var(--lb-r-md)] border border-[var(--lb-border)] bg-[var(--lb-input-bg)] px-3 text-base text-[var(--lb-fg)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)]",
             )}
           >
             {LOCALE_OPTIONS.map((opt) => (
@@ -226,8 +226,8 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
             list="settings-timezone-options"
             {...register("timezone")}
             className={cn(
-              "h-11 rounded-[var(--lg-r-md)] border border-[var(--lg-border)] bg-[var(--lg-input-bg)] px-3 text-base text-[var(--lg-fg)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lg-accent)]",
+              "h-11 rounded-[var(--lb-r-md)] border border-[var(--lb-border)] bg-[var(--lb-input-bg)] px-3 text-base text-[var(--lb-fg)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)]",
             )}
             placeholder="e.g. Europe/Istanbul"
           />
@@ -236,7 +236,7 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
               <option key={tz} value={tz} />
             ))}
           </datalist>
-          <p className="text-xs text-[var(--lg-muted-fg)]">
+          <p className="text-xs text-[var(--lb-muted-fg)]">
             IANA name (e.g. Europe/Istanbul, America/New_York).
           </p>
         </div>
@@ -246,7 +246,7 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
         <div className="flex items-center justify-between gap-4">
           <div className="flex flex-col gap-1">
             <Label htmlFor="settings-notifications">Reminder DMs</Label>
-            <p className="text-xs text-[var(--lg-muted-fg)]">
+            <p className="text-xs text-[var(--lb-muted-fg)]">
               Receive a Telegram DM when an item is due.
             </p>
           </div>
@@ -284,9 +284,9 @@ function Section({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold text-[var(--lg-fg)]">{title}</h2>
+        <h2 className="text-base font-semibold text-[var(--lb-fg)]">{title}</h2>
         {subtitle && (
-          <p className="text-xs text-[var(--lg-muted-fg)]">{subtitle}</p>
+          <p className="text-xs text-[var(--lb-muted-fg)]">{subtitle}</p>
         )}
       </div>
       <div className="flex flex-col gap-4">{children}</div>

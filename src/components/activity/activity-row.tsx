@@ -42,14 +42,14 @@ export function ActivityRow({
     <li
       style={{
         listStyle: "none",
-        borderBottom: "1px solid var(--lg-border)",
+        borderBottom: "1px solid var(--lb-border)",
       }}
     >
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        className="flex w-full items-start gap-3 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lg-accent)] focus-visible:ring-inset"
+        className="flex w-full items-start gap-3 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)] focus-visible:ring-inset"
         style={{ minHeight: 56 }}
       >
         <Avatar
@@ -60,8 +60,8 @@ export function ActivityRow({
         <div style={{ flex: 1, minWidth: 0 }}>
           <p
             style={{
-              fontSize: "var(--lg-fs-md)",
-              color: "var(--lg-fg)",
+              fontSize: "var(--lb-fs-md)",
+              color: "var(--lb-fg)",
               lineHeight: 1.45,
               wordBreak: "break-word",
             }}
@@ -70,8 +70,8 @@ export function ActivityRow({
           </p>
           <p
             style={{
-              fontSize: "var(--lg-fs-xs)",
-              color: "var(--lg-muted-fg)",
+              fontSize: "var(--lb-fs-xs)",
+              color: "var(--lb-muted-fg)",
               marginTop: 2,
             }}
             title={absolute}
@@ -81,12 +81,12 @@ export function ActivityRow({
           {expanded && (
             <dl
               className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs"
-              style={{ color: "var(--lg-muted-fg)" }}
+              style={{ color: "var(--lb-muted-fg)" }}
             >
               <dt>at</dt>
-              <dd style={{ color: "var(--lg-fg)" }}>{absolute}</dd>
+              <dd style={{ color: "var(--lb-fg)" }}>{absolute}</dd>
               <dt>action</dt>
-              <dd style={{ color: "var(--lg-fg)" }}>{row.action}</dd>
+              <dd style={{ color: "var(--lb-fg)" }}>{row.action}</dd>
             </dl>
           )}
         </div>

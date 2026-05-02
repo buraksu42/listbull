@@ -84,20 +84,20 @@ export function ItemRow({
       role="listitem"
       aria-label={ariaLabel}
       className={cn(
-        "group flex items-center gap-3 border-b border-[var(--lg-border)]",
+        "group flex items-center gap-3 border-b border-[var(--lb-border)]",
         "px-4 transition-opacity",
         pending && "opacity-60",
       )}
       style={{ minHeight: 56 }}
     >
       {dragHandle ? (
-        <span className="flex h-11 w-7 items-center justify-center text-[var(--lg-muted-fg)]">
+        <span className="flex h-11 w-7 items-center justify-center text-[var(--lb-muted-fg)]">
           {dragHandle}
         </span>
       ) : (
         <span
           aria-hidden
-          className="hidden h-11 w-7 items-center justify-center text-[var(--lg-muted-fg)] opacity-0 transition-opacity group-hover:opacity-100 sm:flex"
+          className="hidden h-11 w-7 items-center justify-center text-[var(--lb-muted-fg)] opacity-0 transition-opacity group-hover:opacity-100 sm:flex"
         >
           <GripVertical className="h-4 w-4" />
         </span>
@@ -114,11 +114,11 @@ export function ItemRow({
         onClick={onEdit}
         className={cn(
           "flex-1 truncate text-left",
-          "text-[length:var(--lg-fs-lg)] font-normal leading-relaxed",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lg-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lg-bg)] rounded-[var(--lg-r-sm)]",
+          "text-[length:var(--lb-fs-lg)] font-normal leading-relaxed",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lb-bg)] rounded-[var(--lb-r-sm)]",
         )}
         style={{
-          color: item.isDone ? "var(--lg-muted-fg)" : "var(--lg-fg)",
+          color: item.isDone ? "var(--lb-muted-fg)" : "var(--lb-fg)",
           textDecoration: item.isDone ? "line-through" : "none",
         }}
       >
@@ -169,16 +169,16 @@ function Checkbox({
       aria-label={ariaLabel}
       onClick={() => onCheckedChange(!checked)}
       className={cn(
-        "flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--lg-r-full)]",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lg-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lg-bg)]",
+        "flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--lb-r-full)]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lb-bg)]",
       )}
     >
       <span
         aria-hidden
         className="grid h-[22px] w-[22px] place-items-center rounded-full transition-colors"
         style={{
-          border: `2px solid ${checked ? "var(--lg-accent)" : "var(--lg-muted-fg)"}`,
-          background: checked ? "var(--lg-accent)" : "transparent",
+          border: `2px solid ${checked ? "var(--lb-accent)" : "var(--lb-muted-fg)"}`,
+          background: checked ? "var(--lb-accent)" : "transparent",
         }}
       >
         {checked && (
@@ -191,7 +191,7 @@ function Checkbox({
           >
             <path
               d="M2 6.5l2.5 2.5L10 3.5"
-              stroke="var(--lg-accent-fg)"
+              stroke="var(--lb-accent-fg)"
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"

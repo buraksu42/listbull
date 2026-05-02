@@ -124,7 +124,7 @@ export function ItemEditSheet({
               {errors.text && (
                 <p
                   id="item-edit-text-error"
-                  className="text-sm text-[var(--lg-destructive)]"
+                  className="text-sm text-[var(--lb-destructive)]"
                 >
                   {errors.text.message}
                 </p>
@@ -138,7 +138,7 @@ export function ItemEditSheet({
                 type="datetime-local"
                 {...register("dueAtLocal")}
               />
-              <p className="text-xs text-[var(--lg-muted-fg)]">
+              <p className="text-xs text-[var(--lb-muted-fg)]">
                 Leave empty to clear the reminder.
               </p>
             </div>

@@ -30,33 +30,33 @@ export function Hero({
 }: HeroProps) {
   return (
     <section
-      aria-label="listgram"
+      aria-label="listbull"
       style={{
-        padding: "var(--lg-sp-12) var(--lg-sp-4) var(--lg-sp-10)",
+        padding: "var(--lb-sp-12) var(--lb-sp-4) var(--lb-sp-10)",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: "var(--lg-sp-6)",
+        gap: "var(--lb-sp-6)",
         textAlign: "center",
       }}
     >
-      <BrandMark size={72} ariaLabel="listgram" />
+      <BrandMark size={72} ariaLabel="listbull" />
 
       <span
-        className="lg-wordmark"
+        className="lb-wordmark"
         style={{
-          fontSize: "var(--lg-fs-3xl)",
-          color: "var(--lg-ink-deep)",
+          fontSize: "var(--lb-fs-3xl)",
+          color: "var(--lb-ink-deep)",
         }}
       >
-        listgram
+        listbull
       </span>
 
       <h1
         style={{
-          fontSize: "var(--lg-fs-4xl)",
-          fontWeight: "var(--lg-fw-bold)",
-          letterSpacing: "var(--lg-tracking-title)",
+          fontSize: "var(--lb-fs-4xl)",
+          fontWeight: "var(--lb-fw-bold)",
+          letterSpacing: "var(--lb-tracking-title)",
           lineHeight: 1.15,
           maxWidth: 640,
         }}
@@ -66,8 +66,8 @@ export function Hero({
 
       <p
         style={{
-          fontSize: "var(--lg-fs-xl)",
-          color: "var(--lg-muted-fg)",
+          fontSize: "var(--lb-fs-xl)",
+          color: "var(--lb-muted-fg)",
           lineHeight: 1.5,
           maxWidth: 560,
         }}
@@ -78,7 +78,7 @@ export function Hero({
       <div
         style={{
           display: "flex",
-          gap: "var(--lg-sp-3)",
+          gap: "var(--lb-sp-3)",
           flexWrap: "wrap",
           justifyContent: "center",
         }}
@@ -88,13 +88,13 @@ export function Hero({
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: "var(--lg-sp-2)",
-            padding: "var(--lg-sp-3) var(--lg-sp-6)",
-            minHeight: "var(--lg-tap-target)",
-            borderRadius: "var(--lg-r-full)",
-            background: "var(--lg-accent)",
-            color: "var(--lg-accent-fg)",
-            fontWeight: "var(--lg-fw-semibold)",
+            gap: "var(--lb-sp-2)",
+            padding: "var(--lb-sp-3) var(--lb-sp-6)",
+            minHeight: "var(--lb-tap-target)",
+            borderRadius: "var(--lb-r-full)",
+            background: "var(--lb-accent)",
+            color: "var(--lb-accent-fg)",
+            fontWeight: "var(--lb-fw-semibold)",
             textDecoration: "none",
           }}
         >
@@ -107,14 +107,14 @@ export function Hero({
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: "var(--lg-sp-2)",
-            padding: "var(--lg-sp-3) var(--lg-sp-6)",
-            minHeight: "var(--lg-tap-target)",
-            borderRadius: "var(--lg-r-full)",
-            border: "1px solid var(--lg-border)",
+            gap: "var(--lb-sp-2)",
+            padding: "var(--lb-sp-3) var(--lb-sp-6)",
+            minHeight: "var(--lb-tap-target)",
+            borderRadius: "var(--lb-r-full)",
+            border: "1px solid var(--lb-border)",
             background: "transparent",
-            color: "var(--lg-fg)",
-            fontWeight: "var(--lg-fw-semibold)",
+            color: "var(--lb-fg)",
+            fontWeight: "var(--lb-fw-semibold)",
             textDecoration: "none",
           }}
         >

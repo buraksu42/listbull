@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
 
-export const alt = "listgram — Telegram-native AI list assistant";
+export const alt = "listbull — Telegram-native AI list assistant";
 export const size = {
   width: 1200,
   height: 630,
@@ -63,7 +63,7 @@ export default function OgImage() {
             marginBottom: 16,
           }}
         >
-          listgram
+          listbull
         </div>
 
         <div

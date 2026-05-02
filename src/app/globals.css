@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* listgram · design tokens · v1
+/* listbull · design tokens · v1
  * Direction C "Sent" — chat-bubble mark
  * Theme tokens scoped on [data-theme] / [data-theme="dark"].
  * Telegram Mini Apps expose CSS vars via tg-theme-*; bridged in app code.
@@ -8,189 +8,189 @@
 
 :root {
   /* ─── Brand ─── */
-  --lg-accent:           #00D9C0;
-  --lg-accent-cobalt:    #3D7DFF;
-  --lg-accent-marigold:  #F0A020;
-  --lg-accent-rose:      #E5466F;
+  --lb-accent:           #00D9C0;
+  --lb-accent-cobalt:    #3D7DFF;
+  --lb-accent-marigold:  #F0A020;
+  --lb-accent-rose:      #E5466F;
 
-  --lg-ink-deep:  #0A1419;
-  --lg-ink:       #0A0A0A;
-  --lg-paper:     #FFFFFF;
+  --lb-ink-deep:  #0A1419;
+  --lb-ink:       #0A0A0A;
+  --lb-paper:     #FFFFFF;
 
   /* ─── Type ─── */
-  --lg-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --lg-font-brand: var(--lg-font-sans);
+  --lb-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --lb-font-brand: var(--lb-font-sans);
 
-  --lg-fs-xs:  11px;
-  --lg-fs-sm:  12px;
-  --lg-fs-md:  14px;
-  --lg-fs-lg:  16px;
-  --lg-fs-xl:  18px;
-  --lg-fs-2xl: 22px;
-  --lg-fs-3xl: 28px;
-  --lg-fs-4xl: 34px;
+  --lb-fs-xs:  11px;
+  --lb-fs-sm:  12px;
+  --lb-fs-md:  14px;
+  --lb-fs-lg:  16px;
+  --lb-fs-xl:  18px;
+  --lb-fs-2xl: 22px;
+  --lb-fs-3xl: 28px;
+  --lb-fs-4xl: 34px;
 
-  --lg-fw-regular:  400;
-  --lg-fw-medium:   500;
-  --lg-fw-semibold: 600;
-  --lg-fw-bold:     700;
+  --lb-fw-regular:  400;
+  --lb-fw-medium:   500;
+  --lb-fw-semibold: 600;
+  --lb-fw-bold:     700;
 
-  --lg-tracking-wordmark: -0.02em;
-  --lg-tracking-title:    -0.01em;
-  --lg-tracking-body:     0;
+  --lb-tracking-wordmark: -0.02em;
+  --lb-tracking-title:    -0.01em;
+  --lb-tracking-body:     0;
 
   /* ─── Radius ─── */
-  --lg-r-sm:   6px;
-  --lg-r-md:   10px;
-  --lg-r-lg:   14px;
-  --lg-r-xl:   22px;
-  --lg-r-full: 9999px;
+  --lb-r-sm:   6px;
+  --lb-r-md:   10px;
+  --lb-r-lg:   14px;
+  --lb-r-xl:   22px;
+  --lb-r-full: 9999px;
 
   /* ─── Spacing (4px base) ─── */
-  --lg-sp-1:  4px;
-  --lg-sp-2:  8px;
-  --lg-sp-3:  12px;
-  --lg-sp-4:  16px;
-  --lg-sp-5:  20px;
-  --lg-sp-6:  24px;
-  --lg-sp-8:  32px;
-  --lg-sp-10: 40px;
-  --lg-sp-12: 48px;
+  --lb-sp-1:  4px;
+  --lb-sp-2:  8px;
+  --lb-sp-3:  12px;
+  --lb-sp-4:  16px;
+  --lb-sp-5:  20px;
+  --lb-sp-6:  24px;
+  --lb-sp-8:  32px;
+  --lb-sp-10: 40px;
+  --lb-sp-12: 48px;
 
   /* ─── Elevation ─── */
-  --lg-shadow-card:    0 1px 2px rgba(10,20,25,0.04), 0 2px 8px rgba(10,20,25,0.04);
-  --lg-shadow-popover: 0 8px 24px rgba(10,20,25,0.16);
-  --lg-shadow-sheet:   0 -8px 24px rgba(10,20,25,0.18);
+  --lb-shadow-card:    0 1px 2px rgba(10,20,25,0.04), 0 2px 8px rgba(10,20,25,0.04);
+  --lb-shadow-popover: 0 8px 24px rgba(10,20,25,0.16);
+  --lb-shadow-sheet:   0 -8px 24px rgba(10,20,25,0.18);
 
   /* ─── Motion ─── */
-  --lg-dur-fast:   120ms;
-  --lg-dur-normal: 200ms;
-  --lg-dur-slow:   320ms;
-  --lg-ease-std:   cubic-bezier(0.2, 0, 0, 1);
-  --lg-ease-emph:  cubic-bezier(0.3, 0, 0, 1);
+  --lb-dur-fast:   120ms;
+  --lb-dur-normal: 200ms;
+  --lb-dur-slow:   320ms;
+  --lb-ease-std:   cubic-bezier(0.2, 0, 0, 1);
+  --lb-ease-emph:  cubic-bezier(0.3, 0, 0, 1);
 
   /* ─── Sizes ─── */
-  --lg-checkbox:    22px;
-  --lg-icon-sm:     16px;
-  --lg-icon-md:     18px;
-  --lg-icon-lg:     24px;
-  --lg-avatar:      28px;
-  --lg-tap-target:  44px;
-  --lg-header-h:    52px;
+  --lb-checkbox:    22px;
+  --lb-icon-sm:     16px;
+  --lb-icon-md:     18px;
+  --lb-icon-lg:     24px;
+  --lb-avatar:      28px;
+  --lb-tap-target:  44px;
+  --lb-header-h:    52px;
 }
 
 /* ─── Light theme (default) ─── */
 :root,
 [data-theme="light"] {
-  --lg-bg:          #FFFFFF;
-  --lg-fg:          #0A0A0A;
-  --lg-card:        #F4F4F5;
-  --lg-card-fg:     #0A0A0A;
-  --lg-muted:       #F4F4F5;
-  --lg-muted-fg:    #707579;
-  --lg-border:      #E1E4E8;
-  --lg-input-bg:    #FFFFFF;
-  --lg-subtle:      #FAFAFA;
-  --lg-destructive: #E53935;
-  --lg-success:     #2EB872;
-  --lg-accent-fg:   #FFFFFF;
+  --lb-bg:          #FFFFFF;
+  --lb-fg:          #0A0A0A;
+  --lb-card:        #F4F4F5;
+  --lb-card-fg:     #0A0A0A;
+  --lb-muted:       #F4F4F5;
+  --lb-muted-fg:    #707579;
+  --lb-border:      #E1E4E8;
+  --lb-input-bg:    #FFFFFF;
+  --lb-subtle:      #FAFAFA;
+  --lb-destructive: #E53935;
+  --lb-success:     #2EB872;
+  --lb-accent-fg:   #FFFFFF;
 }
 
 /* ─── Dark theme (Telegram default) ─── */
 [data-theme="dark"] {
-  --lg-bg:          #17212B;
-  --lg-fg:          #F5F5F5;
-  --lg-card:        #232E3C;
-  --lg-card-fg:     #F5F5F5;
-  --lg-muted:       #232E3C;
-  --lg-muted-fg:    #708499;
-  --lg-border:      #2C3A4D;
-  --lg-input-bg:    #1B2735;
-  --lg-subtle:      #1C2734;
-  --lg-destructive: #FF5252;
-  --lg-success:     #4DD18C;
-  --lg-accent-fg:   #0A1419;
+  --lb-bg:          #17212B;
+  --lb-fg:          #F5F5F5;
+  --lb-card:        #232E3C;
+  --lb-card-fg:     #F5F5F5;
+  --lb-muted:       #232E3C;
+  --lb-muted-fg:    #708499;
+  --lb-border:      #2C3A4D;
+  --lb-input-bg:    #1B2735;
+  --lb-subtle:      #1C2734;
+  --lb-destructive: #FF5252;
+  --lb-success:     #4DD18C;
+  --lb-accent-fg:   #0A1419;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --lg-bg:          #17212B;
-    --lg-fg:          #F5F5F5;
-    --lg-card:        #232E3C;
-    --lg-card-fg:     #F5F5F5;
-    --lg-muted:       #232E3C;
-    --lg-muted-fg:    #708499;
-    --lg-border:      #2C3A4D;
-    --lg-input-bg:    #1B2735;
-    --lg-subtle:      #1C2734;
-    --lg-destructive: #FF5252;
-    --lg-success:     #4DD18C;
-    --lg-accent-fg:   #0A1419;
+    --lb-bg:          #17212B;
+    --lb-fg:          #F5F5F5;
+    --lb-card:        #232E3C;
+    --lb-card-fg:     #F5F5F5;
+    --lb-muted:       #232E3C;
+    --lb-muted-fg:    #708499;
+    --lb-border:      #2C3A4D;
+    --lb-input-bg:    #1B2735;
+    --lb-subtle:      #1C2734;
+    --lb-destructive: #FF5252;
+    --lb-success:     #4DD18C;
+    --lb-accent-fg:   #0A1419;
   }
 }
 
 /* Tailwind v4 theme bridge — expose tokens to utility classes */
 @theme inline {
-  --color-bg: var(--lg-bg);
-  --color-fg: var(--lg-fg);
-  --color-card: var(--lg-card);
-  --color-card-fg: var(--lg-card-fg);
-  --color-muted: var(--lg-muted);
-  --color-muted-fg: var(--lg-muted-fg);
-  --color-border: var(--lg-border);
-  --color-input-bg: var(--lg-input-bg);
-  --color-subtle: var(--lg-subtle);
-  --color-accent: var(--lg-accent);
-  --color-accent-fg: var(--lg-accent-fg);
-  --color-destructive: var(--lg-destructive);
-  --color-success: var(--lg-success);
+  --color-bg: var(--lb-bg);
+  --color-fg: var(--lb-fg);
+  --color-card: var(--lb-card);
+  --color-card-fg: var(--lb-card-fg);
+  --color-muted: var(--lb-muted);
+  --color-muted-fg: var(--lb-muted-fg);
+  --color-border: var(--lb-border);
+  --color-input-bg: var(--lb-input-bg);
+  --color-subtle: var(--lb-subtle);
+  --color-accent: var(--lb-accent);
+  --color-accent-fg: var(--lb-accent-fg);
+  --color-destructive: var(--lb-destructive);
+  --color-success: var(--lb-success);
 
-  --radius-sm: var(--lg-r-sm);
-  --radius-md: var(--lg-r-md);
-  --radius-lg: var(--lg-r-lg);
-  --radius-xl: var(--lg-r-xl);
-  --radius-full: var(--lg-r-full);
+  --radius-sm: var(--lb-r-sm);
+  --radius-md: var(--lb-r-md);
+  --radius-lg: var(--lb-r-lg);
+  --radius-xl: var(--lb-r-xl);
+  --radius-full: var(--lb-r-full);
 
-  --font-sans: var(--lg-font-sans);
-  --font-brand: var(--lg-font-brand);
+  --font-sans: var(--lb-font-sans);
+  --font-brand: var(--lb-font-brand);
 }
 
 html,
 body {
-  font-family: var(--lg-font-sans);
-  font-size: var(--lg-fs-md);
-  background: var(--lg-bg);
-  color: var(--lg-fg);
+  font-family: var(--lb-font-sans);
+  font-size: var(--lb-fs-md);
+  background: var(--lb-bg);
+  color: var(--lb-fg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-.lg-wordmark {
-  font-family: var(--lg-font-brand);
-  font-weight: var(--lg-fw-bold);
-  letter-spacing: var(--lg-tracking-wordmark);
+.lb-wordmark {
+  font-family: var(--lb-font-brand);
+  font-weight: var(--lb-fw-bold);
+  letter-spacing: var(--lb-tracking-wordmark);
 }
 
 /* Skip link — visible only on keyboard focus. */
-.lg-skip-link {
+.lb-skip-link {
   position: absolute;
-  left: var(--lg-sp-2);
-  top: var(--lg-sp-2);
-  padding: var(--lg-sp-2) var(--lg-sp-3);
-  background: var(--lg-accent);
-  color: var(--lg-accent-fg);
-  border-radius: var(--lg-r-md);
-  font-weight: var(--lg-fw-semibold);
+  left: var(--lb-sp-2);
+  top: var(--lb-sp-2);
+  padding: var(--lb-sp-2) var(--lb-sp-3);
+  background: var(--lb-accent);
+  color: var(--lb-accent-fg);
+  border-radius: var(--lb-r-md);
+  font-weight: var(--lb-fw-semibold);
   text-decoration: none;
   transform: translateY(-200%);
   transition: transform 120ms ease-out;
   z-index: 100;
 }
-.lg-skip-link:focus,
-.lg-skip-link:focus-visible {
+.lb-skip-link:focus,
+.lb-skip-link:focus-visible {
   transform: translateY(0);
   outline: none;
-  box-shadow: 0 0 0 2px var(--lg-bg), 0 0 0 4px var(--lg-accent);
+  box-shadow: 0 0 0 2px var(--lb-bg), 0 0 0 4px var(--lb-accent);
 }
 
 /* Visually hidden — used by aria-live regions etc. */

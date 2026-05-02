@@ -43,7 +43,7 @@ export default async function InviteAcceptPage({
 
   if (!token || token.length < 16) {
     return (
-      <main style={{ paddingTop: "var(--lg-sp-12)" }}>
+      <main style={{ paddingTop: "var(--lb-sp-12)" }}>
         <EmptyState
           title="Invite not found"
           description="This invite link is invalid or has been removed."
@@ -55,7 +55,7 @@ export default async function InviteAcceptPage({
   const ctx = await getInviteContextByToken(token);
   if (!ctx) {
     return (
-      <main style={{ paddingTop: "var(--lg-sp-12)" }}>
+      <main style={{ paddingTop: "var(--lb-sp-12)" }}>
         <EmptyState
           title="Invite not found"
           description="This invite link is invalid or has been removed."
@@ -93,7 +93,7 @@ export default async function InviteAcceptPage({
   return (
     <main
       style={{
-        padding: "var(--lg-sp-6) var(--lg-sp-4) var(--lg-sp-12)",
+        padding: "var(--lb-sp-6) var(--lb-sp-4) var(--lb-sp-12)",
         minHeight: "100dvh",
       }}
     >

@@ -67,10 +67,10 @@ export function FilterChips({
       aria-label={groupLabel}
       style={{
         display: "flex",
-        gap: "var(--lg-sp-2)",
-        padding: "var(--lg-sp-3) var(--lg-sp-4)",
+        gap: "var(--lb-sp-2)",
+        padding: "var(--lb-sp-3) var(--lb-sp-4)",
         overflowX: "auto",
-        borderBottom: "1px solid var(--lg-border)",
+        borderBottom: "1px solid var(--lb-border)",
       }}
     >
       {AUDIT_FILTERS.map((filter, idx) => {
@@ -88,14 +88,14 @@ export function FilterChips({
             onClick={() => onChange(filter)}
             onKeyDown={(e) => handleKeyDown(e, idx)}
             className={cn(
-              "inline-flex shrink-0 items-center rounded-[var(--lg-r-full)] border px-3 text-sm font-medium",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lg-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lg-bg)]",
+              "inline-flex shrink-0 items-center rounded-[var(--lb-r-full)] border px-3 text-sm font-medium",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lb-bg)]",
             )}
             style={{
               minHeight: 36,
-              background: checked ? "var(--lg-accent)" : "transparent",
-              color: checked ? "var(--lg-accent-fg)" : "var(--lg-fg)",
-              borderColor: checked ? "transparent" : "var(--lg-border)",
+              background: checked ? "var(--lb-accent)" : "transparent",
+              color: checked ? "var(--lb-accent-fg)" : "var(--lb-fg)",
+              borderColor: checked ? "transparent" : "var(--lb-border)",
             }}
           >
             {labels[filter]}

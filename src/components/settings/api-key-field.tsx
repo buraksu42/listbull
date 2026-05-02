@@ -54,7 +54,7 @@ export function ApiKeyField({
         <div className="flex items-center gap-2">
           <span
             id={id}
-            className="flex-1 rounded-[var(--lg-r-md)] border border-[var(--lg-border)] bg-[var(--lg-input-bg)] px-3 py-2 font-mono text-sm text-[var(--lg-muted-fg)]"
+            className="flex-1 rounded-[var(--lb-r-md)] border border-[var(--lb-border)] bg-[var(--lb-input-bg)] px-3 py-2 font-mono text-sm text-[var(--lb-muted-fg)]"
             aria-label={`Current key ending in ${storedKeyPreview ?? "unknown"}`}
           >
             {masked}
@@ -71,7 +71,7 @@ export function ApiKeyField({
             Replace key
           </Button>
         </div>
-        <p className="text-xs text-[var(--lg-muted-fg)]">
+        <p className="text-xs text-[var(--lb-muted-fg)]">
           Stored encrypted on the server. Replace to rotate.
         </p>
       </div>
@@ -114,12 +114,12 @@ export function ApiKeyField({
             setEditingRequested(false);
             onChange("");
           }}
-          className="self-start text-xs text-[var(--lg-muted-fg)] underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lg-accent)]"
+          className="self-start text-xs text-[var(--lb-muted-fg)] underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)]"
         >
           Cancel — keep existing key
         </button>
       )}
-      <p className="text-xs text-[var(--lg-muted-fg)]">
+      <p className="text-xs text-[var(--lb-muted-fg)]">
         We use this key to call OpenRouter on your behalf. Get one at{" "}
         <a
           href="https://openrouter.ai/keys"

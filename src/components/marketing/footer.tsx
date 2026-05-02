@@ -21,9 +21,9 @@ export function Footer({
   return (
     <footer
       style={{
-        padding: "var(--lg-sp-8) var(--lg-sp-4)",
+        padding: "var(--lb-sp-8) var(--lb-sp-4)",
         textAlign: "center",
-        borderTop: "1px solid var(--lg-border)",
+        borderTop: "1px solid var(--lb-border)",
       }}
     >
       <ul
@@ -33,9 +33,9 @@ export function Footer({
           padding: 0,
           display: "flex",
           flexDirection: "column",
-          gap: "var(--lg-sp-2)",
-          fontSize: "var(--lg-fs-sm)",
-          color: "var(--lg-muted-fg)",
+          gap: "var(--lb-sp-2)",
+          fontSize: "var(--lb-fs-sm)",
+          color: "var(--lb-muted-fg)",
         }}
       >
         <li>

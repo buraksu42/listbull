@@ -286,7 +286,7 @@ async function detectPersistentFailures(): Promise<void> {
  * Phase 4 · P2-3 resolution.
  */
 async function maybePingHeartbeat(): Promise<void> {
-  const url = env.LISTGRAM_HEARTBEAT_URL;
+  const url = env.LISTBULL_HEARTBEAT_URL;
   if (!url) return;
   try {
     await fetch(url, { method: "GET" });

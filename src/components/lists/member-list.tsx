@@ -128,7 +128,7 @@ export function MemberList({
     <section
       aria-labelledby={`${sectionId}-toggle`}
       style={{
-        borderBottom: "1px solid var(--lg-border)",
+        borderBottom: "1px solid var(--lb-border)",
       }}
     >
       <button
@@ -139,23 +139,23 @@ export function MemberList({
         onClick={() => setOpen((v) => !v)}
         className={cn(
           "flex w-full items-center gap-3 px-4 text-left",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lg-accent)] focus-visible:ring-inset",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)] focus-visible:ring-inset",
         )}
-        style={{ minHeight: 48, color: "var(--lg-fg)" }}
+        style={{ minHeight: 48, color: "var(--lb-fg)" }}
       >
         <Users
           className="h-4 w-4"
           aria-hidden
-          style={{ color: "var(--lg-muted-fg)" }}
+          style={{ color: "var(--lb-muted-fg)" }}
         />
-        <span style={{ fontSize: "var(--lg-fs-md)", fontWeight: "var(--lg-fw-medium)" }}>
+        <span style={{ fontSize: "var(--lb-fs-md)", fontWeight: "var(--lb-fw-medium)" }}>
           Members
         </span>
         <span
           aria-hidden
           style={{
-            fontSize: "var(--lg-fs-sm)",
-            color: "var(--lg-muted-fg)",
+            fontSize: "var(--lb-fs-sm)",
+            color: "var(--lb-muted-fg)",
           }}
         >
           {members.length}
@@ -164,7 +164,7 @@ export function MemberList({
         <ChevronDown
           className={cn("h-4 w-4 transition-transform", open && "rotate-180")}
           aria-hidden
-          style={{ color: "var(--lg-muted-fg)" }}
+          style={{ color: "var(--lb-muted-fg)" }}
         />
       </button>
 
@@ -174,7 +174,7 @@ export function MemberList({
             <div
               role="listitem"
               className="px-4 py-3 text-sm"
-              style={{ color: "var(--lg-muted-fg)" }}
+              style={{ color: "var(--lb-muted-fg)" }}
             >
               No members yet.
             </div>
@@ -233,9 +233,9 @@ function MemberRowView({
         <p
           className="truncate"
           style={{
-            fontSize: "var(--lg-fs-md)",
-            fontWeight: "var(--lg-fw-medium)",
-            color: "var(--lg-fg)",
+            fontSize: "var(--lb-fs-md)",
+            fontWeight: "var(--lb-fw-medium)",
+            color: "var(--lb-fg)",
           }}
         >
           {member.user.telegramFirstName}
@@ -243,8 +243,8 @@ function MemberRowView({
         <p
           className="truncate"
           style={{
-            fontSize: "var(--lg-fs-sm)",
-            color: "var(--lg-muted-fg)",
+            fontSize: "var(--lb-fs-sm)",
+            color: "var(--lb-muted-fg)",
           }}
         >
           {displayName === member.user.telegramFirstName ? "" : displayName}
@@ -274,10 +274,10 @@ function RoleChipReadonly({
     role === "owner" ? "Owner" : role === "editor" ? "Editor" : "Viewer";
   return (
     <span
-      className="inline-flex items-center rounded-[var(--lg-r-full)] px-2 py-1 text-xs font-medium"
+      className="inline-flex items-center rounded-[var(--lb-r-full)] px-2 py-1 text-xs font-medium"
       style={{
-        background: "var(--lg-muted)",
-        color: "var(--lg-muted-fg)",
+        background: "var(--lb-muted)",
+        color: "var(--lb-muted-fg)",
       }}
     >
       {label}
@@ -327,7 +327,7 @@ function MemberKebab({
       >
         <MoreVertical
           className="h-4 w-4"
-          style={{ color: "var(--lg-muted-fg)" }}
+          style={{ color: "var(--lb-muted-fg)" }}
           aria-hidden
         />
       </Button>
@@ -335,11 +335,11 @@ function MemberKebab({
         <div
           role="menu"
           aria-label={`Actions for ${memberLabel}`}
-          className="absolute right-0 top-full z-20 mt-1 min-w-[180px] overflow-hidden rounded-[var(--lg-r-md)] border"
+          className="absolute right-0 top-full z-20 mt-1 min-w-[180px] overflow-hidden rounded-[var(--lb-r-md)] border"
           style={{
-            background: "var(--lg-card)",
-            borderColor: "var(--lg-border)",
-            boxShadow: "var(--lg-shadow-popover)",
+            background: "var(--lb-card)",
+            borderColor: "var(--lb-border)",
+            boxShadow: "var(--lb-shadow-popover)",
           }}
         >
           <button
@@ -349,8 +349,8 @@ function MemberKebab({
               setOpen(false);
               onRemove();
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--lg-muted)] focus-visible:bg-[var(--lg-muted)] focus-visible:outline-none"
-            style={{ color: "var(--lg-destructive)" }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--lb-muted)] focus-visible:bg-[var(--lb-muted)] focus-visible:outline-none"
+            style={{ color: "var(--lb-destructive)" }}
           >
             <Trash2 className="h-4 w-4" aria-hidden />
             Remove
@@ -361,7 +361,7 @@ function MemberKebab({
             disabled
             aria-disabled="true"
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm opacity-50"
-            style={{ color: "var(--lg-muted-fg)" }}
+            style={{ color: "var(--lb-muted-fg)" }}
             title="Coming in Phase 4"
           >
             Change role
@@ -406,8 +406,8 @@ export function Avatar({
       style={{
         width: size,
         height: size,
-        background: "var(--lg-muted)",
-        color: "var(--lg-muted-fg)",
+        background: "var(--lb-muted)",
+        color: "var(--lb-muted-fg)",
         fontSize: Math.max(11, Math.round(size * 0.42)),
       }}
     >

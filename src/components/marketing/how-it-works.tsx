@@ -15,19 +15,19 @@ export function HowItWorks({ heading, steps }: HowItWorksProps) {
       id="how-it-works"
       aria-labelledby="how-heading"
       style={{
-        padding: "var(--lg-sp-10) var(--lg-sp-4)",
-        background: "var(--lg-card)",
+        padding: "var(--lb-sp-10) var(--lb-sp-4)",
+        background: "var(--lb-card)",
       }}
     >
       <div style={{ maxWidth: 1080, margin: "0 auto" }}>
         <h2
           id="how-heading"
           style={{
-            fontSize: "var(--lg-fs-2xl)",
-            fontWeight: "var(--lg-fw-bold)",
-            letterSpacing: "var(--lg-tracking-title)",
+            fontSize: "var(--lb-fs-2xl)",
+            fontWeight: "var(--lb-fw-bold)",
+            letterSpacing: "var(--lb-tracking-title)",
             textAlign: "center",
-            marginBottom: "var(--lg-sp-8)",
+            marginBottom: "var(--lb-sp-8)",
           }}
         >
           {heading}
@@ -40,20 +40,20 @@ export function HowItWorks({ heading, steps }: HowItWorksProps) {
             padding: 0,
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-            gap: "var(--lg-sp-4)",
+            gap: "var(--lb-sp-4)",
           }}
         >
           {steps.map((step, idx) => (
             <li
               key={step.title}
               style={{
-                padding: "var(--lg-sp-6)",
-                borderRadius: "var(--lg-r-lg)",
-                background: "var(--lg-paper)",
-                border: "1px solid var(--lg-border)",
+                padding: "var(--lb-sp-6)",
+                borderRadius: "var(--lb-r-lg)",
+                background: "var(--lb-paper)",
+                border: "1px solid var(--lb-border)",
                 display: "flex",
                 flexDirection: "column",
-                gap: "var(--lg-sp-3)",
+                gap: "var(--lb-sp-3)",
               }}
             >
               <span
@@ -64,28 +64,28 @@ export function HowItWorks({ heading, steps }: HowItWorksProps) {
                   justifyContent: "center",
                   width: 32,
                   height: 32,
-                  borderRadius: "var(--lg-r-full)",
-                  background: "var(--lg-ink-deep)",
-                  color: "var(--lg-accent)",
-                  fontWeight: "var(--lg-fw-bold)",
-                  fontSize: "var(--lg-fs-md)",
+                  borderRadius: "var(--lb-r-full)",
+                  background: "var(--lb-ink-deep)",
+                  color: "var(--lb-accent)",
+                  fontWeight: "var(--lb-fw-bold)",
+                  fontSize: "var(--lb-fs-md)",
                 }}
               >
                 {idx + 1}
               </span>
               <h3
                 style={{
-                  fontSize: "var(--lg-fs-lg)",
-                  fontWeight: "var(--lg-fw-semibold)",
-                  color: "var(--lg-ink-deep)",
+                  fontSize: "var(--lb-fs-lg)",
+                  fontWeight: "var(--lb-fw-semibold)",
+                  color: "var(--lb-ink-deep)",
                 }}
               >
                 {step.title}
               </h3>
               <p
                 style={{
-                  fontSize: "var(--lg-fs-md)",
-                  color: "var(--lg-muted-fg)",
+                  fontSize: "var(--lb-fs-md)",
+                  color: "var(--lb-muted-fg)",
                   lineHeight: 1.5,
                 }}
               >

@@ -92,7 +92,7 @@ export function AlertDialogContent({
         aria-modal="true"
         aria-label={ariaLabel ?? "Confirm"}
         className={cn(
-          "relative w-full max-w-sm rounded-[var(--lg-r-lg)] border border-[var(--lg-border)] bg-[var(--lg-card)] text-[var(--lg-card-fg)] shadow-[var(--lg-shadow-popover)]",
+          "relative w-full max-w-sm rounded-[var(--lb-r-lg)] border border-[var(--lb-border)] bg-[var(--lb-card)] text-[var(--lb-card-fg)] shadow-[var(--lb-shadow-popover)]",
           className,
         )}
       >
@@ -126,7 +126,7 @@ export function AlertDialogTitle({
   return (
     <h2
       className={cn(
-        "text-lg font-semibold text-[var(--lg-fg)]",
+        "text-lg font-semibold text-[var(--lb-fg)]",
         className,
       )}
     >
@@ -145,7 +145,7 @@ export function AlertDialogDescription({
   return (
     <p
       className={cn(
-        "text-sm text-[var(--lg-muted-fg)] leading-relaxed",
+        "text-sm text-[var(--lb-muted-fg)] leading-relaxed",
         className,
       )}
     >

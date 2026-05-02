@@ -20,15 +20,15 @@ export interface ButtonProps
 
 const variantClasses: Record<ButtonVariant, string> = {
   default:
-    "bg-[var(--lg-accent)] text-[var(--lg-accent-fg)] hover:opacity-90 active:opacity-80",
+    "bg-[var(--lb-accent)] text-[var(--lb-accent-fg)] hover:opacity-90 active:opacity-80",
   secondary:
-    "bg-[var(--lg-card)] text-[var(--lg-fg)] hover:bg-[var(--lg-muted)]",
+    "bg-[var(--lb-card)] text-[var(--lb-fg)] hover:bg-[var(--lb-muted)]",
   destructive:
-    "bg-[var(--lg-destructive)] text-white hover:opacity-90 active:opacity-80",
+    "bg-[var(--lb-destructive)] text-white hover:opacity-90 active:opacity-80",
   ghost:
-    "bg-transparent text-[var(--lg-fg)] hover:bg-[var(--lg-muted)]",
+    "bg-transparent text-[var(--lb-fg)] hover:bg-[var(--lb-muted)]",
   outline:
-    "bg-transparent text-[var(--lg-fg)] border border-[var(--lg-border)] hover:bg-[var(--lg-muted)]",
+    "bg-transparent text-[var(--lb-fg)] border border-[var(--lb-border)] hover:bg-[var(--lb-muted)]",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
@@ -45,8 +45,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         type={type}
         className={cn(
-          "inline-flex items-center justify-center gap-2 rounded-[var(--lg-r-md)] font-medium transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lg-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lg-bg)]",
+          "inline-flex items-center justify-center gap-2 rounded-[var(--lb-r-md)] font-medium transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lb-bg)]",
           "disabled:pointer-events-none disabled:opacity-50",
           variantClasses[variant],
           sizeClasses[size],

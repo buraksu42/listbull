@@ -1,7 +1,7 @@
 /**
  * D1 — bot inline-query handler (Phase 4).
  *
- * `@listgram_bot <query>` in any Telegram chat. Returns up to 10
+ * `@listbull_bot <query>` in any Telegram chat. Returns up to 10
  * `InlineQueryResultArticle` rows (Telegram's API caps at 50; we cap
  * at 10 per Architect's contract for sub-100ms latency + UI density).
  *

@@ -153,7 +153,7 @@ function SortableItem({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
-    background: isDragging ? "var(--lg-card)" : undefined,
+    background: isDragging ? "var(--lb-card)" : undefined,
   };
 
   const dragHandle = (
@@ -161,7 +161,7 @@ function SortableItem({
       type="button"
       ref={setActivatorNodeRef}
       aria-label={`Reorder ${item.text}`}
-      className="flex h-11 w-7 cursor-grab items-center justify-center rounded-[var(--lg-r-sm)] text-[var(--lg-muted-fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lg-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lg-bg)] active:cursor-grabbing"
+      className="flex h-11 w-7 cursor-grab items-center justify-center rounded-[var(--lb-r-sm)] text-[var(--lb-muted-fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lb-bg)] active:cursor-grabbing"
       style={{ touchAction: "none" }}
       {...attributes}
       {...listeners}

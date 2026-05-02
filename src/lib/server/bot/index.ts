@@ -36,7 +36,7 @@ export function getBot(): Bot {
   // Phase 4 — D2 shareable list snapshot.
   bot.command("snapshot", handleSnapshot);
 
-  // Phase 4 — D1 inline mode (`@listgram_bot <query>`).
+  // Phase 4 — D1 inline mode (`@listbull_bot <query>`).
   bot.on("inline_query", handleInlineQuery);
 
   // Phase 2 LLM router: any plain-text message that isn't a slash command.

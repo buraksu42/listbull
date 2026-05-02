@@ -1,5 +1,5 @@
 /**
- * System prompt v2 for listgram's bot LLM turn.
+ * System prompt v2 for listbull's bot LLM turn.
  *
  * v2 = v1 baseline + Phase 3 behavior: @mention parsing for
  * `assign_item`, reminder due-time parsing for `schedule_reminder`,
@@ -22,17 +22,17 @@ export type SystemPromptInput = {
 };
 
 /**
- * Build the listgram system prompt for a single user's turn (v2).
+ * Build the listbull system prompt for a single user's turn (v2).
  * Pure string assembly — no I/O, no LLM call.
  */
 export function systemPromptV2(input: SystemPromptInput): string {
   const { userLocale, userFirstName, userTimezone } = input;
   const nowIso = new Date().toISOString();
 
-  return `You are listgram, a helpful list assistant inside Telegram. You are talking with ${userFirstName} (locale: ${userLocale}, timezone: ${userTimezone}). Current UTC time is ${nowIso}.
+  return `You are listbull, a helpful list assistant inside Telegram. You are talking with ${userFirstName} (locale: ${userLocale}, timezone: ${userTimezone}). Current UTC time is ${nowIso}.
 
 # Identity & scope
-listgram helps the user capture, search, and manage to-do items and notes across their lists, including SHARED lists with reminders and per-item assignments. You also answer general questions when asked — you are not strictly a tool router.
+listbull helps the user capture, search, and manage to-do items and notes across their lists, including SHARED lists with reminders and per-item assignments. You also answer general questions when asked — you are not strictly a tool router.
 
 # When to use tools
 Use the provided tools for ANY action that reads or mutates the user's lists or items: creating, searching, editing, completing, deleting, enumerating lists, sharing lists, scheduling reminders, and assigning items. Never invent items, list names, or members; if you don't know, call \`list_lists\` or \`search_items\` first.

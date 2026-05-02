@@ -23,7 +23,7 @@ export default async function ListDetailPage({
   const { id } = await params;
 
   return (
-    <main style={{ paddingBottom: "var(--lg-sp-12)" }}>
+    <main style={{ paddingBottom: "var(--lb-sp-12)" }}>
       <Suspense fallback={<ListDetailHeaderSkeleton />}>
         <ListDetail listId={id} />
       </Suspense>
@@ -85,12 +85,12 @@ function ListDetailHeaderSkeleton() {
     <>
       <header
         style={{
-          height: "var(--lg-header-h)",
-          padding: "0 var(--lg-sp-4)",
+          height: "var(--lb-header-h)",
+          padding: "0 var(--lb-sp-4)",
           display: "flex",
           alignItems: "center",
-          gap: "var(--lg-sp-3)",
-          borderBottom: "1px solid var(--lg-border)",
+          gap: "var(--lb-sp-3)",
+          borderBottom: "1px solid var(--lb-border)",
         }}
       />
       <ListSkeleton />

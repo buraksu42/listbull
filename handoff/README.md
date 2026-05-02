@@ -1,9 +1,9 @@
-# listgram — Engineering Handoff
+# listbull — Engineering Handoff
 
 > Telegram-native AI list assistant with persistent shared list memory.
 > A Telegram Mini App + a chatty bot, with bring-your-own-key AI.
 
-This folder is the **single source of truth** for building listgram. Everything you need — product spec, architecture, agent design, visual design, brand assets, design tokens, and an interactive design reference — is here.
+This folder is the **single source of truth** for building listbull. Everything you need — product spec, architecture, agent design, visual design, brand assets, design tokens, and an interactive design reference — is here.
 
 ---
 
@@ -19,12 +19,12 @@ handoff/
 │   ├── agents.md                          ← AI agent architecture (intent routing, tools)
 │   └── design.md                          ← UX rules, layout, type, anti-patterns
 ├── design-reference/
-│   └── listgram (standalone).html         ← OPEN THIS · interactive prototype of all 7 surfaces
+│   └── listbull (standalone).html         ← OPEN THIS · interactive prototype of all 7 surfaces
 ├── brand/                                 ← logo & icon (Direction C · "Sent")
-│   ├── listgram-mark.svg                  ← primary mark, full color
-│   ├── listgram-mark-mono.svg             ← single-fill (currentColor) for stickers/silhouette
-│   ├── listgram-lockup-horizontal.svg     ← mark + wordmark
-│   └── listgram-app-icon-1024.svg         ← masked app-icon tile · 1024×1024
+│   ├── listbull-mark.svg                  ← primary mark, full color
+│   ├── listbull-mark-mono.svg             ← single-fill (currentColor) for stickers/silhouette
+│   ├── listbull-lockup-horizontal.svg     ← mark + wordmark
+│   └── listbull-app-icon-1024.svg         ← masked app-icon tile · 1024×1024
 └── tokens/                                ← design tokens
     ├── tokens.json                        ← W3C-style token export
     └── tokens.css                         ← drop-in CSS custom properties
@@ -35,7 +35,7 @@ handoff/
 ## 🚀 Quickstart for engineers
 
 1. **Read `specs/CLAUDE.md` first** — it's the 5-minute project overview.
-2. **Open `design-reference/listgram (standalone).html` in a browser** — fully interactive, offline. Click any artboard label to focus it. Toggle the **Tweaks** button (bottom right) to swap accent color, checkbox style, theme, etc.
+2. **Open `design-reference/listbull (standalone).html` in a browser** — fully interactive, offline. Click any artboard label to focus it. Toggle the **Tweaks** button (bottom right) to swap accent color, checkbox style, theme, etc.
 3. **Drop `tokens/tokens.css` into your app's global stylesheet** — every color, font size, spacing, radius, and motion token is wired up.
 4. **Use the SVGs in `brand/`** as-is. The mark is path-only, optimised for any size from 16px favicon to app-icon.
 
@@ -57,7 +57,7 @@ Use `[data-theme="light|dark"]` on `<html>` to switch. The CSS file also respect
 Single family: **Inter**. Self-host via `next/font` or fontsource — never load from Google in production (privacy + perf).
 
 ### Spacing & radius
-4px base spacing scale. Cards use `--lg-r-lg` (14px). The app-icon tile uses `--lg-r-xl` (22px) at 1024 size — scales proportionally.
+4px base spacing scale. Cards use `--lb-r-lg` (14px). The app-icon tile uses `--lb-r-xl` (22px) at 1024 size — scales proportionally.
 
 ---
 
@@ -68,8 +68,8 @@ These are the patterns the design assumes. Implement once, reuse everywhere.
 | Component        | Spec                                                                                  |
 |------------------|---------------------------------------------------------------------------------------|
 | **Item row**     | 56px tall · circular checkbox left · title + meta · drag handle on long-press        |
-| **Checkbox**     | 22×22 circle · stroke `--lg-muted-fg` unchecked · fills `--lg-accent` checked        |
-| **Composer**     | Bottom-fixed pill · 44px tall · placeholder "Add an item or ask listgram…"           |
+| **Checkbox**     | 22×22 circle · stroke `--lb-muted-fg` unchecked · fills `--lb-accent` checked        |
+| **Composer**     | Bottom-fixed pill · 44px tall · placeholder "Add an item or ask listbull…"           |
 | **App header**   | 52px · platform-native (iOS large title / Android M3 small app bar)                   |
 | **List icon**    | One emoji per list (allowed exception to the no-emoji rule) — see `design.md`        |
 | **Activity row** | Avatar · "Ahmet completed 3 items" · timestamp · undo within 10s                     |
@@ -78,11 +78,11 @@ These are the patterns the design assumes. Implement once, reuse everywhere.
 
 ## 🔌 Telegram Mini App integration notes
 
-- Bridge `tg-theme-*` CSS vars to our `--lg-*` tokens at app boot. Map:
-  - `--tg-theme-bg-color` → `--lg-bg`
-  - `--tg-theme-text-color` → `--lg-fg`
-  - `--tg-theme-hint-color` → `--lg-muted-fg`
-  - `--tg-theme-link-color` → `--lg-accent` (only if user hasn't set custom accent)
+- Bridge `tg-theme-*` CSS vars to our `--lb-*` tokens at app boot. Map:
+  - `--tg-theme-bg-color` → `--lb-bg`
+  - `--tg-theme-text-color` → `--lb-fg`
+  - `--tg-theme-hint-color` → `--lb-muted-fg`
+  - `--tg-theme-link-color` → `--lb-accent` (only if user hasn't set custom accent)
 - Respect `WebApp.colorScheme` for initial theme.
 - The composer must clear viewport on `WebApp.viewportChanged` (keyboard up).
 - Wire `WebApp.MainButton` for primary actions on Settings / Share screens.
@@ -92,7 +92,7 @@ These are the patterns the design assumes. Implement once, reuse everywhere.
 ## 🤖 BYOK (bring your own key) — implementation reminders
 
 - Keys are **stored client-side only** (Mini App localStorage + optionally synced encrypted to your backend with the user's Telegram ID as salt). Never log them.
-- The settings screen makes the trust model explicit: *"listgram uses your key — your usage, your bill."* Keep that copy.
+- The settings screen makes the trust model explicit: *"listbull uses your key — your usage, your bill."* Keep that copy.
 - Show a redacted preview (`sk-••••5f2a`) once stored, and a one-tap "Replace key" affordance.
 
 ---
@@ -117,6 +117,6 @@ Before sprint planning, confirm:
 
 - The standalone HTML is the **canonical visual spec**. If a token in code disagrees with the HTML, the HTML wins (and tell the designer).
 - Tokens are versioned with the design — bump `tokens.json` `brand.version` whenever you ship a visual change.
-- The brand SVGs use the accent color hard-coded as `#00D9C0`. If you want themeable marks, swap to `currentColor` and pass `style="color: var(--lg-accent)"` from the parent.
+- The brand SVGs use the accent color hard-coded as `#00D9C0`. If you want themeable marks, swap to `currentColor` and pass `style="color: var(--lb-accent)"` from the parent.
 
 Built with Claude on 2026-05-01. Direction C ("Sent") chosen 2026-05-01.

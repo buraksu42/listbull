@@ -1,7 +1,7 @@
 name: E2E (Playwright)
 
 # Phase 4 e2e workflow. Live execution requires:
-#   - LISTGRAM_E2E_LIVE=1 (workflow input)
+#   - LISTBULL_E2E_LIVE=1 (workflow input)
 #   - Real bot token + webhook secret in workflow secrets (Phase 5)
 #
 # Default behavior: runs `npx playwright test --list` to confirm the
@@ -32,13 +32,13 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: listgram
-          POSTGRES_USER: listgram
-          POSTGRES_PASSWORD: listgram
+          POSTGRES_DB: listbull
+          POSTGRES_USER: listbull
+          POSTGRES_PASSWORD: listbull
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U listgram -d listgram"
+          --health-cmd "pg_isready -U listbull -d listbull"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
@@ -66,8 +66,8 @@ jobs:
         if: github.event.inputs.live == '1'
         run: npx playwright test
         env:
-          LISTGRAM_E2E_LIVE: "1"
-          DATABASE_URL: postgres://listgram:listgram@localhost:5432/listgram
+          LISTBULL_E2E_LIVE: "1"
+          DATABASE_URL: postgres://listbull:listbull@localhost:5432/listbull
           # Staging secrets (Phase 5):
           TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_BOT_TOKEN }}
           TELEGRAM_WEBHOOK_SECRET: ${{ secrets.E2E_WEBHOOK_SECRET }}
@@ -77,7 +77,7 @@ jobs:
           NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
           NEXT_PUBLIC_ENV: test
           TELEGRAM_BOT_USERNAME: ${{ secrets.E2E_BOT_USERNAME }}
-          LISTGRAM_E2E_AUTO_WEBSERVER: "1"
+          LISTBULL_E2E_AUTO_WEBSERVER: "1"
 
       - name: Upload Playwright report on failure
         if: failure() && github.event.inputs.live == '1'

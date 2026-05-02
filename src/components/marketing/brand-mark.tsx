@@ -1,7 +1,7 @@
 /**
- * Inline SVG of the listgram chat-bubble + checkmark mark.
+ * Inline SVG of the listbull chat-bubble + checkmark mark.
  *
- * Source: `handoff/brand/listgram-mark.svg`. Inlined as a React component
+ * Source: `handoff/brand/listbull-mark.svg`. Inlined as a React component
  * (rather than `<img src=".svg">`) so it inherits `currentColor` for the
  * stroke check when used on a colored background, and so we ship zero
  * extra HTTP requests for the most-rendered asset on the marketing page.
@@ -20,7 +20,7 @@ type BrandMarkProps = {
 export function BrandMark({
   size = 56,
   className,
-  ariaLabel = "listgram",
+  ariaLabel = "listbull",
 }: BrandMarkProps) {
   return (
     <svg

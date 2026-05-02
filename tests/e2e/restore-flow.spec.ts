@@ -18,7 +18,7 @@ import { LIVE } from "./_utils";
 test.describe("F2 restore flow (owner)", () => {
   test.skip(
     !LIVE,
-    "Skipped: requires LISTGRAM_E2E_LIVE=1 + a seeded owner (Phase 5 staging gate).",
+    "Skipped: requires LISTBULL_E2E_LIVE=1 + a seeded owner (Phase 5 staging gate).",
   );
 
   test("create → delete → restore → item reappears", async ({ page }) => {

@@ -5,10 +5,10 @@ import "./globals.css";
 const isProd = process.env.NEXT_PUBLIC_ENV === "production";
 
 export const metadata: Metadata = {
-  title: "listgram",
+  title: "listbull",
   description:
     "Telegram-native AI list assistant with persistent shared list memory. Open source, self-hostable, BYOK.",
-  applicationName: "listgram",
+  applicationName: "listbull",
   metadataBase:
     process.env.NEXT_PUBLIC_APP_URL && process.env.NEXT_PUBLIC_APP_URL.length > 0
       ? new URL(process.env.NEXT_PUBLIC_APP_URL)

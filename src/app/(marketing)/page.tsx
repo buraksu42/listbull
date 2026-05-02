@@ -5,7 +5,7 @@ import { HowItWorks } from "@/components/marketing/how-it-works";
 import { env } from "@/lib/env";
 
 export const metadata = {
-  title: "listgram — Telegram-native AI list assistant",
+  title: "listbull — Telegram-native AI list assistant",
   description:
     "Open source, self-hostable, BYOK. Chat your todos into Telegram, manage in a Mini App.",
 };
@@ -24,7 +24,7 @@ export const metadata = {
  * imagery, no skeumorphic shadows. Just type, color, and shape.
  */
 export default function MarketingHome() {
-  const botUsername = env.TELEGRAM_BOT_USERNAME ?? "listgram_bot";
+  const botUsername = env.TELEGRAM_BOT_USERNAME ?? "listbull_bot";
   const botUrl =
     env.NEXT_PUBLIC_ENV === "production"
       ? `https://t.me/${botUsername}?start=marketing`
@@ -33,15 +33,15 @@ export default function MarketingHome() {
   return (
     <>
       {/* Skip link — first focusable, not visible until focus. */}
-      <a href="#how-it-works" className="lg-skip-link">
+      <a href="#how-it-works" className="lb-skip-link">
         Skip to how it works
       </a>
 
       <main
         style={{
           minHeight: "100dvh",
-          background: "var(--lg-bg)",
-          color: "var(--lg-fg)",
+          background: "var(--lb-bg)",
+          color: "var(--lb-fg)",
           display: "flex",
           flexDirection: "column",
         }}
@@ -89,7 +89,7 @@ export default function MarketingHome() {
           steps={[
             {
               title: "Open the bot",
-              body: "Start a chat with @listgram_bot. The bot creates your Inbox automatically.",
+              body: "Start a chat with @listbull_bot. The bot creates your Inbox automatically.",
             },
             {
               title: "Talk or tap",
@@ -105,7 +105,7 @@ export default function MarketingHome() {
         <Footer
           hostedLabel="Hosted on Hetzner — Dokploy"
           licenseLabel="MIT licensed · open source"
-          copyrightLabel="© 2026 listgram"
+          copyrightLabel="© 2026 listbull"
         />
       </main>
     </>

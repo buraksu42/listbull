@@ -207,8 +207,8 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
 
 // ─── helpers ────────────────────────────────────────────────────────
 
-export const NO_KEY_SENTINEL = "__listgram_no_api_key__";
-export const ROUNDTRIP_CAP_SENTINEL = "__listgram_roundtrip_cap__";
+export const NO_KEY_SENTINEL = "__listbull_no_api_key__";
+export const ROUNDTRIP_CAP_SENTINEL = "__listbull_roundtrip_cap__";
 
 /**
  * Map our provider-neutral `ConversationMessage[]` to Anthropic's

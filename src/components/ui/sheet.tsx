@@ -72,9 +72,9 @@ export function SheetContent({
 
   const sideClasses: Record<SheetSide, string> = {
     bottom:
-      "inset-x-0 bottom-0 rounded-t-[var(--lg-r-xl)] border-t border-[var(--lg-border)] max-h-[90dvh] data-[state=open]:animate-in data-[state=open]:slide-in-from-bottom",
+      "inset-x-0 bottom-0 rounded-t-[var(--lb-r-xl)] border-t border-[var(--lb-border)] max-h-[90dvh] data-[state=open]:animate-in data-[state=open]:slide-in-from-bottom",
     right:
-      "right-0 top-0 h-full w-full sm:max-w-sm border-l border-[var(--lg-border)]",
+      "right-0 top-0 h-full w-full sm:max-w-sm border-l border-[var(--lb-border)]",
   };
 
   return (
@@ -93,8 +93,8 @@ export function SheetContent({
         aria-modal="true"
         aria-label={ariaLabel ?? "Sheet"}
         className={cn(
-          "absolute bg-[var(--lg-card)] text-[var(--lg-card-fg)] shadow-[var(--lg-shadow-sheet)]",
-          "transition-transform duration-[var(--lg-dur-slow)] ease-[var(--lg-ease-emph)]",
+          "absolute bg-[var(--lb-card)] text-[var(--lb-card-fg)] shadow-[var(--lb-shadow-sheet)]",
+          "transition-transform duration-[var(--lb-dur-slow)] ease-[var(--lb-ease-emph)]",
           sideClasses[side],
           className,
         )}
@@ -115,7 +115,7 @@ export function SheetHeader({
   return (
     <div
       className={cn(
-        "flex flex-col gap-1.5 p-4 border-b border-[var(--lg-border)]",
+        "flex flex-col gap-1.5 p-4 border-b border-[var(--lb-border)]",
         className,
       )}
     >
@@ -134,7 +134,7 @@ export function SheetTitle({
   return (
     <h2
       className={cn(
-        "text-lg font-semibold tracking-[var(--lg-tracking-title)] text-[var(--lg-fg)]",
+        "text-lg font-semibold tracking-[var(--lb-tracking-title)] text-[var(--lb-fg)]",
         className,
       )}
     >
@@ -151,7 +151,7 @@ export function SheetDescription({
   children: React.ReactNode;
 }) {
   return (
-    <p className={cn("text-sm text-[var(--lg-muted-fg)]", className)}>
+    <p className={cn("text-sm text-[var(--lb-muted-fg)]", className)}>
       {children}
     </p>
   );
@@ -179,7 +179,7 @@ export function SheetFooter({
   return (
     <div
       className={cn(
-        "flex flex-col-reverse gap-2 p-4 border-t border-[var(--lg-border)] sm:flex-row sm:justify-end",
+        "flex flex-col-reverse gap-2 p-4 border-t border-[var(--lb-border)] sm:flex-row sm:justify-end",
         className,
       )}
     >

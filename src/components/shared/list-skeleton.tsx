@@ -11,7 +11,7 @@ export function ListSkeleton({ rows = 6 }: { rows?: number }) {
       {Array.from({ length: rows }).map((_, i) => (
         <div
           key={i}
-          className="flex items-center gap-3 border-b border-[var(--lg-border)] px-4"
+          className="flex items-center gap-3 border-b border-[var(--lb-border)] px-4"
           style={{ minHeight: 56 }}
         >
           <Skeleton className="h-[22px] w-[22px] rounded-full" />
@@ -31,7 +31,7 @@ export function ListsListSkeleton({ rows = 5 }: { rows?: number }) {
       {Array.from({ length: rows }).map((_, i) => (
         <div
           key={i}
-          className="flex items-center gap-3 border-b border-[var(--lg-border)] px-4"
+          className="flex items-center gap-3 border-b border-[var(--lb-border)] px-4"
           style={{ minHeight: 56 }}
         >
           <Skeleton className="h-7 w-7 rounded-full" />

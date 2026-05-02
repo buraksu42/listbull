@@ -1,4 +1,4 @@
-# listgram — main web app (Next.js 16 + Turbopack build, standalone output).
+# listbull — main web app (Next.js 16 + Turbopack build, standalone output).
 #
 # Multi-stage Node 22 alpine. Two stages:
 #   1. builder     — full deps + `next build`. NEXT_PUBLIC_* + Sentry

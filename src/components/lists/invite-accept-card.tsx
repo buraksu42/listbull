@@ -150,10 +150,10 @@ export function InviteAcceptCard({
       <Headline emoji={invite.listEmoji} listName={invite.listName} />
       <p
         style={{
-          fontSize: "var(--lg-fs-md)",
-          color: "var(--lg-muted-fg)",
+          fontSize: "var(--lb-fs-md)",
+          color: "var(--lb-muted-fg)",
           textAlign: "center",
-          marginBottom: "var(--lg-sp-3)",
+          marginBottom: "var(--lb-sp-3)",
         }}
       >
         {invite.invitedByName} invited you
@@ -161,9 +161,9 @@ export function InviteAcceptCard({
       <div
         style={{
           display: "flex",
-          gap: "var(--lg-sp-2)",
+          gap: "var(--lb-sp-2)",
           justifyContent: "center",
-          marginBottom: "var(--lg-sp-4)",
+          marginBottom: "var(--lb-sp-4)",
         }}
       >
         <Chip>{invite.role === "viewer" ? "Viewer" : "Editor"}</Chip>
@@ -192,12 +192,12 @@ function Card({ children }: { children: React.ReactNode }) {
       aria-label="Invite"
       style={{
         maxWidth: 420,
-        margin: "var(--lg-sp-12) auto 0",
-        padding: "var(--lg-sp-6)",
-        background: "var(--lg-card)",
-        color: "var(--lg-card-fg)",
-        borderRadius: "var(--lg-r-lg)",
-        border: "1px solid var(--lg-border)",
+        margin: "var(--lb-sp-12) auto 0",
+        padding: "var(--lb-sp-6)",
+        background: "var(--lb-card)",
+        color: "var(--lb-card-fg)",
+        borderRadius: "var(--lb-r-lg)",
+        border: "1px solid var(--lb-border)",
         textAlign: "center",
       }}
     >
@@ -216,13 +216,13 @@ function Headline({
   return (
     <h1
       style={{
-        fontSize: "var(--lg-fs-2xl)",
-        fontWeight: "var(--lg-fw-semibold)",
-        letterSpacing: "var(--lg-tracking-title)",
-        marginBottom: "var(--lg-sp-3)",
+        fontSize: "var(--lb-fs-2xl)",
+        fontWeight: "var(--lb-fw-semibold)",
+        letterSpacing: "var(--lb-tracking-title)",
+        marginBottom: "var(--lb-sp-3)",
       }}
     >
-      <span aria-hidden style={{ marginRight: "var(--lg-sp-2)" }}>
+      <span aria-hidden style={{ marginRight: "var(--lb-sp-2)" }}>
         {emoji ?? "📋"}
       </span>
       {listName}
@@ -237,13 +237,13 @@ function Icon({
   icon: React.ReactNode;
   tone: "success" | "muted";
 }) {
-  const color = tone === "success" ? "var(--lg-success)" : "var(--lg-muted-fg)";
+  const color = tone === "success" ? "var(--lb-success)" : "var(--lb-muted-fg)";
   return (
     <div
       style={{
         display: "flex",
         justifyContent: "center",
-        marginBottom: "var(--lg-sp-3)",
+        marginBottom: "var(--lb-sp-3)",
         color,
       }}
     >
@@ -256,10 +256,10 @@ function Title({ children }: { children: React.ReactNode }) {
   return (
     <h2
       style={{
-        fontSize: "var(--lg-fs-lg)",
-        fontWeight: "var(--lg-fw-semibold)",
-        color: "var(--lg-fg)",
-        marginBottom: "var(--lg-sp-2)",
+        fontSize: "var(--lb-fs-lg)",
+        fontWeight: "var(--lb-fw-semibold)",
+        color: "var(--lb-fg)",
+        marginBottom: "var(--lb-sp-2)",
       }}
     >
       {children}
@@ -271,8 +271,8 @@ function Subtitle({ children }: { children: React.ReactNode }) {
   return (
     <p
       style={{
-        fontSize: "var(--lg-fs-md)",
-        color: "var(--lg-muted-fg)",
+        fontSize: "var(--lb-fs-md)",
+        color: "var(--lb-muted-fg)",
         lineHeight: 1.5,
       }}
     >
@@ -285,7 +285,7 @@ function Body({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
-        marginTop: "var(--lg-sp-4)",
+        marginTop: "var(--lb-sp-4)",
         display: "flex",
         justifyContent: "center",
       }}
@@ -304,10 +304,10 @@ function Chip({
 }) {
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-[var(--lg-r-full)] px-2 py-1 text-xs font-medium"
+      className="inline-flex items-center gap-1 rounded-[var(--lb-r-full)] px-2 py-1 text-xs font-medium"
       style={{
-        background: "var(--lg-muted)",
-        color: "var(--lg-muted-fg)",
+        background: "var(--lb-muted)",
+        color: "var(--lb-muted-fg)",
       }}
     >
       {icon}

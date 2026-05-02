@@ -8,7 +8,7 @@
  *
  * Live verification of the row requires DB access from the test runner;
  * Phase 5 staging spins up a dedicated test DB whose creds are exposed
- * via `LISTGRAM_E2E_DATABASE_URL`. Until then, this spec asserts the
+ * via `LISTBULL_E2E_DATABASE_URL`. Until then, this spec asserts the
  * webhook responds 200 (Inv-9 + signature gate working).
  */
 import { test, expect, request } from "@playwright/test";
@@ -18,7 +18,7 @@ import { LIVE, makeTextUpdate } from "./_utils";
 test.describe("bot intent → webhook", () => {
   test.skip(
     !LIVE,
-    "Skipped: requires LISTGRAM_E2E_LIVE=1 + running server with TELEGRAM_WEBHOOK_SECRET (Phase 5 staging gate).",
+    "Skipped: requires LISTBULL_E2E_LIVE=1 + running server with TELEGRAM_WEBHOOK_SECRET (Phase 5 staging gate).",
   );
 
   test("webhook accepts a signed POST and returns 200 within 60s", async ({

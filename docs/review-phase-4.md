@@ -24,12 +24,12 @@ No P0 / P1 findings. Two P2 follow-ups noted below.
 | 3 | `SKIP_ENV_VALIDATION=1 npm run build` | PASS | 30 routes generated; middleware compiled |
 | 4 | `npm test` (Vitest) | PASS | 8 files, 63 tests, 0 failures, ~1s |
 | 5 | `npm run e2e` config compiles | PASS | `npx playwright test --list` enumerates 6 specs |
-| 6 | `npm run e2e` live runs | DEFERRED-TO-STAGING | Specs gated behind `LISTGRAM_E2E_LIVE=1`; require real bot token + DB. Phase 5 staging flips on. |
+| 6 | `npm run e2e` live runs | DEFERRED-TO-STAGING | Specs gated behind `LISTBULL_E2E_LIVE=1`; require real bot token + DB. Phase 5 staging flips on. |
 | 7 | Lighthouse a11y `/lists` ≥95 | DEFERRED-TO-STAGING | Requires authed session in a built+running app. Audit recipe in CLAUDE.md § monitoring stack. |
 | 8 | `docker-compose up` on fresh node | DEFERRED-TO-STAGING | Compose file authored + reviewed; no Hetzner node available to the orchestrator. Recipe + smoke checklist below. |
 | 9 | README Quickstart <15 min | LOGICAL-PASS | Steps verified for ordering + completeness; live wall-clock test deferred to Phase 5 first-self-host run. |
 | 10 | Bundle scan post-deploy (Sentry DSN) | DEFERRED-TO-STAGING | Recipe in `.env.example` + Dockerfile build args. Verify with `curl https://<host>/_next/static/chunks/*.js \| grep -E 'sentry'`. |
-| 11 | HTML scan post-deploy (Umami) | DEFERRED-TO-STAGING | Wired via `wire-umami.sh listgram` + `NEXT_PUBLIC_UMAMI_WEBSITE_ID`. Verify post-deploy. |
+| 11 | HTML scan post-deploy (Umami) | DEFERRED-TO-STAGING | Wired via `wire-umami.sh listbull` + `NEXT_PUBLIC_UMAMI_WEBSITE_ID`. Verify post-deploy. |
 | 12 | gitleaks workflow green on PR | PASS | unchanged from Phase 3 baseline; no Phase 4 files violate the allowlist |
 
 ## OSS deliverable inventory
@@ -148,7 +148,7 @@ npx lighthouse https://test.listbull.org/lists \
 # Expect: ≥95 a11y score.
 
 # E2E live run
-LISTGRAM_E2E_LIVE=1 npx playwright test
+LISTBULL_E2E_LIVE=1 npx playwright test
 # All 6 specs should pass against a seeded test DB + bot.
 ```
 
@@ -163,7 +163,7 @@ Recommended next steps for Phase 5 (launch prep):
 3. **Demo asset**: record a 30s GIF for the README hero
    (`docs/demo.gif` placeholder is in place).
 4. **Staging smoke**: run all 5 deferred gates above; flip the
-   `LISTGRAM_E2E_LIVE=1` flag in CI for the staging environment.
+   `LISTBULL_E2E_LIVE=1` flag in CI for the staging environment.
 5. **Standalone build**: optional Phase 5 follow-up per P2-1 above.
 6. **`robots.txt` + `sitemap.xml`**: marketing route gating; noindex
    on test domain (`NEXT_PUBLIC_ENV=test` → handled in

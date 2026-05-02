@@ -1,8 +1,8 @@
-# listgram
+# listbull
 
 ## What it is
 
-listgram is a Telegram-native AI list assistant with persistent shared list memory.
+listbull is a Telegram-native AI list assistant with persistent shared list memory.
 Users chat with the bot in natural language to capture, manage, and share to-dos +
 notes; a Telegram Mini App provides visual management. Open source, self-hostable,
 BYOK (bring-your-own OpenRouter key).
@@ -16,8 +16,8 @@ shared lists.
 
 - **Prod**: `https://prod.listbull.org`
 - **Test/staging**: `https://test.listbull.org`
-- **Bot username**: `@listgram_bot` (reserve via BotFather pre-deploy; fallback
-  `@listgram_app_bot` if taken)
+- **Bot username**: `@listbull_bot` (reserve via BotFather pre-deploy; fallback
+  `@listbull_app_bot` if taken)
 - **Mini App URL**: `https://prod.listbull.org/app`
 - **Bot webhook URL**: `https://prod.listbull.org/api/telegram/webhook` (prod) /
   `https://test.listbull.org/api/telegram/webhook` (test)
@@ -198,7 +198,7 @@ shared lists.
   - [ ] Runs on every PR via GitHub Actions
 
 ### D1: Bot inline mode
-- Description: `@listgram_bot <query>` in any chat → suggestions inline
+- Description: `@listbull_bot <query>` in any chat → suggestions inline
 - Acceptance:
   - [ ] BotFather inline mode enabled
   - [ ] Inline query returns up to 10 most-recent items across user's lists
@@ -279,7 +279,7 @@ shared lists.
 ### Folder structure
 
 ```
-listgram/
+listbull/
 ├─ src/
 │  ├─ app/
 │  │  ├─ (marketing)/                       # public landing page (light-only)
@@ -473,7 +473,7 @@ Defaults — no overrides for this project:
 
 ## Project-specific gotchas
 
-- **Bot username squatting.** Check `https://t.me/listgram_bot` and BotFather `/mybots` before deploy. If `@listgram_bot` is taken, fall back to `@listgram_app_bot` and update README + Mini App config + marketing landing CTA.
+- **Bot username squatting.** Check `https://t.me/listbull_bot` and BotFather `/mybots` before deploy. If `@listbull_bot` is taken, fall back to `@listbull_app_bot` and update README + Mini App config + marketing landing CTA.
 - **Webhook secret rotation.** Telegram lets you set a `secret_token` on `setWebhook`. Verify the `X-Telegram-Bot-Api-Secret-Token` header on every request; rotate on prod via env redeploy. Failing to verify = open webhook = anyone can spoof updates.
 - **initData expires in 24h.** Telegram convention. Re-issue session cookie when initData is fresh; fall back to existing session when older.
 - **Telegram message length cap = 4096 chars.** LLM replies occasionally exceed; chunk on word boundaries before sending.
@@ -532,7 +532,7 @@ Defaults — no overrides for this project:
 
 ## Open questions / TODOs
 
-- **Bot username availability.** Check `@listgram_bot` BEFORE Phase 1 starts; if taken, fall back to `@listgram_app_bot`. Update README, Mini App config, marketing landing accordingly.
+- **Bot username availability.** Check `@listbull_bot` BEFORE Phase 1 starts; if taken, fall back to `@listbull_app_bot`. Update README, Mini App config, marketing landing accordingly.
 - **Cron heartbeat target.** Architecture proposes Better Stack heartbeat URL (env-configurable). Phase 3 implementation: opt-in only? Default-on with public endpoint that does nothing? Decide during Phase 3 architect pass.
 - **Inline mode result-list cap (D1).** 10 most-recent items vs LLM-ranked? Decide during Phase 4 architect pass.
 - **Snapshot expiry (D2).** Default 30-day expiry; user-configurable column added in Phase 4 if user demand surfaces during Phase 4 review.

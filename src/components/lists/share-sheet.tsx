@@ -267,7 +267,7 @@ function ShareFormBody({
           <p
             id="share-username-hint"
             className="text-xs"
-            style={{ color: "var(--lg-muted-fg)" }}
+            style={{ color: "var(--lb-muted-fg)" }}
           >
             Without the @, lower-case. They must have started the bot once.
           </p>
@@ -276,7 +276,7 @@ function ShareFormBody({
         <fieldset className="flex flex-col gap-2">
           <legend
             className="text-sm font-medium"
-            style={{ color: "var(--lg-fg)" }}
+            style={{ color: "var(--lb-fg)" }}
           >
             Role
           </legend>
@@ -327,15 +327,15 @@ function ShareSuccessBody({
       <>
         <SheetBody className="flex flex-col gap-3">
           <div
-            className="flex items-center gap-2 rounded-[var(--lg-r-md)] p-3"
-            style={{ background: "var(--lg-muted)" }}
+            className="flex items-center gap-2 rounded-[var(--lb-r-md)] p-3"
+            style={{ background: "var(--lb-muted)" }}
           >
             <Check
               className="h-4 w-4"
-              style={{ color: "var(--lg-success)" }}
+              style={{ color: "var(--lb-success)" }}
               aria-hidden
             />
-            <span style={{ color: "var(--lg-fg)" }}>
+            <span style={{ color: "var(--lb-fg)" }}>
               @{success.invitedUsername} is already on this list.
             </span>
           </div>
@@ -361,25 +361,25 @@ function ShareSuccessBody({
   };
 
   const tgShare = `https://t.me/share/url?url=${encodeURIComponent(success.deeplink)}&text=${encodeURIComponent(
-    `Join my list on listgram`,
+    `Join my list on listbull`,
   )}`;
 
   return (
     <>
       <SheetBody className="flex flex-col gap-3">
         <div
-          className="flex flex-col gap-2 rounded-[var(--lg-r-md)] p-3"
-          style={{ background: "var(--lg-muted)" }}
+          className="flex flex-col gap-2 rounded-[var(--lb-r-md)] p-3"
+          style={{ background: "var(--lb-muted)" }}
         >
           <p
             className="text-xs"
-            style={{ color: "var(--lg-muted-fg)" }}
+            style={{ color: "var(--lb-muted-fg)" }}
           >
             Invite link for @{success.invitedUsername}
           </p>
           <code
             className="block break-all text-sm"
-            style={{ color: "var(--lg-fg)" }}
+            style={{ color: "var(--lb-fg)" }}
           >
             {success.deeplink}
           </code>
@@ -404,12 +404,12 @@ function ShareSuccessBody({
             target="_blank"
             rel="noopener noreferrer"
             className={cn(
-              "inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-[var(--lg-r-md)] px-4 text-base font-medium transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lg-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lg-bg)]",
+              "inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-[var(--lb-r-md)] px-4 text-base font-medium transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lb-bg)]",
             )}
             style={{
-              background: "var(--lg-accent)",
-              color: "var(--lg-accent-fg)",
+              background: "var(--lb-accent)",
+              color: "var(--lb-accent-fg)",
             }}
           >
             <Send className="h-4 w-4" aria-hidden />
@@ -444,15 +444,15 @@ function RoleChip({
       aria-checked={checked}
       onClick={onSelect}
       className={cn(
-        "flex-1 rounded-[var(--lg-r-md)] border px-3 py-2 text-sm font-medium transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lg-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lg-bg)]",
+        "flex-1 rounded-[var(--lb-r-md)] border px-3 py-2 text-sm font-medium transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lb-bg)]",
         checked
           ? "border-transparent"
-          : "border-[var(--lg-border)] bg-transparent",
+          : "border-[var(--lb-border)] bg-transparent",
       )}
       style={{
-        background: checked ? "var(--lg-accent)" : "var(--lg-input-bg)",
-        color: checked ? "var(--lg-accent-fg)" : "var(--lg-fg)",
+        background: checked ? "var(--lb-accent)" : "var(--lb-input-bg)",
+        color: checked ? "var(--lb-accent-fg)" : "var(--lb-fg)",
         minHeight: 44,
       }}
     >

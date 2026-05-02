@@ -11,21 +11,21 @@ export const dynamic = "force-dynamic";
 
 export default function ListsPage() {
   return (
-    <main style={{ paddingBottom: "var(--lg-sp-12)" }}>
+    <main style={{ paddingBottom: "var(--lb-sp-12)" }}>
       <header
         style={{
-          height: "var(--lg-header-h)",
-          padding: "0 var(--lg-sp-4)",
+          height: "var(--lb-header-h)",
+          padding: "0 var(--lb-sp-4)",
           display: "flex",
           alignItems: "center",
-          borderBottom: "1px solid var(--lg-border)",
+          borderBottom: "1px solid var(--lb-border)",
         }}
       >
         <h1
           style={{
-            fontSize: "var(--lg-fs-xl)",
-            fontWeight: "var(--lg-fw-semibold)",
-            letterSpacing: "var(--lg-tracking-title)",
+            fontSize: "var(--lb-fs-xl)",
+            fontWeight: "var(--lb-fw-semibold)",
+            letterSpacing: "var(--lb-tracking-title)",
           }}
         >
           Lists

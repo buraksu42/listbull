@@ -27,21 +27,21 @@ export default async function SettingsPage() {
   const t = await getTranslations("settings");
 
   return (
-    <main style={{ paddingBottom: "var(--lg-sp-12)" }}>
+    <main style={{ paddingBottom: "var(--lb-sp-12)" }}>
       <header
         style={{
-          height: "var(--lg-header-h)",
-          padding: "0 var(--lg-sp-4)",
+          height: "var(--lb-header-h)",
+          padding: "0 var(--lb-sp-4)",
           display: "flex",
           alignItems: "center",
-          borderBottom: "1px solid var(--lg-border)",
+          borderBottom: "1px solid var(--lb-border)",
         }}
       >
         <h1
           style={{
-            fontSize: "var(--lg-fs-xl)",
-            fontWeight: "var(--lg-fw-semibold)",
-            letterSpacing: "var(--lg-tracking-title)",
+            fontSize: "var(--lb-fs-xl)",
+            fontWeight: "var(--lb-fw-semibold)",
+            letterSpacing: "var(--lb-tracking-title)",
           }}
         >
           {t("title")}
@@ -51,10 +51,10 @@ export default async function SettingsPage() {
 
       <section className="flex flex-col gap-3 px-4 pt-2">
         <div className="flex flex-col gap-1">
-          <h2 className="text-base font-semibold text-[var(--lg-fg)]">
+          <h2 className="text-base font-semibold text-[var(--lb-fg)]">
             {t("exportTitle")}
           </h2>
-          <p className="text-xs text-[var(--lg-muted-fg)]">
+          <p className="text-xs text-[var(--lb-muted-fg)]">
             {t("exportDescription")}
           </p>
         </div>

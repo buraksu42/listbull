@@ -112,14 +112,14 @@
     "feature6Body": "Her eylemde optimistik UI. Paylaşılan listelerde 5 saniyede bir senkron. Ağdan bağımsız hızlı.",
     "howHeading": "Nasıl çalışır",
     "how1Title": "Botu aç",
-    "how1Body": "@listgram_bot ile sohbet başlat. Bot, Gelen kutunu otomatik oluşturur.",
+    "how1Body": "@listbull_bot ile sohbet başlat. Bot, Gelen kutunu otomatik oluşturur.",
     "how2Title": "Konuş ya da dokun",
     "how2Body": "\"süt al\" yaz veya Mini App'i açıp dokun. İkisi 5 saniye içinde senkronize olur.",
     "how3Title": "İstediğinde paylaş",
     "how3Body": "Ev arkadaşlarını @kullanıcıadı ile davet et. Sohbette tek dokunuşluk kabul bağlantısı alırlar.",
     "footerHosted": "Hetzner üzerinde — Dokploy ile",
     "footerLicense": "MIT lisanslı · açık kaynak",
-    "footerCopyright": "© 2026 listgram"
+    "footerCopyright": "© 2026 listbull"
   },
   "snapshot": {
     "capturedBy": "{name} tarafından",
@@ -165,7 +165,7 @@
   },
   "setup": {
     "title": "Kurulum",
-    "description": "Bu sunucuda listgram'ı yapılandır.",
+    "description": "Bu sunucuda listbull'ı yapılandır.",
     "botToken": "Bot token",
     "botTokenHint": "Bunu @BotFather'dan al.",
     "webhookSecret": "Webhook secret",

@@ -1,4 +1,4 @@
-# listgram — Claude Code Context
+# listbull — Claude Code Context
 
 > Stack/infra/CI/secrets/git/monitoring defaults: see `~/.claude/CLAUDE.md`.
 > Full handoff (research, architecture, agents plan, design, brand, tokens, interactive prototype):
@@ -16,10 +16,10 @@ Primary persona: power Telegram user (Turkish/English, mobile-first).
 
 - Type: **flagship** (umbrella domain `listbull.org`, OSS public product)
 - **Project home (apex)**: `https://listbull.org` — open-source project info / install docs (separate static site, not in this codebase; built from a sibling repo or simple GitHub Pages)
-- **Production app**: `https://prod.listbull.org` — canonical hosted instance of the listgram Mini App + bot
+- **Production app**: `https://prod.listbull.org` — canonical hosted instance of the listbull Mini App + bot
 - **Test/staging**: `https://test.listbull.org`
 - **Tenant pattern**: `https://<tenant>.listbull.org` — additional self-host instances on the same infra (e.g. `loyetta.listbull.org`). Same code, env-driven `NEXT_PUBLIC_APP_URL` + dedicated `DATABASE_URL` per tenant.
-- **Bot**: `@listgram_bot` for prod (fallback `@listgram_app_bot`); separate test bot for `test.` (e.g. `@listgram_test_bot`); per-tenant bots for tenant deployments.
+- **Bot**: `@listbull_bot` for prod (fallback `@listbull_app_bot`); separate test bot for `test.` (e.g. `@listbull_test_bot`); per-tenant bots for tenant deployments.
 - **Mini App URL** (BotFather setMenuButton target): `https://prod.listbull.org/app` (or matching subdomain).
 - DNS: pending (post-deploy).
 
@@ -83,7 +83,7 @@ Multi-agent roster (Architect, Backend, Frontend, AI, Reviewer) — see `handoff
 
 ## Project-specific gotchas
 
-- **Bot username squatting**: confirm `@listgram_bot` via BotFather before deploy; fall back `@listgram_app_bot`.
+- **Bot username squatting**: confirm `@listbull_bot` via BotFather before deploy; fall back `@listbull_app_bot`.
 - **Webhook secret rotation**: verify `X-Telegram-Bot-Api-Secret-Token` on every request; rotate via env redeploy.
 - **initData expires in 24h** (Telegram convention) — re-issue session on fresh initData.
 - **Telegram message cap = 4096 chars** — chunk on word boundaries.
@@ -96,9 +96,9 @@ Multi-agent roster (Architect, Backend, Frontend, AI, Reviewer) — see `handoff
 
 ## Links
 
-- GitHub: https://github.com/buraksu42/listgram
+- GitHub: https://github.com/buraksu42/listbull
 - Test: https://test.listbull.org
 - Prod: https://prod.listbull.org
 - Handoff (canonical): `handoff/`
 - Agent plan (Phase invocations): `handoff/specs/agents.md`
-- Interactive design reference: `handoff/design-reference/listgram (standalone).html`
+- Interactive design reference: `handoff/design-reference/listbull (standalone).html`

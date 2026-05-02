@@ -1,4 +1,4 @@
-# listgram — self-host docker-compose stack.
+# listbull — self-host docker-compose stack.
 #
 # Three services:
 #   - postgres:  Postgres 16 alpine, persistent named volume.
@@ -10,7 +10,7 @@
 # running `docker compose up -d` (see README Quickstart).
 #
 # Networks: a single internal bridge. Postgres is NOT exposed publicly;
-# use `docker compose exec postgres psql -U listgram` for DB access.
+# use `docker compose exec postgres psql -U listbull` for DB access.
 #
 # Reverse-proxy: this stack expects to live BEHIND a reverse proxy
 # (Caddy / Traefik / Nginx) terminating TLS. The `app` service exposes
@@ -19,23 +19,23 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: listgram-postgres
+    container_name: listbull-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-listgram}
-      POSTGRES_USER: ${POSTGRES_USER:-listgram}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-listgram}
+      POSTGRES_DB: ${POSTGRES_DB:-listbull}
+      POSTGRES_USER: ${POSTGRES_USER:-listbull}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-listbull}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test:
         - CMD-SHELL
-        - "pg_isready -U $${POSTGRES_USER:-listgram} -d $${POSTGRES_DB:-listgram}"
+        - "pg_isready -U $${POSTGRES_USER:-listbull} -d $${POSTGRES_DB:-listbull}"
       interval: 10s
       timeout: 5s
       retries: 6
     networks:
-      - listgram-net
+      - listbull-net
 
   app:
     build:
@@ -46,7 +46,7 @@ services:
         NEXT_PUBLIC_ENV: ${NEXT_PUBLIC_ENV:-production}
         NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
         NEXT_PUBLIC_UMAMI_WEBSITE_ID: ${NEXT_PUBLIC_UMAMI_WEBSITE_ID:-}
-    container_name: listgram-app
+    container_name: listbull-app
     restart: unless-stopped
     depends_on:
       postgres:
@@ -55,7 +55,7 @@ services:
       - .env
     environment:
       # Override DATABASE_URL to the in-network host (overrides .env).
-      DATABASE_URL: postgres://${POSTGRES_USER:-listgram}:${POSTGRES_PASSWORD:-listgram}@postgres:5432/${POSTGRES_DB:-listgram}
+      DATABASE_URL: postgres://${POSTGRES_USER:-listbull}:${POSTGRES_PASSWORD:-listbull}@postgres:5432/${POSTGRES_DB:-listbull}
       PORT: "3000"
       HOSTNAME: "0.0.0.0"
     ports:
@@ -68,13 +68,13 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - listgram-net
+      - listbull-net
 
   cron:
     build:
       context: .
       dockerfile: Dockerfile.cron
-    container_name: listgram-cron
+    container_name: listbull-cron
     restart: unless-stopped
     depends_on:
       postgres:
@@ -84,7 +84,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-listgram}:${POSTGRES_PASSWORD:-listgram}@postgres:5432/${POSTGRES_DB:-listgram}
+      DATABASE_URL: postgres://${POSTGRES_USER:-listbull}:${POSTGRES_PASSWORD:-listbull}@postgres:5432/${POSTGRES_DB:-listbull}
     # 60-second sleep loop. The dispatch script's per-row UPDATEs are
     # conditional on `reminder_sent = false`, so overlap is safe.
     command:
@@ -92,11 +92,11 @@ services:
       - -c
       - "while true; do npm run cron; sleep 60; done"
     networks:
-      - listgram-net
+      - listbull-net
 
 volumes:
   pgdata:
 
 networks:
-  listgram-net:
+  listbull-net:
     driver: bridge

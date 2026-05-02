@@ -91,8 +91,8 @@ export function RestoreButton({
         aria-disabled
         title={labels.unavailable}
         style={{
-          fontSize: "var(--lg-fs-xs)",
-          color: "var(--lg-muted-fg)",
+          fontSize: "var(--lb-fs-xs)",
+          color: "var(--lb-muted-fg)",
         }}
       >
         {labels.unavailable}

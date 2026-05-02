@@ -14,9 +14,9 @@ export function EmptyState({
   return (
     <div
       style={{
-        padding: "var(--lg-sp-12) var(--lg-sp-6)",
+        padding: "var(--lb-sp-12) var(--lb-sp-6)",
         textAlign: "center",
-        color: "var(--lg-muted-fg)",
+        color: "var(--lb-muted-fg)",
       }}
     >
       {icon && (
@@ -24,8 +24,8 @@ export function EmptyState({
           style={{
             display: "flex",
             justifyContent: "center",
-            marginBottom: "var(--lg-sp-3)",
-            color: "var(--lg-muted-fg)",
+            marginBottom: "var(--lb-sp-3)",
+            color: "var(--lb-muted-fg)",
           }}
         >
           {icon}
@@ -33,11 +33,11 @@ export function EmptyState({
       )}
       <h2
         style={{
-          fontSize: "var(--lg-fs-xl)",
-          fontWeight: "var(--lg-fw-semibold)",
-          color: "var(--lg-fg)",
-          letterSpacing: "var(--lg-tracking-title)",
-          marginBottom: "var(--lg-sp-2)",
+          fontSize: "var(--lb-fs-xl)",
+          fontWeight: "var(--lb-fw-semibold)",
+          color: "var(--lb-fg)",
+          letterSpacing: "var(--lb-tracking-title)",
+          marginBottom: "var(--lb-sp-2)",
         }}
       >
         {title}
@@ -45,14 +45,14 @@ export function EmptyState({
       {description && (
         <p
           style={{
-            fontSize: "var(--lg-fs-md)",
+            fontSize: "var(--lb-fs-md)",
             lineHeight: 1.5,
           }}
         >
           {description}
         </p>
       )}
-      {cta && <div style={{ marginTop: "var(--lg-sp-4)" }}>{cta}</div>}
+      {cta && <div style={{ marginTop: "var(--lb-sp-4)" }}>{cta}</div>}
     </div>
   );
 }

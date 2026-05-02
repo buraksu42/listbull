@@ -13,7 +13,7 @@ export function Skeleton({
   return (
     <div
       className={cn(
-        "animate-pulse rounded-[var(--lg-r-md)] bg-[var(--lg-muted)]",
+        "animate-pulse rounded-[var(--lb-r-md)] bg-[var(--lb-muted)]",
         className,
       )}
       {...props}

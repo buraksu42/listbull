@@ -10,7 +10,7 @@
  *
  * The fallback embeds the bundle directly so the Frontend can let the
  * user save without a second round-trip. Both modes use the same
- * filename convention: `listgram-export-<userId>-<isoDate>.json`.
+ * filename convention: `listbull-export-<userId>-<isoDate>.json`.
  *
  * Inv-20: encrypted API key + session cookies + other users' content
  * are excluded — see `src/lib/server/export.ts`.
@@ -46,7 +46,7 @@ export async function POST() {
 
   const bundle = await generateExportBundle(userId);
   const isoDate = bundle.generatedAt.slice(0, 10);
-  const filename = `listgram-export-${userId}-${isoDate}.json`;
+  const filename = `listbull-export-${userId}-${isoDate}.json`;
 
   const json = JSON.stringify(bundle);
   const buf = Buffer.from(json, "utf8");

@@ -181,7 +181,7 @@ function parseDispositionFilename(value: string | null): string | undefined {
 
 function defaultExportFilename(): string {
   const iso = new Date().toISOString().slice(0, 10);
-  return `listgram-export-${iso}.json`;
+  return `listbull-export-${iso}.json`;
 }
 
 function translateExportError(

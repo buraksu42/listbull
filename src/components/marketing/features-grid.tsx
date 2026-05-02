@@ -39,7 +39,7 @@ export function FeaturesGrid({ heading, features }: FeaturesGridProps) {
     <section
       aria-labelledby="features-heading"
       style={{
-        padding: "var(--lg-sp-10) var(--lg-sp-4)",
+        padding: "var(--lb-sp-10) var(--lb-sp-4)",
         maxWidth: 1080,
         margin: "0 auto",
       }}
@@ -47,11 +47,11 @@ export function FeaturesGrid({ heading, features }: FeaturesGridProps) {
       <h2
         id="features-heading"
         style={{
-          fontSize: "var(--lg-fs-2xl)",
-          fontWeight: "var(--lg-fw-bold)",
-          letterSpacing: "var(--lg-tracking-title)",
+          fontSize: "var(--lb-fs-2xl)",
+          fontWeight: "var(--lb-fw-bold)",
+          letterSpacing: "var(--lb-tracking-title)",
           textAlign: "center",
-          marginBottom: "var(--lg-sp-8)",
+          marginBottom: "var(--lb-sp-8)",
         }}
       >
         {heading}
@@ -64,7 +64,7 @@ export function FeaturesGrid({ heading, features }: FeaturesGridProps) {
           padding: 0,
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-          gap: "var(--lg-sp-4)",
+          gap: "var(--lb-sp-4)",
         }}
       >
         {features.map((f, idx) => {
@@ -73,13 +73,13 @@ export function FeaturesGrid({ heading, features }: FeaturesGridProps) {
             <li
               key={f.title}
               style={{
-                padding: "var(--lg-sp-6)",
-                borderRadius: "var(--lg-r-lg)",
-                border: "1px solid var(--lg-border)",
-                background: "var(--lg-paper)",
+                padding: "var(--lb-sp-6)",
+                borderRadius: "var(--lb-r-lg)",
+                border: "1px solid var(--lb-border)",
+                background: "var(--lb-paper)",
                 display: "flex",
                 flexDirection: "column",
-                gap: "var(--lg-sp-3)",
+                gap: "var(--lb-sp-3)",
               }}
             >
               <span
@@ -90,26 +90,26 @@ export function FeaturesGrid({ heading, features }: FeaturesGridProps) {
                   justifyContent: "center",
                   width: 40,
                   height: 40,
-                  borderRadius: "var(--lg-r-md)",
-                  background: "var(--lg-accent)",
-                  color: "var(--lg-accent-fg)",
+                  borderRadius: "var(--lb-r-md)",
+                  background: "var(--lb-accent)",
+                  color: "var(--lb-accent-fg)",
                 }}
               >
                 <Icon className="h-5 w-5" />
               </span>
               <h3
                 style={{
-                  fontSize: "var(--lg-fs-lg)",
-                  fontWeight: "var(--lg-fw-semibold)",
-                  color: "var(--lg-ink-deep)",
+                  fontSize: "var(--lb-fs-lg)",
+                  fontWeight: "var(--lb-fw-semibold)",
+                  color: "var(--lb-ink-deep)",
                 }}
               >
                 {f.title}
               </h3>
               <p
                 style={{
-                  fontSize: "var(--lg-fs-md)",
-                  color: "var(--lg-muted-fg)",
+                  fontSize: "var(--lb-fs-md)",
+                  color: "var(--lb-muted-fg)",
                   lineHeight: 1.5,
                 }}
               >

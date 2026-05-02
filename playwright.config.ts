@@ -5,12 +5,12 @@ import { defineConfig, devices } from "@playwright/test";
  *
  * Tests live under `tests/e2e/**`. The full suite (Mini App auth flow,
  * mocked-webhook intent, share flow, restore flow) is authored in
- * Phase 4; live execution is gated behind `LISTGRAM_E2E_LIVE=1` so CI
+ * Phase 4; live execution is gated behind `LISTBULL_E2E_LIVE=1` so CI
  * can ship a green smoke run without provisioning a Postgres + bot
  * webhook in the orchestrator's environment. Phase 5 staging flips the
  * gate on after DNS + bot token + DB are wired.
  *
- * Local dev: `LISTGRAM_E2E_LIVE=1 npx playwright test` against a
+ * Local dev: `LISTBULL_E2E_LIVE=1 npx playwright test` against a
  * `npm run dev` server with `.env.local` populated.
  */
 const baseURL =
@@ -37,8 +37,8 @@ export default defineConfig({
   ],
   // Webserver auto-start is OFF by default — test runs against an
   // already-up dev/staging deploy. Set
-  // LISTGRAM_E2E_AUTO_WEBSERVER=1 locally to spin one up.
-  ...(process.env.LISTGRAM_E2E_AUTO_WEBSERVER === "1"
+  // LISTBULL_E2E_AUTO_WEBSERVER=1 locally to spin one up.
+  ...(process.env.LISTBULL_E2E_AUTO_WEBSERVER === "1"
     ? {
         webServer: {
           command: "npm run dev",

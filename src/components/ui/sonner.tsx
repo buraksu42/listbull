@@ -13,9 +13,9 @@ export function Toaster() {
       theme="system"
       toastOptions={{
         style: {
-          background: "var(--lg-card)",
-          color: "var(--lg-card-fg)",
-          border: "1px solid var(--lg-border)",
+          background: "var(--lb-card)",
+          color: "var(--lb-card-fg)",
+          border: "1px solid var(--lb-border)",
         },
       }}
     />

@@ -11,7 +11,7 @@
 
 ### Stack
 - Next.js 16.2.4 (App Router, Turbopack), React 19, TypeScript strict + `noUncheckedIndexedAccess`
-- Tailwind v4 (CSS-first config) with token bridge from `handoff/tokens/tokens.css` → `--lg-*` CSS vars + `@theme inline` for utility classes
+- Tailwind v4 (CSS-first config) with token bridge from `handoff/tokens/tokens.css` → `--lb-*` CSS vars + `@theme inline` for utility classes
 - Drizzle 0.45 + `postgres` driver, `casing: "snake_case"`
 - Better Auth 1.6 installed (full plugin wiring deferred to Phase 2 — Phase 1 ships a minimal HMAC-signed session cookie)
 - grammY 1.42 for bot
@@ -59,11 +59,11 @@
 
 ### Design tokens
 - `handoff/tokens/tokens.css` content inlined into `src/app/globals.css` (one canonical copy).
-- Tailwind v4 `@theme inline` exposes `--lg-*` to utility classes (`bg-bg`, `text-fg`, etc.).
+- Tailwind v4 `@theme inline` exposes `--lb-*` to utility classes (`bg-bg`, `text-fg`, etc.).
 - `prefers-reduced-motion` honored globally.
 
 ### Telegram theme adapter
-- `src/lib/telegram/theme-adapter.ts`: maps `Telegram.WebApp.themeParams` → `--lg-*` CSS vars, listens to `themeChanged` event, brand `--lg-accent` stays constant.
+- `src/lib/telegram/theme-adapter.ts`: maps `Telegram.WebApp.themeParams` → `--lb-*` CSS vars, listens to `themeChanged` event, brand `--lb-accent` stays constant.
 - `link_color` deliberately ignored — accent is the immovable signal color per design spec.
 
 ### Project hygiene
@@ -98,9 +98,9 @@ These are NOT Phase 1 scope per `handoff/specs/agents.md` but are logged here to
 2. **next-intl wiring.** Mini App still uses raw inline strings; Phase 4 enhancement E1 brings `messages/{tr,en}.json` + `next-intl` server config. Bot side already has its own dictionary.
 3. **Lazy env validation pattern.** Currently `src/lib/env.ts` uses a Proxy that lazy-validates on first access, with a build-phase fallback that returns placeholders. Works for build, but Phase 4 should add a `validate-env.ts` script run in CI to assert the schema before deploy.
 4. **shadcn primitives not generated.** `src/components/ui/` is empty. Phase 2 will run `shadcn add button input sheet alert-dialog switch skeleton sonner` and use those instead of inline-styled elements.
-5. **Bot username availability.** `@listgram_bot` not reserved on BotFather yet. Confirm before Phase 5 launch; fall back to `@listgram_app_bot` if taken (env var `TELEGRAM_BOT_USERNAME` already supports either).
+5. **Bot username availability.** `@listbull_bot` not reserved on BotFather yet. Confirm before Phase 5 launch; fall back to `@listbull_app_bot` if taken (env var `TELEGRAM_BOT_USERNAME` already supports either).
 6. **Sentry not wired.** Phase 4 OSS-quality pass adds `instrumentation-client.ts` + Dockerfile build args per global CLAUDE.md "Sentry / Next 16 Turbopack" gotcha.
-7. **Umami tracking not wired.** Phase 4 — run `~/scripts/wire-umami.sh listgram` after first prod deploy.
+7. **Umami tracking not wired.** Phase 4 — run `~/scripts/wire-umami.sh listbull` after first prod deploy.
 
 ---
 

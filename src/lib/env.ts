@@ -20,12 +20,12 @@ const serverSchema = z.object({
 
   OPENROUTER_API_KEY: z.string().optional(),
 
-  LISTGRAM_PER_USER_HOURLY_MSG_LIMIT: z.coerce
+  LISTBULL_PER_USER_HOURLY_MSG_LIMIT: z.coerce
     .number()
     .int()
     .nonnegative()
     .default(0),
-  LISTGRAM_HEARTBEAT_URL: z.string().url().optional(),
+  LISTBULL_HEARTBEAT_URL: z.string().url().optional(),
 
   // Phase 4 · F1: optional Hetzner Object Storage upload target for
   // export bundles. When unset, the export route falls back to a
@@ -81,8 +81,8 @@ function parseServer(): ServerEnv {
         ENV_KEY: "x".repeat(32),
         TELEGRAM_BOT_TOKEN: "0000000000",
         TELEGRAM_WEBHOOK_SECRET: "x".repeat(16),
-        TELEGRAM_BOT_USERNAME: "listgram_bot",
-        LISTGRAM_PER_USER_HOURLY_MSG_LIMIT: 0,
+        TELEGRAM_BOT_USERNAME: "listbull_bot",
+        LISTBULL_PER_USER_HOURLY_MSG_LIMIT: 0,
       });
       return cachedServer;
     }

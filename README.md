@@ -1,4 +1,4 @@
-# listgram
+# listbull
 
 > Telegram-native AI list assistant with persistent shared list memory.
 > A chatty bot + Mini App, BYOK (bring-your-own OpenRouter key),
@@ -6,7 +6,7 @@
 
 ![demo](docs/demo.gif)
 
-listgram lives where you already chat. Send a message ("Süt al", "tomorrow
+listbull lives where you already chat. Send a message ("Süt al", "tomorrow
 9am go to the gym"), forward a recipe, share a list with your partner —
 the bot extracts items, sets reminders, and gives you a clean Mini App
 to drag, check off, and audit. No third-party LLM telemetry, no cloud
@@ -21,7 +21,7 @@ DB, the data stays yours.
   `schedule_reminder`, `assign_item`).
 - **Forwarded message extraction** — forward any Telegram message; the
   bot extracts up to 20 distinct action items in one round-trip.
-- **Inline mode** — `@listgram_bot <query>` in any chat surfaces your
+- **Inline mode** — `@listbull_bot <query>` in any chat surfaces your
   10 most-recent matching items, deeplinkable.
 - **Shareable list snapshots** — HMAC-signed read-only URLs (default
   30-day expiry) for any list. No DB-stored snapshot rows; the URL is
@@ -55,13 +55,13 @@ You'll need: Docker (with Compose), a Telegram bot token from
 
 ```bash
 # 1. Clone
-git clone https://github.com/buraksu42/listgram.git
-cd listgram
+git clone https://github.com/buraksu42/listbull.git
+cd listbull
 
 # 2. Configure secrets
 cp .env.example .env
 # Edit .env. Minimum required:
-#   DATABASE_URL=postgres://listgram:listgram@postgres:5432/listgram
+#   DATABASE_URL=postgres://listbull:listbull@postgres:5432/listbull
 #   BETTER_AUTH_SECRET=$(openssl rand -base64 48)
 #   BETTER_AUTH_URL=https://your-host.tld   # public URL
 #   ENV_KEY=$(openssl rand -base64 32)
@@ -115,7 +115,7 @@ Architecture deep-dive: [`handoff/specs/architecture.md`](handoff/specs/architec
 
 ## Data flow / GDPR
 
-- **Where data lives**: your Postgres. listgram makes zero outbound
+- **Where data lives**: your Postgres. listbull makes zero outbound
   calls except (a) Telegram (because that's the chat surface) and
   (b) OpenRouter via the user's BYOK key for the LLM turn.
 - **Retention**: until the user exports + deletes (F1). No automatic
@@ -126,7 +126,7 @@ Architecture deep-dive: [`handoff/specs/architecture.md`](handoff/specs/architec
 - **No third-party telemetry by default**. Sentry + Umami integration
   is opt-in via `NEXT_PUBLIC_SENTRY_DSN` / `NEXT_PUBLIC_UMAMI_WEBSITE_ID`
   env vars; absent those, no events leave the box.
-- **Self-host operators are the GDPR data controller**. listgram
+- **Self-host operators are the GDPR data controller**. listbull
   provides the tooling (export, restore, audit log); the operator owns
   the policy.
 
@@ -144,7 +144,7 @@ npm run db:studio                # Drizzle Studio (DB browser)
 npm run lint                     # ESLint
 npm run typecheck                # tsc --noEmit
 npm test                         # Vitest unit suite
-npm run e2e                      # Playwright (live tests behind LISTGRAM_E2E_LIVE=1)
+npm run e2e                      # Playwright (live tests behind LISTBULL_E2E_LIVE=1)
 
 # Cron container (separate process, every 60s in docker-compose)
 npm run cron                     # one-shot dispatch tick

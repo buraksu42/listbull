@@ -1,5 +1,5 @@
 /**
- * LLM tool registry for listgram Phase 2 + Phase 3.
+ * LLM tool registry for listbull Phase 2 + Phase 3.
  *
  * Each tool exports:
  *   - input zod schema  → `<tool>InputSchema`

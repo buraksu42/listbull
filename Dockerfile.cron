@@ -1,4 +1,4 @@
-# listgram — reminder dispatch cron container.
+# listbull — reminder dispatch cron container.
 #
 # Runs `tsx src/lib/cron/dispatch-reminders.ts` once per minute. The
 # script is idempotent (Inv-11 conditional UPDATE) so duplicate ticks

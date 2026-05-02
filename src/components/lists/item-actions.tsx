@@ -36,7 +36,7 @@ export function ItemActions({
       >
         <Pencil
           className="h-4 w-4"
-          style={{ color: "var(--lg-muted-fg)" }}
+          style={{ color: "var(--lb-muted-fg)" }}
           aria-hidden
         />
       </Button>
@@ -49,7 +49,7 @@ export function ItemActions({
       >
         <Trash2
           className="h-4 w-4"
-          style={{ color: "var(--lg-muted-fg)" }}
+          style={{ color: "var(--lb-muted-fg)" }}
           aria-hidden
         />
       </Button>
