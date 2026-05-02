@@ -32,7 +32,7 @@ ENV TZ=UTC
 # Copy dependency tree from the deps stage and the source tree.
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json package-lock.json* ./
-COPY tsconfig.json ./
+COPY tsconfig.json tsconfig.cron.json ./
 COPY drizzle.config.ts ./
 COPY src ./src
 
