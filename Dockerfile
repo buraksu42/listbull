@@ -1,28 +1,18 @@
-# listgram — main web app (Next.js 16 + Turbopack build).
+# listgram — main web app (Next.js 16 + Turbopack build, standalone output).
 #
-# Multi-stage Node 22 alpine. Three stages:
-#   1. deps        — production-only dep install for the runtime layer
-#   2. builder     — full deps + `next build`. NEXT_PUBLIC_* + Sentry
+# Multi-stage Node 22 alpine. Two stages:
+#   1. builder     — full deps + `next build`. NEXT_PUBLIC_* + Sentry
 #                    + Umami arg → env so Turbopack inlines them at
 #                    build time (per ~/.claude/CLAUDE.md silent-broken
 #                    rule + docs/architecture-pass-phase-4.md § Sentry).
-#   3. runner      — final image: prod node_modules + .next + public +
-#                    minimal config files. Runs as non-root.
-#
-# Note: Phase 5 follow-up — switch to `output: "standalone"` in
-# next.config.ts to ship a tinier image. Architect owns that flip.
+#   2. runner      — final image: copies the .next/standalone bundle
+#                    (Next emits a minimal node_modules subset there)
+#                    + .next/static + public + messages. ~150MB final
+#                    vs. ~250MB with full node_modules. Runs as non-root.
 
 ARG NODE_VERSION=22
 
-# ─── 1. Production deps ───────────────────────────────────────────
-FROM node:${NODE_VERSION}-alpine AS deps
-WORKDIR /app
-
-# We need the lockfile so `npm ci` is reproducible.
-COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev --no-audit --no-fund
-
-# ─── 2. Builder ───────────────────────────────────────────────────
+# ─── 1. Builder ───────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-alpine AS builder
 WORKDIR /app
 
@@ -40,7 +30,6 @@ ENV NEXT_PUBLIC_ENV=${NEXT_PUBLIC_ENV}
 ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
 ENV NEXT_PUBLIC_UMAMI_WEBSITE_ID=${NEXT_PUBLIC_UMAMI_WEBSITE_ID}
 
-# Skip env validation during build; runtime env validation still applies.
 ENV SKIP_ENV_VALIDATION=1
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -57,7 +46,7 @@ COPY drizzle ./drizzle
 
 RUN npm run build
 
-# ─── 3. Runner ────────────────────────────────────────────────────
+# ─── 2. Runner ────────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-alpine AS runner
 WORKDIR /app
 
@@ -67,26 +56,20 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV TZ=UTC
 
-# Non-root runtime — the official `node` image already has a `node`
-# user (uid 1000) which we use directly.
+# Non-root runtime.
 RUN addgroup --system --gid 1001 nodejs \
  && adduser --system --uid 1001 --ingroup nodejs nextjs
 
-# Production deps.
-COPY --from=deps   /app/node_modules ./node_modules
-# Build artifacts.
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/messages ./messages
-# Config files needed at runtime.
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/next.config.ts ./next.config.ts
+# Standalone bundle: Next emits a minimal node_modules subset under
+# .next/standalone, plus a server.js entry point. Static assets live
+# under .next/static and must be copied separately.
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/messages ./messages
 
 USER nextjs
 
 EXPOSE 3000
 
-# `next start` reads next.config.ts at boot. If you switch to
-# `output: "standalone"` later, replace this with `node server.js`
-# from the standalone bundle.
-CMD ["node_modules/.bin/next", "start", "-H", "0.0.0.0", "-p", "3000"]
+CMD ["node", "server.js"]

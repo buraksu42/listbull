@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 
 import "./globals.css";
 
+const isProd = process.env.NEXT_PUBLIC_ENV === "production";
+
 export const metadata: Metadata = {
   title: "listgram",
   description:
@@ -11,6 +13,11 @@ export const metadata: Metadata = {
     process.env.NEXT_PUBLIC_APP_URL && process.env.NEXT_PUBLIC_APP_URL.length > 0
       ? new URL(process.env.NEXT_PUBLIC_APP_URL)
       : undefined,
+  // Belt-and-suspenders with src/app/robots.ts: anywhere outside production
+  // gets a noindex meta even if the robots route is misconfigured. Mini App
+  // (`(app)` route group) ALWAYS gets noindex via its own layout — this only
+  // catches the marketing surface on test/dev environments.
+  robots: isProd ? undefined : { index: false, follow: false },
 };
 
 export const viewport: Viewport = {
