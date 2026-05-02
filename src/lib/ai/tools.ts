@@ -212,6 +212,40 @@ export const listListsOutputSchema = z.object({
 export type ListListsInput = z.infer<typeof listListsInputSchema>;
 export type ListListsOutput = z.infer<typeof listListsOutputSchema>;
 
+// ─── 6b. create_list (post-Phase-5 architectural gap fix) ─────────
+//
+// Originally not in the Phase-1..4 tool inventory: lists were created
+// only via /start (Inbox) — no LLM-mediated path. Surfaced when users
+// asked the bot "yeni alışveriş listesi yap" and it had no tool to
+// invoke. Adds owner-only list creation; auto-creates a `list_members`
+// row (Inv-2) and an `activity_log` `list_created` entry (Inv-1).
+
+export const createListInputSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "List name is required")
+    .max(120, "List name must be ≤120 chars"),
+  emoji: z
+    .string()
+    .trim()
+    .min(1)
+    .max(8)
+    .nullable()
+    .optional(),
+});
+
+export const createListOutputSchema = z.object({
+  list: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    emoji: z.string().nullable(),
+  }),
+});
+
+export type CreateListInput = z.infer<typeof createListInputSchema>;
+export type CreateListOutput = z.infer<typeof createListOutputSchema>;
+
 // ─── 7. share_list (Phase 3) ────────────────────────────────────────
 //
 // Field names match `docs/architecture-pass-phase-3.md` § "share_list"
@@ -358,6 +392,7 @@ export const TOOL_NAMES = [
   "complete_item",
   "delete_item",
   "list_lists",
+  "create_list",
   "share_list",
   "schedule_reminder",
   "assign_item",
@@ -444,6 +479,19 @@ export const tools: readonly ToolDefinition[] = [
       "Read-only; no mutations.",
     inputSchema: listListsInputSchema,
     outputSchema: listListsOutputSchema,
+  },
+  {
+    name: "create_list",
+    description:
+      "Create a new list owned by the calling user. Pass `name` (1-120 chars; " +
+      "deduplication is the user's responsibility — multiple lists with the " +
+      "same name are allowed). `emoji` is optional (single emoji char). The " +
+      "Inbox list is auto-created on /start; do NOT call this for Inbox. " +
+      "Use when the user asks 'yeni alışveriş listesi yap' / 'create a " +
+      "shopping list' / similar net-new list intent. After success, items " +
+      "added in the same conversational turn should target the new list_id.",
+    inputSchema: createListInputSchema,
+    outputSchema: createListOutputSchema,
   },
   {
     name: "share_list",
