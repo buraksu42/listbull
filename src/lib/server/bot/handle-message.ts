@@ -23,6 +23,7 @@ import "server-only";
 
 import type { Context } from "grammy";
 
+import { env } from "@/lib/env";
 import { getRecentMessages, insertMessages } from "@/lib/db/queries/messages";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { sliceForContext } from "@/lib/ai/conversation";
@@ -143,19 +144,25 @@ export async function handleMessage(ctx: Context): Promise<void> {
   const copy = COPY[locale];
   const chatId = message.chat.id;
 
-  // BYOK gate — fast path, no DB write if key is missing. Applies to BOTH
-  // the forwarded branch and the conversational branch.
-  if (!user.openrouterApiKeyEncrypted) {
-    await ctx.reply(copy.noKey);
-    return;
-  }
-
+  // BYOK gate (with operator-level fallback per architecture.md AI section):
+  //   1. User's BYOK key wins when set
+  //   2. Otherwise, env.OPENROUTER_API_KEY (operator-level) is used
+  //   3. If neither, surface the noKey copy
+  // Operator fallback lets self-hosters offer a "no setup needed" experience
+  // for trusted user pools; production BYOK leaves the env unset.
   let apiKey: string;
-  try {
-    apiKey = decrypt(user.openrouterApiKeyEncrypted);
-  } catch {
-    // Key blob is unreadable — most likely ENV_KEY rotated.
-    await ctx.reply(copy.keyDecryptError);
+  if (user.openrouterApiKeyEncrypted) {
+    try {
+      apiKey = decrypt(user.openrouterApiKeyEncrypted);
+    } catch {
+      // Key blob is unreadable — most likely ENV_KEY rotated.
+      await ctx.reply(copy.keyDecryptError);
+      return;
+    }
+  } else if (env.OPENROUTER_API_KEY) {
+    apiKey = env.OPENROUTER_API_KEY;
+  } else {
+    await ctx.reply(copy.noKey);
     return;
   }
 
