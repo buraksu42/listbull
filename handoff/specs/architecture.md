@@ -7,22 +7,35 @@
 ## Domain instance
 
 > Pattern type from Stack Defaults: "Main flagship + experiments subdomain".
-> Mode here: **flagship** (own domain, OSS public product).
+> Mode here: **flagship under umbrella** — `listbull.org` is the umbrella; the
+> listgram app deploys to subdomains.
 
-- **Prod URL**: `https://www.listgram.net`
-- **Test/staging URL**: `https://test.listgram.net`
-- **Bot username**: `@listgram_bot` (must be reserved via BotFather pre-deploy; fall back
-  to `@listgram_app_bot` if taken)
-- **Mini App URL**: `https://www.listgram.net/app` (linked from `BotFather` Mini App config)
-- **DNS**: Cloudflare — `A` records for both subdomains pointing to:
-  - `www.listgram.net` → `46.224.144.255` (Hetzner prod)
-  - `test.listgram.net` → `62.238.8.55` (Hetzner test)
-  - `listgram.net` → 308 redirect to `www.listgram.net`
-- **Apex redirect**: yes, `listgram.net` → `www.listgram.net` (Cloudflare Page Rule
-  or Dokploy reverse-proxy redirect)
-- **Cert mechanism**: hosting-managed (Dokploy / Traefik handles Let's Encrypt HTTP-01)
-- **Bot webhook URL**: `https://www.listgram.net/api/telegram/webhook` (prod),
-  `https://test.listgram.net/api/telegram/webhook` (test)
+### 3-tier domain structure
+
+`listbull.org` is the umbrella domain. Three categories of host:
+
+1. **Apex `listbull.org`** — open-source project info / install docs site. Static, decoupled from this codebase. Hosted as a separate deliverable (Cloudflare Pages / GitHub Pages / dedicated container). Contains the pitch, GitHub link, install guide, contributing guide, changelog. **NOT the listgram app.** See `docs/launch-checklist-phase-5.md` § Step 11 for hosting options.
+2. **Canonical app deployment `prod.listbull.org`** — production listgram instance (Mini App + bot + DB). This codebase, prod Hetzner server.
+3. **Test/staging `test.listbull.org`** — same code as prod, lower stakes; deploys on every `dev` push.
+4. **Tenant pattern `<tenant>.listbull.org`** — additional self-host instances on the same infra (e.g. `loyetta.listbull.org`). Same code, separate `NEXT_PUBLIC_APP_URL`, `DATABASE_URL`, `TELEGRAM_BOT_TOKEN`. Sharing or dedicated server depending on scale.
+
+### URLs / endpoints for the listgram app
+
+- **Prod URL**: `https://prod.listbull.org`
+- **Test/staging URL**: `https://test.listbull.org`
+- **Bot username**: `@listgram_bot` for prod (must be reserved via BotFather pre-deploy; fall back
+  to `@listgram_app_bot` if taken). Test deployment uses a separate bot (e.g. `@listgram_test_bot`). Tenants pick their own bot per deployment.
+- **Mini App URL**: `https://prod.listbull.org/app` (linked from `BotFather` Mini App config). Tenant deployments use `https://<tenant>.listbull.org/app`.
+- **DNS**: Cloudflare —
+  - `prod.listbull.org` → `46.224.144.255` (Hetzner prod), proxy OFF (Let's Encrypt HTTP-01 needs direct origin)
+  - `test.listbull.org` → `62.238.8.55` (Hetzner test), proxy OFF
+  - `listbull.org` (apex) → static project info site host (per launch checklist Step 11), proxy OK
+  - `<tenant>.listbull.org` → per-tenant server, proxy OFF (same webhook constraint)
+- **Apex behavior**: `listbull.org` is a **distinct site** (project info + install docs), NOT a redirect to the app. Visitors arriving at `listbull.org` are looking for "what is this and how do I install it"; visitors arriving at `prod.listbull.org` are looking for "open in Telegram". The two surfaces have different audiences.
+- **Cert mechanism**: hosting-managed (Dokploy / Traefik handles Let's Encrypt for app subdomains; apex site host handles its own).
+- **Bot webhook URL**: `https://prod.listbull.org/api/telegram/webhook` (prod),
+  `https://test.listbull.org/api/telegram/webhook` (test); per-tenant bots use
+  `https://<tenant>.listbull.org/api/telegram/webhook`.
 - **Status**: DNS pending (post-deploy step)
 
 ## Stack overrides
@@ -198,7 +211,7 @@ audit) but UI does not surface them.
 ## Email
 
 - **Provider:** Resend (Stack Defaults).
-- **Sending domain:** `noreply@listgram.net` (DKIM/SPF on Cloudflare DNS).
+- **Sending domain:** `noreply@listbull.org` (DKIM/SPF on Cloudflare DNS).
 - **Email types:** none in Phase 1. **Drop section in CLAUDE.md.**
 
 **Rationale:** all notifications go via Telegram DM (the bot already has the chat).

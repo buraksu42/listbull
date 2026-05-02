@@ -122,27 +122,27 @@ None.
 
 ## Gates deferred to Phase 5 staging — checklist
 
-Phase 5 launches a real test deploy to `test.listgram.net` (or
+Phase 5 launches a real test deploy to `test.listbull.org` (or
 operator's chosen domain). At that point, run:
 
 ```bash
 # Bundle scan (Sentry DSN inline post-deploy)
-curl https://test.listgram.net/_next/static/chunks/*.js \
+curl https://test.listbull.org/_next/static/chunks/*.js \
   | grep -E 'ingest\.(de\.)?sentry\.io|@sentry|sentryDsn'
 # Should match.
 
 # HTML scan (Umami live tracking)
-curl -s https://test.listgram.net/ | grep analytics.bullshitapps.com
+curl -s https://test.listbull.org/ | grep analytics.bullshitapps.com
 # Should match (Next 16 Turbopack inlines preload+RSC payload, NOT chunks).
 
 # UptimeRobot keyword monitor
 # - Type: HTTPS Keyword
-# - URL: https://test.listgram.net/api/health
+# - URL: https://test.listbull.org/api/health
 # - Keyword: "status":"ok"
 # - Interval: 5 min
 
 # Lighthouse a11y on /lists (authed session)
-npx lighthouse https://test.listgram.net/lists \
+npx lighthouse https://test.listbull.org/lists \
   --only-categories=accessibility \
   --chrome-flags="--headless"
 # Expect: ≥95 a11y score.

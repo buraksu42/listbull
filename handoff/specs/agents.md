@@ -830,8 +830,8 @@ Run sequentially:
 2. Backend-agent: BotFather production bot setup (manual steps documented in
    docs/launch-checklist.md — Reviewer authors the checklist):
    - Create @listgram_bot in BotFather
-   - Set webhook to https://www.listgram.net/api/telegram/webhook
-   - Set Mini App URL to https://www.listgram.net/app
+   - Set webhook to https://prod.listbull.org/api/telegram/webhook
+   - Set Mini App URL to https://prod.listbull.org/app
    - Set bot commands list, description, about text
 3. Frontend-agent: prod robots.txt + OG image + demo GIF for README.
 4. Manual: merge to main → Dokploy deploys → verify cert + reachability.
@@ -907,7 +907,7 @@ Dependency rules:
 
 This phase covers:
 - Marketing landing page → use Prompt 5 in design-prompts.md
-  ("listgram.net marketing landing")
+  ("listbull.org marketing landing")
 - Audit log + restore UI → use Prompt 6 in design-prompts.md
   ("Mini App audit & restore")
 - Bot avatar + OG images → use Prompt 7 in design-prompts.md

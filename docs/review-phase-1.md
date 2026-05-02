@@ -70,7 +70,7 @@
 - `prompts/` removed (handoff/specs/ canonical).
 - Root `CLAUDE.md` rewritten — concise, project-specific only, references global CLAUDE.md for stack defaults (no duplication).
 - `.env.example` rewritten: Postgres + Better Auth + Telegram + BYOK + optional analytics/Sentry/heartbeat (no Supabase).
-- `README.md` updated: domain `listgram.net`, real scripts, current stack.
+- `README.md` updated: domain `listbull.org`, real scripts, current stack.
 
 ---
 

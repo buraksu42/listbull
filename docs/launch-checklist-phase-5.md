@@ -3,7 +3,7 @@
 > Generated 2026-05-02 by orchestrator session.
 > Phase 5 is single-session orchestrator-driven; the heavy lift is **manual user action** (DNS, BotFather, Dokploy env vars). The code-side bits are committed in this phase's commit.
 
-This document is the runbook for taking listgram from `dev` branch on the test server to a public production launch on `www.listgram.net`.
+This document is the runbook for taking listgram from `dev` branch on the test server to a public production launch on `prod.listbull.org`.
 
 ---
 
@@ -29,22 +29,31 @@ These are documented in `~/.claude/CLAUDE.md`. Confirm they're still your server
 
 ## Step 1 — DNS (Cloudflare)
 
-Cloudflare proxy MUST be **OFF** for both subdomains (Let's Encrypt HTTP-01 challenge requires direct origin).
+`listbull.org` is the umbrella domain. Three-tier structure:
 
-| Type | Name | Content | Proxy | TTL |
-|---|---|---|---|---|
-| A | `www` | `46.224.144.255` | DNS only | Auto |
-| A | `test` | `62.238.8.55` | DNS only | Auto |
-| A | `@` | `46.224.144.255` | DNS only | Auto |
+| Subdomain | Purpose | Hosted on |
+|---|---|---|
+| `listbull.org` (apex) | Open-source project info / install docs / GitHub link / "what is listgram" | **Separate static site** (deferred deliverable — see Step 11). NOT this listgram codebase. |
+| `prod.listbull.org` | Production listgram app (Mini App + bot + DB) | This codebase, prod server `46.224.144.255` |
+| `test.listbull.org` | Test/staging listgram app | This codebase, test server `62.238.8.55` |
+| `<tenant>.listbull.org` (e.g. `loyetta`) | Additional tenant deployments (same code, separate DB + bot) | This codebase, deployed per-tenant via Dokploy |
 
-Apex redirect (`listgram.net` → `www.listgram.net`):
-- Either add a Cloudflare Page Rule: `listgram.net/*` → 308 redirect to `https://www.listgram.net/$1` (Forwarding URL),
-- Or rely on Dokploy's reverse proxy (Traefik) middleware redirecting non-www to www.
+Cloudflare proxy MUST be **OFF** for app subdomains (Let's Encrypt HTTP-01 challenge requires direct origin). The apex `listbull.org` static site can be Cloudflare-proxied since it has no webhook.
+
+| Type | Name | Content | Proxy | TTL | Notes |
+|---|---|---|---|---|---|
+| A | `prod` | `46.224.144.255` | DNS only | Auto | Production app server (Hetzner) |
+| A | `test` | `62.238.8.55` | DNS only | Auto | Test app server (Hetzner) |
+| A | `@` (apex) | (apex static site host) | Proxy ON OK | Auto | Project info site — see Step 11 for hosting options (GitHub Pages, Cloudflare Pages, Vercel, Hetzner static container) |
+| CNAME (optional) | `www` | `listbull.org` | Proxy follows apex | Auto | Convenience redirect — many users type `www.listbull.org` |
+
+Per-tenant subdomain pattern: add an `A` record `<tenant>` → either prod server (sharing infrastructure) or a dedicated tenant server. Each tenant deployment uses its own `NEXT_PUBLIC_APP_URL`, `DATABASE_URL`, and `TELEGRAM_BOT_TOKEN`.
 
 Verify with `dig`:
 ```bash
-dig +short www.listgram.net    # expect 46.224.144.255
-dig +short test.listgram.net   # expect 62.238.8.55
+dig +short listbull.org         # apex — depends on Step 11 host
+dig +short prod.listbull.org    # expect 46.224.144.255
+dig +short test.listbull.org    # expect 62.238.8.55
 ```
 
 Wait for propagation (usually <5 min on Cloudflare).
@@ -53,15 +62,15 @@ Wait for propagation (usually <5 min on Cloudflare).
 
 ## Step 2 — Dokploy app setup
 
-Two Dokploy applications: one watching `dev` branch (test server, deploys to `test.listgram.net`), one watching `main` (prod server, `www.listgram.net`).
+Two Dokploy applications: one watching `dev` branch (test server, deploys to `test.listbull.org`), one watching `main` (prod server, `prod.listbull.org`).
 
 For each app:
 
 ### 2a. Domain assignment
 
 Dokploy panel → app → Domains:
-- Test app → `test.listgram.net`, port `3000`, HTTPS via Let's Encrypt (`letsencrypt-dns` resolver).
-- Prod app → `www.listgram.net`, port `3000`, HTTPS via Let's Encrypt.
+- Test app → `test.listbull.org`, port `3000`, HTTPS via Let's Encrypt (`letsencrypt-dns` resolver).
+- Prod app → `prod.listbull.org`, port `3000`, HTTPS via Let's Encrypt.
 
 ### 2b. Environment variables
 
@@ -71,12 +80,12 @@ Set the following env vars in Dokploy panel → app → Environment. **Required 
 |---|---|---|
 | `DATABASE_URL` | `postgres://listgram:<pw>@<db-host>:5432/listgram` | Internal Docker network host name. |
 | `BETTER_AUTH_SECRET` | `openssl rand -base64 48` | ≥32 chars. |
-| `BETTER_AUTH_URL` | `https://www.listgram.net` (prod) / `https://test.listgram.net` (test) | Match the domain. |
+| `BETTER_AUTH_URL` | `https://prod.listbull.org` (prod) / `https://test.listbull.org` (test) | Match the domain. |
 | `ENV_KEY` | `openssl rand -base64 32` | AES-256-GCM key for BYOK encryption. **Rotation = all stored keys unreadable; document re-prompt procedure.** |
 | `TELEGRAM_BOT_TOKEN` | From BotFather (Step 3) | Different bots for test vs prod recommended. |
 | `TELEGRAM_WEBHOOK_SECRET` | `openssl rand -hex 32` | Set on `setWebhook` call AND verified on every incoming request. |
 | `TELEGRAM_BOT_USERNAME` | `listgram_bot` (or fallback) | Without `@`. |
-| `NEXT_PUBLIC_APP_URL` | `https://www.listgram.net` (prod) / `https://test.listgram.net` (test) | Used in deeplinks + invite URLs. |
+| `NEXT_PUBLIC_APP_URL` | `https://prod.listbull.org` (prod) / `https://test.listbull.org` (test) | Used in deeplinks + invite URLs. |
 | `NEXT_PUBLIC_ENV` | `production` (prod) / `test` (test) | Test gates `<meta noindex>` + robots disallow. |
 
 **Optional** (operator opt-in):
@@ -164,7 +173,7 @@ reset - Clear your conversation history with the bot
 ```
 /setdomain
 @listgram_bot
-www.listgram.net   (or test.listgram.net for the test bot)
+prod.listbull.org   (or test.listbull.org for the test bot)
 ```
 
 ```
@@ -184,7 +193,7 @@ Search items…
 /setmenubutton
 @listgram_bot
 Web App
-https://www.listgram.net/app
+https://prod.listbull.org/app
 listgram        (button label)
 ```
 
@@ -195,7 +204,7 @@ Run on your laptop:
 ```bash
 TOKEN="<your bot token>"
 SECRET="<TELEGRAM_WEBHOOK_SECRET from Dokploy env>"
-URL="https://www.listgram.net/api/telegram/webhook"  # or test.listgram.net for test bot
+URL="https://prod.listbull.org/api/telegram/webhook"  # or test.listbull.org for test bot
 
 curl -X POST "https://api.telegram.org/bot${TOKEN}/setWebhook" \
   -H "content-type: application/json" \
@@ -223,11 +232,11 @@ After DNS + Dokploy + BotFather are set:
 
 1. **Health endpoint**:
    ```bash
-   curl https://www.listgram.net/api/health
+   curl https://prod.listbull.org/api/health
    # Expect: {"status":"ok","db":"ok","ts":<ms>}
    ```
 
-2. **Marketing landing**: open `https://www.listgram.net` in a browser. See hero + features + footer (light theme, anti-list strict).
+2. **Marketing landing**: open `https://prod.listbull.org` in a browser. See hero + features + footer (light theme, anti-list strict).
 
 3. **Bot `/start`**: open Telegram, search `@listgram_bot`, send `/start`. Expect localized welcome + "Inbox created" copy.
 
@@ -252,7 +261,7 @@ If any step fails, check Dokploy app logs first — most likely cause is a missi
 
 Per global CLAUDE.md monitoring standard:
 - Type: **HTTPS Keyword**
-- URL: `https://www.listgram.net/api/health`
+- URL: `https://prod.listbull.org/api/health`
 - Keyword: `"status":"ok"` (with quotes)
 - Interval: **5 minutes**
 - Alert contacts: email
@@ -310,7 +319,7 @@ This idempotently:
 
 **Verify** post-deploy:
 ```bash
-curl -s https://www.listgram.net/ | grep analytics.bullshitapps.com
+curl -s https://prod.listbull.org/ | grep analytics.bullshitapps.com
 ```
 HTML preload + RSC payload should match. Then open the Umami dashboard — events show within 1 min.
 
@@ -380,7 +389,7 @@ ssh prod 'docker logs -f $(docker ps --filter name=listgram-app --format "{{.ID}
 
 Wait for `Ready on 0.0.0.0:3000`.
 
-Then re-run the smoke checklist (Step 4) against `https://www.listgram.net`.
+Then re-run the smoke checklist (Step 4) against `https://prod.listbull.org`.
 
 ---
 
@@ -394,7 +403,7 @@ Live env required (auth-gated route).
 
 ```bash
 # From your laptop, with the dev server bot running:
-npx --yes lighthouse https://www.listgram.net/lists \
+npx --yes lighthouse https://prod.listbull.org/lists \
   --only-categories=accessibility \
   --output=json --output-path=./lighthouse-a11y.json \
   --chrome-flags="--headless --no-sandbox"
@@ -410,11 +419,11 @@ Target: ≥95.
 
 ```bash
 # Sentry (only if you wired Step 6a):
-curl -s https://www.listgram.net/_next/static/chunks/*.js | \
+curl -s https://prod.listbull.org/_next/static/chunks/*.js | \
   grep -E 'ingest\.(de\.)?sentry\.io|@sentry|sentryDsn' && echo "Sentry inlined ✓"
 
 # Umami:
-curl -s https://www.listgram.net/ | grep analytics.bullshitapps.com && \
+curl -s https://prod.listbull.org/ | grep analytics.bullshitapps.com && \
   echo "Umami HTML scan ✓"
 ```
 
@@ -463,6 +472,51 @@ README claim: <15 min. Wall-clock check: was it <15 min from `git clone` to `/st
 
 ---
 
+## Step 11 — Apex site (`listbull.org`) — separate deliverable
+
+**Not built in this codebase.** The apex `listbull.org` is a project-info / open-source landing site explaining "what is listgram, how do I install it, where's the GitHub". It's intentionally decoupled from the listgram app:
+
+- **Concern separation**: the app deployments (`prod.listbull.org`, `<tenant>.listbull.org`) host the live product. The apex hosts the project narrative.
+- **Independent deploy cadence**: docs change without redeploying the app, and vice versa.
+- **Cheaper hosting**: a static site costs nothing on Cloudflare Pages / GitHub Pages.
+
+### Recommended structure for the apex site
+
+A small static site with the following pages/sections:
+
+- `/` — Hero ("listgram — Telegram-native AI list assistant"), short pitch, "Try the live demo" CTA → `prod.listbull.org`, "View on GitHub" CTA.
+- `/install` — Self-host quickstart (mirror README's Quickstart). Docker Compose, env var template, BotFather setup, DNS, deploy targets (Dokploy, Fly, bare VPS).
+- `/architecture` — High-level diagram (Bot ↔ Webhook ↔ App ↔ DB ↔ OpenRouter), link to `handoff/specs/architecture.md` in the listgram repo for full spec.
+- `/contributing` — Mirror `CONTRIBUTING.md`. Link to issues + Discussions.
+- `/changelog` — Released versions (Phases 1-5 → v0.1, future releases).
+- `/tenants` — (optional) A growing list of `<tenant>.listbull.org` instances, who runs them, their purpose. Validates the tenant pattern publicly.
+
+### Hosting options (pick one)
+
+1. **Cloudflare Pages** (recommended): connect a GitHub repo `buraksu42/listbull-org`, build via Astro / Eleventy / Next.js static export. Custom domain → `listbull.org`. Free tier covers this scale.
+2. **GitHub Pages**: same repo, push to `gh-pages` branch. Add `CNAME` file containing `listbull.org`. Free, slightly less flexible.
+3. **A second Dokploy app**: `Dockerfile` with Caddy or nginx serving static files. Same Hetzner box. More control, more ops.
+4. **Vercel**: simplest if you already have a Vercel account. Connect repo, custom domain. Free tier.
+
+### Building the apex site (deferred — not Phase 5 code-side scope)
+
+To be done in a follow-up session. The minimum viable apex site can ship in <2 hours with Astro:
+
+```bash
+mkdir ~/projects/listbull-org && cd ~/projects/listbull-org
+npm create astro@latest .
+# Pick "minimal" template, TypeScript "strict", no add-ons.
+# Add a couple of MDX pages mirroring the README sections above.
+# Push to github.com/buraksu42/listbull-org.
+# Connect Cloudflare Pages → custom domain → listbull.org.
+```
+
+Until the apex site exists:
+- Park `listbull.org` on a one-page placeholder ("Coming soon — the listgram project. Live demo: prod.listbull.org. Source: github.com/buraksu42/listgram"), OR
+- 308 redirect `listbull.org` → `github.com/buraksu42/listgram`. Cloudflare Page Rule.
+
+---
+
 ## Rollback / disaster recovery
 
 If prod deploy goes sideways:
@@ -488,7 +542,7 @@ If the bot webhook is hit by spoofed traffic (`X-Telegram-Bot-Api-Secret-Token` 
 
 Before announcing the launch:
 
-- [ ] DNS resolves both `www.listgram.net` and `test.listgram.net`.
+- [ ] DNS resolves both `prod.listbull.org` and `test.listbull.org`.
 - [ ] HTTPS cert valid + auto-renewing on both.
 - [ ] `/api/health` returns 200 + `"status":"ok"` on both.
 - [ ] Marketing landing renders cleanly (light only, anti-list, OG image valid).

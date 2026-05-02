@@ -421,7 +421,7 @@ First Mini App load detects missing config (`BOT_TOKEN` empty OR
 BotFather token via a Telegram API call, validates the DB connection,
 guides the operator through `setWebhook` with a generated
 `webhook_secret`, then unblocks normal usage. The wizard is
-**self-host-only** — production listgram.net hard-codes the env vars
+**self-host-only** — production listbull.org hard-codes the env vars
 at deploy time and never sees this path.
 
 **Owner:** Reviewer (`.env.example`) + Frontend (wizard page).
@@ -741,10 +741,10 @@ the gate; orchestrator routes failures back to the relevant agent.
 - [ ] `docker-compose up` on a fresh node (no `.env`, follow README's
       Quickstart) → both bot and Mini App functional end-to-end
 - [ ] README "Quickstart" produces working install in <15 min
-- [ ] Bundle scan post-deploy: `curl https://test.listgram.net/_next/static/chunks/*.js
+- [ ] Bundle scan post-deploy: `curl https://test.listbull.org/_next/static/chunks/*.js
       | grep -E 'ingest\.(de\.)?sentry\.io|@sentry|sentryDsn'` → match
       (Sentry DSN inline; per `~/.claude/CLAUDE.md` § silent-broken)
-- [ ] HTML scan post-deploy: `curl -s https://test.listgram.net/ |
+- [ ] HTML scan post-deploy: `curl -s https://test.listbull.org/ |
       grep analytics.bullshitapps.com` → match (Umami live; per
       `~/.claude/CLAUDE.md` § silent-broken)
 - [ ] Sentry deploy-smoke event landed in dashboard (per Sentry
@@ -839,7 +839,7 @@ is unset OR `DATABASE_URL` connection check fails, redirect to
 has been completed (track via a one-row `app_state` mechanism — OR
 just a probe query — Backend's call), the redirect drops out.
 
-Production listgram.net has these set at deploy time, so the redirect
+Production listbull.org has these set at deploy time, so the redirect
 never fires there. Self-host operators see the wizard on first load.
 
 ### Inv-18: Snapshot URL HMAC signing

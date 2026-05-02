@@ -1,18 +1,22 @@
 /**
- * Marketing footer — three short lines, no chrome.
+ * Marketing footer — short, no chrome. Surfaces both:
+ *  - the GitHub repo (this codebase) for self-hosters
+ *  - the project home (listbull.org) for "what is this" / install docs
  */
-import { GITHUB_URL } from "@/components/marketing/links";
+import { GITHUB_URL, PROJECT_HOME_URL } from "@/components/marketing/links";
 
 type FooterProps = {
   hostedLabel: string;
   licenseLabel: string;
   copyrightLabel: string;
+  projectHomeLabel?: string;
 };
 
 export function Footer({
   hostedLabel,
   licenseLabel,
   copyrightLabel,
+  projectHomeLabel = "Project home & install docs",
 }: FooterProps) {
   return (
     <footer
@@ -34,6 +38,16 @@ export function Footer({
           color: "var(--lg-muted-fg)",
         }}
       >
+        <li>
+          <a
+            href={PROJECT_HOME_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "inherit" }}
+          >
+            {projectHomeLabel} → {PROJECT_HOME_URL.replace("https://", "")}
+          </a>
+        </li>
         <li>
           <a
             href={GITHUB_URL}

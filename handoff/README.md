@@ -101,7 +101,7 @@ These are the patterns the design assumes. Implement once, reuse everywhere.
 
 Before sprint planning, confirm:
 
-1. **Hosting / domain** — `listgram.net` DNS owner, where the Mini App is served from.
+1. **Hosting / domain** — `listbull.org` DNS owner, where the Mini App is served from.
 2. **Telegram bot token** — who creates it, where it's stored (env var, secret manager).
 3. **BYOK persistence** — client-only or encrypted-at-rest sync? (changes the threat model)
 4. **Data model finalization** — lists, members, audit log schema (architecture.md has a draft, confirm)

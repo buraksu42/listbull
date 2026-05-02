@@ -14,13 +14,13 @@ shared lists.
 
 ## URLs & deployment
 
-- **Prod**: `https://www.listgram.net`
-- **Test/staging**: `https://test.listgram.net`
+- **Prod**: `https://prod.listbull.org`
+- **Test/staging**: `https://test.listbull.org`
 - **Bot username**: `@listgram_bot` (reserve via BotFather pre-deploy; fallback
   `@listgram_app_bot` if taken)
-- **Mini App URL**: `https://www.listgram.net/app`
-- **Bot webhook URL**: `https://www.listgram.net/api/telegram/webhook` (prod) /
-  `https://test.listgram.net/api/telegram/webhook` (test)
+- **Mini App URL**: `https://prod.listbull.org/app`
+- **Bot webhook URL**: `https://prod.listbull.org/api/telegram/webhook` (prod) /
+  `https://test.listbull.org/api/telegram/webhook` (test)
 - **Status**: DNS pending (post-deploy step)
 
 ## Project-specific tech choices
@@ -511,7 +511,7 @@ Defaults — no overrides for this project:
 
 ## Commands
 
-- `npm run dev` — local dev (Next.js + Drizzle + bot in webhook mode pointed at ngrok or test.listgram.net)
+- `npm run dev` — local dev (Next.js + Drizzle + bot in webhook mode pointed at ngrok or test.listbull.org)
 - `npm run build` — production build
 - `npm run lint` / `npx tsc --noEmit` — checks
 - `npm run test` — Vitest (Phase 4+)

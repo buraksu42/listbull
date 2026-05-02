@@ -13,7 +13,7 @@ The Mini App lives inside Telegram. Its core design constraint is
 variables (`Telegram.WebApp.themeParams`), add a single brand accent, and let
 typography and spacing do the rest.
 
-Marketing landing (`www.listgram.net`) uses the same palette but in a fixed
+Marketing landing (`prod.listbull.org`) uses the same palette but in a fixed
 light-mode variant — visitors haven't authenticated; we can't read their Telegram
 theme. The marketing surface is small (hero + features grid + footer) so the
 single-mode rendering is intentional.
@@ -89,7 +89,7 @@ test environment).
 - Brand accent `#00D9C0` stays constant across themes; everything else inherits.
 - Re-apply on theme change without page reload (CSS vars on `<html>` element).
 
-### Marketing landing (`www.listgram.net`)
+### Marketing landing (`prod.listbull.org`)
 
 Light mode only. Palette identical to "Light mode" above. No theme adapter on
 marketing routes.
@@ -226,7 +226,7 @@ This anti-list is the universal filter for Claude Design prompts in
 
 ## Marketing vs app surface
 
-- **Marketing surface** (`www.listgram.net` root, OSS landing page):
+- **Marketing surface** (`prod.listbull.org` root, OSS landing page):
   - Bigger type, hero-led, generous whitespace
   - Density: spacious on hero, balanced on features grid
   - Light mode only (no theme adapter — visitors aren't authed)
