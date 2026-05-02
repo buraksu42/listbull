@@ -35,7 +35,13 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY package.json package-lock.json* ./
-RUN npm ci --no-audit --no-fund
+# --include=dev forces devDependencies (@tailwindcss/postcss, typescript,
+# eslint, etc.) even though NODE_ENV=production is set above for the build's
+# Next.js process. Without this flag npm ci silently omits devDeps and
+# `next build` fails with "Cannot find module '@tailwindcss/postcss'".
+# The runner stage doesn't see this — it copies the bundled standalone
+# output where Next has already tree-shaken the runtime tree.
+RUN npm ci --no-audit --no-fund --include=dev
 
 COPY tsconfig.json next.config.ts postcss.config.mjs eslint.config.mjs ./
 COPY drizzle.config.ts ./
