@@ -42,6 +42,11 @@ RUN addgroup --system --gid 1001 nodejs \
  && chown -R cron:nodejs /app
 USER cron
 
-# Default = one-shot. docker-compose overrides with the loop form.
-# `npm run cron` invokes `tsx src/lib/cron/dispatch-reminders.ts`.
-CMD ["npm", "run", "cron"]
+# Default = 60s loop, suitable for Dokploy Application mode and any
+# orchestrator that runs containers continuously (compose, k8s
+# Deployment). The dispatch script is idempotent (Inv-11) so overlap
+# during deploy rollover is safe.
+#
+# To run as a one-shot per tick (Dokploy cron job, k8s CronJob, etc.),
+# override the command at deploy time: `npm run cron`.
+CMD ["sh", "-c", "while true; do npm run cron; sleep 60; done"]
