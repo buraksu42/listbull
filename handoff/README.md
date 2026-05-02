@@ -20,11 +20,19 @@ handoff/
 │   └── design.md                          ← UX rules, layout, type, anti-patterns
 ├── design-reference/
 │   └── listbull (standalone).html         ← OPEN THIS · interactive prototype of all 7 surfaces
-├── brand/                                 ← logo & icon (Direction C · "Sent")
-│   ├── listbull-mark.svg                  ← primary mark, full color
-│   ├── listbull-mark-mono.svg             ← single-fill (currentColor) for stickers/silhouette
-│   ├── listbull-lockup-horizontal.svg     ← mark + wordmark
-│   └── listbull-app-icon-1024.svg         ← masked app-icon tile · 1024×1024
+├── brand/                                 ← logo & icon (Direction B · bull head + check-horns)
+│   ├── README.md                          ← asset map + usage notes
+│   ├── svg/
+│   │   ├── listbull-mark.svg              ← primary mark, full color
+│   │   ├── listbull-mark-mono.svg         ← single-fill (currentColor) for stickers/silhouette
+│   │   ├── listbull-app-icon.svg          ← masked app-icon tile (dark squircle bg)
+│   │   ├── listbull-lockup-light.svg      ← mark + wordmark for light backgrounds
+│   │   └── listbull-lockup-dark.svg       ← same lockup for dark backgrounds
+│   └── png/                               ← pre-rendered raster exports
+│       ├── listbull-mark-{32,64,128,256,512,1024}.png  ← favicon + general use
+│       ├── listbull-app-icon-{180,192,256,512,1024}.png ← iOS / Android / store
+│       ├── listbull-lockup-light-{320,640,1280}.png
+│       └── listbull-lockup-dark-{320,640,1280}.png
 └── tokens/                                ← design tokens
     ├── tokens.json                        ← W3C-style token export
     └── tokens.css                         ← drop-in CSS custom properties
@@ -44,10 +52,11 @@ handoff/
 ## 🎨 Design system at a glance
 
 ### Brand
-- **Mark**: chat bubble + checkmark inside · "Direction C · Sent"
-- **Accent**: `#00D9C0` teal (default), with cobalt / marigold / rose alternates
-- **Ink-deep**: `#0A1419` — used as the check-cutout color, sits on top of accent
-- **Wordmark**: Inter 700, `-0.02em` tracking, all-lowercase
+- **Mark**: bull head silhouette with check-mark horns · "Direction B (revised)"
+- **Primary**: `#00D9C0` teal — the bull head fill
+- **Secondary**: `#3D7DFF` cobalt — the two check-mark horns (active brand color, no longer "alternate")
+- **Ink-deep**: `#0A1419` — used for the eye dots + dark backgrounds (lockup-dark, app-icon)
+- **Wordmark**: Inter 700, `-0.035em` tracking, all-lowercase, no accent dot
 
 ### Themes
 Two themes ship together: light and dark. **Default to dark** to match Telegram's Mini App default.

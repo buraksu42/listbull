@@ -32,7 +32,7 @@ export default function OgImage() {
           fontFamily: "Inter, system-ui, sans-serif",
         }}
       >
-        {/* Brand mark */}
+        {/* Brand mark — bull head (teal) + cobalt check-horns */}
         <svg
           width={220}
           height={220}
@@ -40,17 +40,27 @@ export default function OgImage() {
           style={{ marginBottom: 40 }}
         >
           <path
-            d="M28 14 L72 14 C82 14 90 22 90 32 L90 60 C90 70 82 78 72 78 L40 78 L26 90 L28 76 C20 73 14 66 14 58 L14 32 C14 22 22 14 28 14 Z"
+            d="M50 34 C60 34 68 38 72 46 C74 52 74 58 72 64 C68 76 60 84 50 84 C40 84 32 76 28 64 C26 58 26 52 28 46 C32 38 40 34 50 34 Z"
             fill="#00D9C0"
           />
           <path
-            d="M34 46 L44 56 L64 34"
-            stroke="#0A1419"
+            d="M16 22 L26 32 L42 8"
+            stroke="#3D7DFF"
             strokeWidth={8}
             strokeLinecap="round"
             strokeLinejoin="round"
             fill="none"
           />
+          <path
+            d="M84 22 L74 32 L58 8"
+            stroke="#3D7DFF"
+            strokeWidth={8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+          <circle cx={44} cy={68} r={1.8} fill="#0A1419" opacity={0.55} />
+          <circle cx={56} cy={68} r={1.8} fill="#0A1419" opacity={0.55} />
         </svg>
 
         <div
@@ -59,7 +69,7 @@ export default function OgImage() {
             fontSize: 72,
             fontWeight: 700,
             color: "#0A1419",
-            letterSpacing: "-0.02em",
+            letterSpacing: "-0.035em",
             marginBottom: 16,
           }}
         >

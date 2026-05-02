@@ -152,7 +152,7 @@ Telegram-native AI list assistant. Self-host: github.com/buraksu42/listbull
 ```
 /setuserpic
 @listbull_bot
-[upload handoff/brand/listbull-app-icon-1024.svg converted to PNG; or generate via Canva from the SVG]
+[upload handoff/brand/png/listbull-app-icon-1024.png — pre-rendered raster ready for BotFather]
 ```
 
 ### 3c. Commands list
