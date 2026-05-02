@@ -281,9 +281,16 @@ type SplitResult = {
   toolUseBlocks: Array<{ id: string; name: string; input: unknown }>;
 };
 
-function splitContent(content: ContentBlock[]): SplitResult {
+function splitContent(content: ContentBlock[] | null | undefined): SplitResult {
   const textParts: string[] = [];
   const toolUseBlocks: SplitResult["toolUseBlocks"] = [];
+  // Defensive: OpenRouter occasionally returns a response with `content`
+  // missing or null when proxying non-Anthropic models (notably the
+  // `:online` plugin layer for Gemini/OpenAI). Treat as empty turn so the
+  // caller can decide to retry or fall through with an empty assistant.
+  if (!Array.isArray(content)) {
+    return { textParts, toolUseBlocks };
+  }
   for (const block of content) {
     if (block.type === "text") {
       textParts.push(block.text);
