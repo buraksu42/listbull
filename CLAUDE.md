@@ -101,4 +101,4 @@ Multi-agent roster (Architect, Backend, Frontend, AI, Reviewer) — see `handoff
 - Prod: https://prod.listbull.org
 - Handoff (canonical): `handoff/`
 - Agent plan (Phase invocations): `handoff/specs/agents.md`
-- Interactive design reference: `handoff/design-reference/listbull (standalone).html`
+- Interactive design reference: `handoff/design-reference/listbull-standalone.html`

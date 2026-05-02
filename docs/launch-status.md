@@ -19,7 +19,7 @@
   - `--lg-*` → `--lb-*` (CSS variable prefix; trailing `-lg` size suffix preserved correctly)
   - `lg-wordmark` → `lb-wordmark`, `lg-skip-link` → `lb-skip-link` (CSS classes)
 - **Brand asset filenames**: `handoff/brand/listgram-{mark,mark-mono,lockup-horizontal,app-icon-1024}.svg` → `listbull-*.svg`. Content of SVGs still has the old "listgram" wordmark inside; will be replaced when the new logo arrives from user.
-- **Standalone HTML**: `handoff/design-reference/listgram (standalone).html` → `listbull (standalone).html`.
+- **Standalone HTML**: `handoff/design-reference/listgram (standalone).html` → `listbull-standalone.html`.
 - **Bot username** in docs/i18n: `@listgram_bot` → `@listbull_bot` (with fallback `@listbull_app_bot`). Bot itself NOT yet created on BotFather — naming reserved in launch checklist.
 - **Container names** in `docker-compose.yml`: `listgram-{postgres,app,cron}` → `listbull-*`.
 - **DB defaults** in `.env.example` + compose: `listgram` → `listbull`.

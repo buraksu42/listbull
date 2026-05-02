@@ -19,7 +19,7 @@ handoff/
 │   ├── agents.md                          ← AI agent architecture (intent routing, tools)
 │   └── design.md                          ← UX rules, layout, type, anti-patterns
 ├── design-reference/
-│   └── listbull (standalone).html         ← OPEN THIS · interactive prototype of all 7 surfaces
+│   └── listbull-standalone.html         ← OPEN THIS · interactive prototype of all 7 surfaces
 ├── brand/                                 ← logo & icon (Direction B · bull head + check-horns)
 │   ├── README.md                          ← asset map + usage notes
 │   ├── svg/
@@ -43,7 +43,7 @@ handoff/
 ## 🚀 Quickstart for engineers
 
 1. **Read `specs/CLAUDE.md` first** — it's the 5-minute project overview.
-2. **Open `design-reference/listbull (standalone).html` in a browser** — fully interactive, offline. Click any artboard label to focus it. Toggle the **Tweaks** button (bottom right) to swap accent color, checkbox style, theme, etc.
+2. **Open `design-reference/listbull-standalone.html` in a browser** — fully interactive, offline. Click any artboard label to focus it. Toggle the **Tweaks** button (bottom right) to swap accent color, checkbox style, theme, etc.
 3. **Drop `tokens/tokens.css` into your app's global stylesheet** — every color, font size, spacing, radius, and motion token is wired up.
 4. **Use the SVGs in `brand/`** as-is. The mark is path-only, optimised for any size from 16px favicon to app-icon.
 
@@ -128,4 +128,4 @@ Before sprint planning, confirm:
 - Tokens are versioned with the design — bump `tokens.json` `brand.version` whenever you ship a visual change.
 - The brand SVGs use the accent color hard-coded as `#00D9C0`. If you want themeable marks, swap to `currentColor` and pass `style="color: var(--lb-accent)"` from the parent.
 
-Built with Claude on 2026-05-01. Direction C ("Sent") chosen 2026-05-01.
+Built with Claude on 2026-05-01. Direction B (revised) bull-head + check-horn brand finalized 2026-05-02; standalone HTML refreshed 2026-05-02.
