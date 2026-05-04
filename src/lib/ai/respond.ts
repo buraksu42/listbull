@@ -229,6 +229,13 @@ export function conversationToMessageParams(
 ): MessageParam[] {
   const out: MessageParam[] = [];
   let pendingResults: ContentBlockParam[] | null = null;
+  // tool_use ids emitted by the IMMEDIATELY PREVIOUS assistant turn.
+  // Anthropic rejects tool_result blocks whose tool_use_id wasn't in
+  // the preceding assistant message, so we drop orphans here. This
+  // protects against history-ordering corruption (Postgres returning
+  // tied timestamps in undefined order, history truncation cutting
+  // mid-tool-cycle, model switches with incompatible id formats).
+  let activeToolUseIds = new Set<string>();
 
   const flushPendingResults = () => {
     if (pendingResults && pendingResults.length > 0) {
@@ -239,6 +246,8 @@ export function conversationToMessageParams(
 
   for (const msg of messages) {
     if (msg.role === "tool") {
+      // Drop orphan tool_result — no matching tool_use in scope.
+      if (!activeToolUseIds.has(msg.toolCallId)) continue;
       const block: ContentBlockParam = {
         type: "tool_result",
         tool_use_id: msg.toolCallId,
@@ -250,6 +259,7 @@ export function conversationToMessageParams(
     }
 
     flushPendingResults();
+    activeToolUseIds = new Set();
 
     if (msg.role === "user") {
       out.push({ role: "user", content: msg.content });
@@ -269,6 +279,7 @@ export function conversationToMessageParams(
           name: tc.name,
           input: (tc.input ?? {}) as Record<string, unknown>,
         });
+        activeToolUseIds.add(tc.id);
       }
       out.push({ role: "assistant", content: blocks });
     } else {
