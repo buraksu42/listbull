@@ -313,15 +313,42 @@ function conversationMessageToRow(
  * Sends sequentially so messages arrive in order.
  */
 async function sendChunked(ctx: Context, text: string): Promise<void> {
-  if (text.length <= TG_MAX_MESSAGE_LEN) {
-    await ctx.reply(text);
+  const stripped = stripMarkdownForTelegram(text);
+  if (stripped.length <= TG_MAX_MESSAGE_LEN) {
+    await ctx.reply(stripped);
     return;
   }
 
-  const chunks = splitOnWordBoundary(text, TG_MAX_MESSAGE_LEN);
+  const chunks = splitOnWordBoundary(stripped, TG_MAX_MESSAGE_LEN);
   for (const chunk of chunks) {
     await ctx.reply(chunk);
   }
+}
+
+/**
+ * LLM (Claude) habitually emits GitHub-flavored markdown (`**bold**`,
+ * `*italic*`, `__under__`, `[link](url)`, etc.). Telegram has its own
+ * markdown variants but each requires a `parse_mode` and strict
+ * escaping of reserved chars (we send plain text intentionally). So
+ * we strip the most common formatting markers before sending — keeps
+ * the prose readable and avoids leaking `**` into chat.
+ *
+ * Strips:
+ *   `**bold**`  → `bold`
+ *   `__bold__`  → `bold`
+ *   `*italic*`  → `italic`   (only when preceded by start/whitespace)
+ *   `_italic_`  → `italic`   (only when preceded by start/whitespace)
+ *   `[text](u)` → `text (u)` (preserves URL inline)
+ *   `` `code` `` → `code`
+ */
+function stripMarkdownForTelegram(text: string): string {
+  return text
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/__([^_\n]+)__/g, "$1")
+    .replace(/(^|\s)\*([^*\n]+)\*/g, "$1$2")
+    .replace(/(^|\s)_([^_\n]+)_/g, "$1$2")
+    .replace(/`([^`\n]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)");
 }
 
 /**

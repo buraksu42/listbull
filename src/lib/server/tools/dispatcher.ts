@@ -20,7 +20,12 @@ import { executeCompleteItem } from "./complete-item";
 import { executeDeleteItem } from "./delete-item";
 import { executeListLists } from "./list-lists";
 import { executeCreateList } from "./create-list";
+import { executeUpdateList } from "./update-list";
+import { executeDeleteList } from "./delete-list";
+import { executeRestoreList } from "./restore-list";
 import { executeShareList } from "./share-list";
+import { executeRemoveMember } from "./remove-member";
+import { executeUpdateMemberRole } from "./update-member-role";
 import { executeScheduleReminder } from "./schedule-reminder";
 import { executeAssignItem } from "./assign-item";
 import { ERR } from "./_shared";
@@ -59,8 +64,18 @@ async function routeCall(
       return await executeListLists(input, ctx);
     case "create_list":
       return await executeCreateList(input, ctx);
+    case "update_list":
+      return await executeUpdateList(input, ctx);
+    case "delete_list":
+      return await executeDeleteList(input, ctx);
+    case "restore_list":
+      return await executeRestoreList(input, ctx);
     case "share_list":
       return await executeShareList(input, ctx);
+    case "remove_member":
+      return await executeRemoveMember(input, ctx);
+    case "update_member_role":
+      return await executeUpdateMemberRole(input, ctx);
     case "schedule_reminder":
       return await executeScheduleReminder(input, ctx);
     case "assign_item":

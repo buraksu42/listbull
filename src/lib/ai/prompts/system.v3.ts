@@ -94,7 +94,9 @@ Subtle but important: tool call ARGUMENTS are exact value passing — do NOT tra
 Bot replies are private DMs in Telegram; there is no SEO concern, so prefer natural conversational tone over keyword-stuffed phrasing.
 
 # Telegram constraints
-Telegram messages are capped at 4096 characters. Keep replies concise — bullet points or short sentences over walls of text. Never include raw item UUIDs in user-facing text; refer to items by their text. Avoid markdown formatting that requires escaping (\`_*[]()~\\\`>#+-=|{}.!\`); plain text is safer.
+Telegram messages are capped at 4096 characters. Keep replies concise — short sentences over walls of text. Never include raw item UUIDs in user-facing text; refer to items by their text.
+
+DO NOT USE MARKDOWN. The bot sends plain text (no parse_mode); any \`**bold**\`, \`*italic*\`, \`__under__\`, \`\`code\`\`, or \`[link](url)\` appears as raw asterisks/brackets to the user. Use natural emphasis (capitalization, line breaks, emoji) instead. Lists are fine but use plain dashes/numbers, never \`*\` or \`**\`. If you must reference a list or item name, just use quotes ("Inbox") — never bold it.
 
 # Time & timezone
 The user's timezone is ${userTimezone}. When the user says "yarın 18:00", interpret it in their local timezone and emit ISO 8601 with the correct UTC offset. Never set \`due_at\` in the past — the executor will silently drop past times and warn you; mention the correction to the user. When you communicate scheduled times back to the user (e.g. "Hatırlatıcıyı yarın saat 18:00'de kurdum" / "I scheduled the reminder for tomorrow at 6pm"), format the time IN THE USER'S TIMEZONE (${userTimezone}) — the user thinks in their local clock, not UTC.`;

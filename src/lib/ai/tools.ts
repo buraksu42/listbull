@@ -246,6 +246,126 @@ export const createListOutputSchema = z.object({
 export type CreateListInput = z.infer<typeof createListInputSchema>;
 export type CreateListOutput = z.infer<typeof createListOutputSchema>;
 
+// ─── 6c. update_list — rename / re-emoji a list (owner-only) ──────
+//
+// Pairs with create_list. Inbox renaming is allowed (display string)
+// but is_inbox stays true. Editors and viewers cannot mutate the list
+// shell — they're scoped to items.
+
+export const updateListInputSchema = z
+  .object({
+    list_id: z.string().uuid().optional(),
+    list_name: z.string().min(1).max(120).optional(),
+    name: z.string().trim().min(1).max(120).optional(),
+    emoji: z.string().trim().min(1).max(8).nullable().optional(),
+  })
+  .refine((v) => v.list_id !== undefined || v.list_name !== undefined, {
+    message: "Either list_id or list_name is required",
+  })
+  .refine((v) => v.name !== undefined || v.emoji !== undefined, {
+    message: "At least one of `name` or `emoji` must be supplied",
+  });
+
+export const updateListOutputSchema = z.object({
+  list: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    emoji: z.string().nullable(),
+  }),
+  changes: z.array(z.enum(["name", "emoji"])),
+});
+
+export type UpdateListInput = z.infer<typeof updateListInputSchema>;
+export type UpdateListOutput = z.infer<typeof updateListOutputSchema>;
+
+// ─── 6d. delete_list — soft-delete (trash) with confirm-on-non-empty ─
+//
+// Inbox cannot be deleted. Non-empty lists require explicit `confirm: true`
+// — first call returns `requires_confirm` with item count, LLM relays the
+// warning to the user, user confirms, second call sets archived_at.
+// Items inside stay intact (also soft-deletable independently); restore
+// puts everything back via restore_list.
+
+export const deleteListInputSchema = z
+  .object({
+    list_id: z.string().uuid().optional(),
+    list_name: z.string().min(1).max(120).optional(),
+    confirm: z.boolean().default(false),
+  })
+  .refine((v) => v.list_id !== undefined || v.list_name !== undefined, {
+    message: "Either list_id or list_name is required",
+  });
+
+export const deleteListOutputSchema = z.object({
+  list_id: z.string().uuid(),
+  active_item_count: z.number().int().nonnegative().optional(),
+  requires_confirm: z.boolean().optional(),
+});
+
+export type DeleteListInput = z.infer<typeof deleteListInputSchema>;
+export type DeleteListOutput = z.infer<typeof deleteListOutputSchema>;
+
+// ─── 6e. restore_list — undo soft-delete (30-day trash window) ──────
+
+export const restoreListInputSchema = z.object({
+  list_id: z.string().uuid(),
+});
+
+export const restoreListOutputSchema = z.object({
+  list: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    emoji: z.string().nullable(),
+  }),
+});
+
+export type RestoreListInput = z.infer<typeof restoreListInputSchema>;
+export type RestoreListOutput = z.infer<typeof restoreListOutputSchema>;
+
+// ─── 7b. remove_member — kick a member off a shared list (owner-only) ─
+
+export const removeMemberInputSchema = z
+  .object({
+    list_id: z.string().uuid(),
+    username: z.string().trim().min(1).max(64).optional(),
+    user_id: z.string().uuid().optional(),
+  })
+  .refine((v) => v.username !== undefined || v.user_id !== undefined, {
+    message: "Either username or user_id is required",
+  });
+
+export const removeMemberOutputSchema = z.object({
+  list_id: z.string().uuid(),
+  removed_user_id: z.string().uuid(),
+});
+
+export type RemoveMemberInput = z.infer<typeof removeMemberInputSchema>;
+export type RemoveMemberOutput = z.infer<typeof removeMemberOutputSchema>;
+
+// ─── 7c. update_member_role — change role for a current member (owner-only) ─
+
+export const updateMemberRoleInputSchema = z
+  .object({
+    list_id: z.string().uuid(),
+    username: z.string().trim().min(1).max(64).optional(),
+    user_id: z.string().uuid().optional(),
+    role: z.enum(["editor", "viewer"]),
+  })
+  .refine((v) => v.username !== undefined || v.user_id !== undefined, {
+    message: "Either username or user_id is required",
+  });
+
+export const updateMemberRoleOutputSchema = z.object({
+  list_id: z.string().uuid(),
+  user_id: z.string().uuid(),
+  role: z.enum(["owner", "editor", "viewer"]),
+});
+
+export type UpdateMemberRoleInput = z.infer<typeof updateMemberRoleInputSchema>;
+export type UpdateMemberRoleOutput = z.infer<
+  typeof updateMemberRoleOutputSchema
+>;
+
 // ─── 7. share_list (Phase 3) ────────────────────────────────────────
 //
 // Field names match `docs/architecture-pass-phase-3.md` § "share_list"
@@ -393,7 +513,12 @@ export const TOOL_NAMES = [
   "delete_item",
   "list_lists",
   "create_list",
+  "update_list",
+  "delete_list",
+  "restore_list",
   "share_list",
+  "remove_member",
+  "update_member_role",
   "schedule_reminder",
   "assign_item",
 ] as const;
@@ -494,6 +619,44 @@ export const tools: readonly ToolDefinition[] = [
     outputSchema: createListOutputSchema,
   },
   {
+    name: "update_list",
+    description:
+      "Rename a list and/or change its emoji. OWNER-ONLY: editors and " +
+      "viewers can't mutate the list shell. Pass `list_id` (preferred) " +
+      "or `list_name` to identify the target. Provide `name` (1-120) " +
+      "and/or `emoji` (1-8 chars; pass null to remove). At least one " +
+      "must be supplied. Inbox can be renamed and re-emoji'd freely. " +
+      "Output `changes` enumerates the fields that actually changed — " +
+      "use it for a precise confirmation reply.",
+    inputSchema: updateListInputSchema,
+    outputSchema: updateListOutputSchema,
+  },
+  {
+    name: "delete_list",
+    description:
+      "Soft-delete (move-to-trash) a list. OWNER-ONLY. Inbox cannot be " +
+      "deleted. Non-empty lists require an explicit confirmation: " +
+      "the FIRST call returns `requires_confirm: true` with " +
+      "`active_item_count` — relay this to the user ('Bu listede 5 " +
+      "aktif madde var, silmek istediğinden emin misin?'). On user " +
+      "confirmation, call again with `confirm: true`. Empty lists " +
+      "delete immediately on first call. Items inside aren't deleted; " +
+      "the list is simply hidden. Restore within 30 days via restore_list.",
+    inputSchema: deleteListInputSchema,
+    outputSchema: deleteListOutputSchema,
+  },
+  {
+    name: "restore_list",
+    description:
+      "Undo a soft-deleted list (sets archived_at back to null). " +
+      "OWNER-ONLY. Pass `list_id` of a previously deleted list. Items " +
+      "inside the list become visible again exactly as they were at " +
+      "delete time — nothing in the items table is mutated by " +
+      "delete_list, only the parent list's archived_at flag.",
+    inputSchema: restoreListInputSchema,
+    outputSchema: restoreListOutputSchema,
+  },
+  {
     name: "share_list",
     description:
       "Invite another Telegram user to one of the OWNER's lists as " +
@@ -517,6 +680,34 @@ export const tools: readonly ToolDefinition[] = [
       "list before calling.",
     inputSchema: shareListInputSchema,
     outputSchema: shareListOutputSchema,
+  },
+  {
+    name: "remove_member",
+    description:
+      "Remove a current member from a shared list (OWNER-ONLY). Pass " +
+      "`list_id` plus either `username` (Telegram, with or without @ — " +
+      "case normalized) or `user_id` (UUID, for unambiguous removal). " +
+      "The owner cannot remove themselves (rejected with " +
+      "`cannot_remove_owner` — to delete the list, use `delete_list`). " +
+      "Side effects: list_member row deleted; any items in that list " +
+      "assigned to the removed user have `assignee_id` cleared (Inv-12) " +
+      "with corresponding `item_unassigned` activity log rows. The " +
+      "removed user can no longer see or edit the list immediately.",
+    inputSchema: removeMemberInputSchema,
+    outputSchema: removeMemberOutputSchema,
+  },
+  {
+    name: "update_member_role",
+    description:
+      "Change an existing member's role on a shared list (OWNER-ONLY). " +
+      "Pass `list_id`, the target via `username` or `user_id`, and the " +
+      "new `role` ('editor' or 'viewer' — owner role isn't transferable " +
+      "via this tool). The owner cannot demote themselves. " +
+      "`editor` can mutate items; `viewer` is read-only. Use this to " +
+      "reduce a member's permissions ('Ali'yi sadece okuyabilir yap') " +
+      "or restore writes ('Ali'ye düzenleme izni ver').",
+    inputSchema: updateMemberRoleInputSchema,
+    outputSchema: updateMemberRoleOutputSchema,
   },
   {
     name: "schedule_reminder",
