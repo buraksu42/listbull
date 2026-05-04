@@ -53,13 +53,25 @@ export async function insertMessage(
  * share the same `userId`/`chatId` in normal use; the function doesn't
  * enforce this — it's a thin wrapper around the bulk insert.
  *
+ * Stamps each row with a `createdAt` that increments by ms so
+ * `ORDER BY created_at DESC` preserves the supplied order on read.
+ * Without this, Postgres returns rows with identical timestamps in
+ * undefined order, and `conversationToMessageParams` rebuilds the
+ * Anthropic message buffer with `tool_result` blocks orphaned from
+ * their `tool_use` parents → 400 from Anthropic.
+ *
  * Returns inserted rows in the order they were supplied.
  */
 export async function insertMessages(
   values: NewMessage[],
 ): Promise<MessageWithToolCalls[]> {
   if (values.length === 0) return [];
-  const rows = await db.insert(messages).values(values).returning();
+  const baseMs = Date.now();
+  const stamped = values.map((v, i) => ({
+    ...v,
+    createdAt: v.createdAt ?? new Date(baseMs + i),
+  }));
+  const rows = await db.insert(messages).values(stamped).returning();
   return rows.map(parseRow);
 }
 
