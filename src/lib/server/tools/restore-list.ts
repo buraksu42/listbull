@@ -12,7 +12,7 @@ import "server-only";
 import { and, eq, isNotNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { activityLog, listMembers, lists } from "@/lib/db/schema";
+import { activityLog, items, listMembers, lists } from "@/lib/db/schema";
 import {
   restoreListInputSchema,
   type RestoreListOutput,
@@ -50,9 +50,39 @@ export async function executeRestoreList(
   }
 
   return await db.transaction(async (tx) => {
+    const now = new Date();
+    const listArchivedAt = row.archivedAt;
+
+    // Cascade-restore: clear archived_at on any items archived AT THE
+    // SAME TIMESTAMP as the list (i.e. archived as part of the cascade
+    // delete). Items archived independently before the list-delete keep
+    // their archived_at — they're the user's individual deletions, not
+    // collateral from delete_list.
+    let restoredItemIds: string[] = [];
+    if (listArchivedAt) {
+      const cascadeRows = await tx
+        .select({ id: items.id })
+        .from(items)
+        .where(
+          and(eq(items.listId, row.id), eq(items.archivedAt, listArchivedAt)),
+        );
+      restoredItemIds = cascadeRows.map((r) => r.id);
+      if (restoredItemIds.length > 0) {
+        await tx
+          .update(items)
+          .set({ archivedAt: null, updatedAt: now })
+          .where(
+            and(
+              eq(items.listId, row.id),
+              eq(items.archivedAt, listArchivedAt),
+            ),
+          );
+      }
+    }
+
     const [updated] = await tx
       .update(lists)
-      .set({ archivedAt: null, updatedAt: new Date() })
+      .set({ archivedAt: null, updatedAt: now })
       .where(eq(lists.id, row.id))
       .returning();
     if (!updated) throw new Error("restore-list: update returned no row");
@@ -64,7 +94,10 @@ export async function executeRestoreList(
       action: "list_restored",
       actorId: ctx.userId,
       payloadBefore: toListSnapshot(row),
-      payloadAfter: toListSnapshot(updated),
+      payloadAfter: {
+        ...toListSnapshot(updated),
+        restoredItemIds,
+      },
     });
 
     return ok({

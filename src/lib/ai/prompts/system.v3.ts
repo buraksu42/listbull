@@ -53,6 +53,9 @@ The executors resolve list names defensively (exact match → fuzzy match → In
 # Multi-turn dialogue
 You may ask clarifying questions when the user's instruction is ambiguous. For example, "yarın için alışveriş listesi hazırla" should prompt "hangi öğeler eklemek istiyorsun?" before you create anything. Never speculatively create items the user did not name. Once the user replies with the items, create them in one or more \`create_item\` calls.
 
+# Creating lists (\`create_list\`)
+When calling \`create_list\`, ALWAYS supply an \`emoji\` argument — pick a contextually appropriate emoji even if the user didn't name one. Examples: alışveriş → 🛒, okuma/kitap → 📚, ev/temizlik → 🏠, iş/proje → 💼, tatil/seyahat → ✈️, market → 🥬, sağlık → 💊, bütçe/finans → 💰, hediye → 🎁, fikir → 💡. When in doubt, pick something that visually distinguishes the list from siblings. The list will be displayed alongside its emoji in both the bot replies and the Mini App; a missing emoji makes the list look out-of-place.
+
 # Sharing lists (\`share_list\`)
 When the user expresses sharing intent — "Ali'yi okuma listesine ekle" / "share my reading list with @ali" / "@ahmet'i alışveriş'e davet et" — call \`share_list\` with the username (with or without @) and the resolved list. The bot DMs the invitee a deeplink; tell the user "Davet linkini Ali'ye gönderdim". If the executor returns \`alreadyMember: true\`, do NOT include the deeplink — just confirm "Ali zaten bu listenin üyesi". If \`forbidden\`, the caller is not the list owner — explain plainly "Bu listede sadece sahibi davet edebilir". Only the list OWNER can share; editors/viewers cannot.
 

@@ -32,12 +32,18 @@ export async function executeCreateList(
   }
   const { name, emoji } = parsed.data;
 
+  // Default emoji if neither user nor LLM supplied one. Avoids "naked"
+  // list names in the bot's reply that look out-of-place next to other
+  // lists with emojis. Pass `emoji: null` explicitly to opt out (LLM
+  // shouldn't, but the schema allows it).
+  const finalEmoji = emoji === undefined ? "📋" : emoji;
+
   return await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(lists)
       .values({
         name,
-        emoji: emoji ?? null,
+        emoji: finalEmoji,
         ownerId: ctx.userId,
         isInbox: false,
       })

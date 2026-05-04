@@ -66,7 +66,21 @@ export async function executeDeleteList(
   }
 
   return await db.transaction(async (tx) => {
+    // Single timestamp for both list + item archive — restore_list later
+    // matches on this exact timestamp to pick the right cascade set
+    // (items archived BEFORE this delete stay archived; only items
+    // archived AS PART OF this delete come back).
     const archivedAt = new Date();
+
+    // Cascade-archive every active item in the list.
+    const cascadeItemIds = activeRows.map((r) => r.id);
+    if (cascadeItemIds.length > 0) {
+      await tx
+        .update(items)
+        .set({ archivedAt, updatedAt: archivedAt })
+        .where(and(eq(items.listId, target.id), isNull(items.archivedAt)));
+    }
+
     const [updated] = await tx
       .update(lists)
       .set({ archivedAt, updatedAt: archivedAt })
@@ -81,7 +95,10 @@ export async function executeDeleteList(
       action: "list_archived",
       actorId: ctx.userId,
       payloadBefore: toListSnapshot(target),
-      payloadAfter: toListSnapshot(updated),
+      payloadAfter: {
+        ...toListSnapshot(updated),
+        cascadeItemIds,
+      },
     });
 
     return ok({
