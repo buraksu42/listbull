@@ -26,7 +26,10 @@ import type { Context } from "grammy";
 import { env } from "@/lib/env";
 import { getRecentMessages, insertMessages } from "@/lib/db/queries/messages";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
-import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
+import {
+  listWorkspacesForUser,
+  resolveActiveWorkspaceId,
+} from "@/lib/db/queries/workspaces";
 import { sliceForContext } from "@/lib/ai/conversation";
 import { forwardedMessagePrompt } from "@/lib/ai/prompts/forwarded";
 import {
@@ -217,6 +220,11 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // bot serves all workspaces, so this is the only resolution path.
   const workspaceId = await resolveActiveWorkspaceId(user.id);
 
+  // Workspace summary for the v4 system prompt — gives the LLM
+  // awareness of every workspace the user belongs to (so it can
+  // suggest \`switch_workspace\` when context implies another one).
+  const workspaceSummary = await listWorkspacesForUser(user.id);
+
   let assistantText = "";
   let persisted: ConversationMessage[] = [];
   let toolCalls: ToolCall[] = [];
@@ -229,6 +237,14 @@ export async function handleMessage(ctx: Context): Promise<void> {
         firstName: user.telegramFirstName,
         timezone: user.timezone,
       },
+      workspaces: workspaceSummary.map((w) => ({
+        id: w.id,
+        name: w.name,
+        tier: w.tier,
+        role: w.role,
+        isPersonal: w.isPersonal,
+        isActive: w.isActive,
+      })),
       apiKey,
       model: user.llmModel,
       toolDispatcher: createToolDispatcher({ userId: user.id, workspaceId }),
@@ -421,6 +437,7 @@ async function handleForwardedMessage(args: {
   // Same workspace resolution as the regular text path — forwarded
   // messages target the user's currently-active workspace.
   const workspaceId = await resolveActiveWorkspaceId(user.id);
+  const workspaceSummary = await listWorkspacesForUser(user.id);
 
   let assistantText = "";
   let persisted: ConversationMessage[] = [];
@@ -433,6 +450,14 @@ async function handleForwardedMessage(args: {
         firstName: user.telegramFirstName,
         timezone: user.timezone,
       },
+      workspaces: workspaceSummary.map((w) => ({
+        id: w.id,
+        name: w.name,
+        tier: w.tier,
+        role: w.role,
+        isPersonal: w.isPersonal,
+        isActive: w.isActive,
+      })),
       apiKey,
       model: user.llmModel,
       toolDispatcher: createToolDispatcher({ userId: user.id, workspaceId }),

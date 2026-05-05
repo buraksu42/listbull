@@ -36,7 +36,8 @@ import type {
 
 // rollback: systemPromptV1 from "@/lib/ai/prompts/system.v1"
 // rollback: systemPromptV2 from "@/lib/ai/prompts/system.v2"
-import { systemPromptV3 } from "@/lib/ai/prompts/system.v3";
+// rollback: systemPromptV3 from "@/lib/ai/prompts/system.v3"
+import { systemPromptV4 } from "@/lib/ai/prompts/system.v4";
 import { tools as toolRegistry } from "@/lib/ai/tools";
 import type { RespondInput, RespondOutput } from "@/lib/ai/types";
 
@@ -63,7 +64,7 @@ const DEFAULT_MAX_TOKENS = 2048;
  * cap is hit).
  */
 export async function respond(input: RespondInput): Promise<RespondOutput> {
-  const { messages, user, apiKey, model, toolDispatcher } = input;
+  const { messages, user, workspaces, apiKey, model, toolDispatcher } = input;
 
   if (!apiKey) {
     // Sentinel reply for Backend to render as a "no key configured"
@@ -85,10 +86,11 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
     // the SDK's default is fine.
   });
 
-  const system = systemPromptV3({
+  const system = systemPromptV4({
     userLocale: user.locale,
     userFirstName: user.firstName,
     userTimezone: user.timezone,
+    workspaces,
   });
 
   // Anthropic-shaped tool list — convert each zod schema to JSON Schema.

@@ -44,6 +44,20 @@ export type RespondInput = {
     /** IANA timezone (e.g. "Europe/Istanbul"). */
     timezone: string;
   };
+  /**
+   * Phase 4.5: workspace context summary for the system prompt.
+   * Active workspace + every workspace the user belongs to. Caller
+   * (Backend's handle-message) builds this via
+   * `listWorkspacesForUser(userId)`.
+   */
+  workspaces: Array<{
+    id: string;
+    name: string;
+    tier: string;
+    role: string;
+    isPersonal: boolean;
+    isActive: boolean;
+  }>;
   /** Plaintext OpenRouter API key (the caller decrypted it). */
   apiKey: string;
   /** OpenRouter model id, e.g. "anthropic/claude-sonnet-4". */
