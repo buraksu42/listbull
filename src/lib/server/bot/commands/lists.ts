@@ -2,6 +2,7 @@ import type { Context } from "grammy";
 
 import { listListsForUser } from "@/lib/db/queries/lists";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
+import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
 import { escapeMarkdownV2 } from "@/lib/server/bot/escape-markdown";
 import { pickLocale, t } from "@/lib/server/bot/i18n";
 import { env } from "@/lib/env";
@@ -17,7 +18,8 @@ export async function handleLists(ctx: Context): Promise<void> {
     return;
   }
 
-  const lists = await listListsForUser(user.id);
+  const workspaceId = await resolveActiveWorkspaceId(user.id);
+  const lists = await listListsForUser(user.id, workspaceId);
   const locale = pickLocale(user.locale);
   const tr = t(locale);
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getSessionUserId } from "@/lib/auth/session";
 import { listListsForUser } from "@/lib/db/queries/lists";
+import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ export async function GET() {
     );
   }
 
-  const lists = await listListsForUser(userId);
+  const workspaceId = await resolveActiveWorkspaceId(userId);
+  const lists = await listListsForUser(userId, workspaceId);
   return NextResponse.json({ ok: true, data: { lists } });
 }

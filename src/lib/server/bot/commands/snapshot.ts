@@ -13,6 +13,7 @@ import type { Context } from "grammy";
 
 import { listListsForUser } from "@/lib/db/queries/lists";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
+import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
 import { generateSnapshotMessage } from "@/lib/server/bot/snapshot";
 import { pickLocale } from "@/lib/server/bot/i18n";
 
@@ -65,7 +66,8 @@ export async function handleSnapshot(ctx: Context): Promise<void> {
     return;
   }
 
-  const lists = await listListsForUser(user.id);
+  const workspaceId = await resolveActiveWorkspaceId(user.id);
+  const lists = await listListsForUser(user.id, workspaceId);
   // Inbox is excluded from snapshots.
   const shareable = lists.filter((l) => !l.isInbox);
   if (shareable.length === 0) {

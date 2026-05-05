@@ -59,13 +59,20 @@ export async function ensureInbox(userId: string): Promise<List> {
 }
 
 /**
- * All lists the user can see, with item counts (active items broken into
- * open vs done so the UI can show "3 / 7" or "3 görev" depending on
- * preference). Joined via list_members (every owner gets a row at
- * create-time, so this covers owned + shared lists in one query).
- * Inbox first, then by createdAt asc.
+ * Lists the user can see in the given WORKSPACE, with item counts
+ * (active items broken into open vs done so the UI can show "3 / 7"
+ * or "3 görev" depending on preference). Joined via list_members
+ * (every owner gets a row at create-time, so this covers owned +
+ * shared lists in one query). Inbox first, then by createdAt asc.
+ *
+ * Phase 4.5: scoped to one workspace. Callers must resolve the
+ * active workspace first (via resolveActiveWorkspaceId or the bot's
+ * ctx.workspaceId).
  */
-export async function listListsForUser(userId: string): Promise<ListWithCounts[]> {
+export async function listListsForUser(
+  userId: string,
+  workspaceId: string,
+): Promise<ListWithCounts[]> {
   const rows = await db
     .select({
       list: lists,
@@ -75,7 +82,13 @@ export async function listListsForUser(userId: string): Promise<ListWithCounts[]
     .from(listMembers)
     .innerJoin(lists, eq(listMembers.listId, lists.id))
     .leftJoin(items, eq(items.listId, lists.id))
-    .where(and(eq(listMembers.userId, userId), isNull(lists.archivedAt)))
+    .where(
+      and(
+        eq(listMembers.userId, userId),
+        eq(lists.workspaceId, workspaceId),
+        isNull(lists.archivedAt),
+      ),
+    )
     .groupBy(lists.id)
     .orderBy(asc(lists.createdAt));
 

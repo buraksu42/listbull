@@ -4,7 +4,12 @@ import { Suspense } from "react";
 import { ListRow } from "@/components/lists/list-row";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ListsListSkeleton } from "@/components/shared/list-skeleton";
+import { WorkspaceSwitcher } from "@/components/workspace/switcher";
 import { listListsForUser } from "@/lib/db/queries/lists";
+import {
+  listWorkspacesForUser,
+  resolveActiveWorkspaceId,
+} from "@/lib/db/queries/workspaces";
 import { requireUser } from "@/lib/server/auth/require-user";
 
 export const dynamic = "force-dynamic";
@@ -12,26 +17,6 @@ export const dynamic = "force-dynamic";
 export default function ListsPage() {
   return (
     <main style={{ paddingBottom: "var(--lb-sp-12)" }}>
-      <header
-        style={{
-          height: "var(--lb-header-h)",
-          padding: "0 var(--lb-sp-4)",
-          display: "flex",
-          alignItems: "center",
-          borderBottom: "1px solid var(--lb-border)",
-        }}
-      >
-        <h1
-          style={{
-            fontSize: "var(--lb-fs-xl)",
-            fontWeight: "var(--lb-fw-semibold)",
-            letterSpacing: "var(--lb-tracking-title)",
-          }}
-        >
-          Lists
-        </h1>
-      </header>
-
       <Suspense fallback={<ListsListSkeleton />}>
         <ListsContent />
       </Suspense>
@@ -41,7 +26,38 @@ export default function ListsPage() {
 
 async function ListsContent() {
   const user = await requireUser();
-  const lists = await listListsForUser(user.id);
+  const [workspaceId, workspaces] = await Promise.all([
+    resolveActiveWorkspaceId(user.id),
+    listWorkspacesForUser(user.id),
+  ]);
+  const lists = await listListsForUser(user.id, workspaceId);
+
+  return (
+    <>
+      <header
+        style={{
+          height: "var(--lb-header-h)",
+          padding: "0 var(--lb-sp-3)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "var(--lb-sp-2)",
+          borderBottom: "1px solid var(--lb-border)",
+        }}
+      >
+        <WorkspaceSwitcher workspaces={workspaces} />
+      </header>
+
+      <ListsBody lists={lists} />
+    </>
+  );
+}
+
+type ListsBodyProps = {
+  lists: Awaited<ReturnType<typeof listListsForUser>>;
+};
+
+function ListsBody({ lists }: ListsBodyProps) {
 
   if (lists.length === 0) {
     return (

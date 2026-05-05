@@ -5,6 +5,9 @@ import * as React from "react";
 
 import { ItemActions } from "@/components/lists/item-actions";
 import { Avatar } from "@/components/lists/member-list";
+import { PriorityIndicator } from "@/components/items/priority-indicator";
+import { StatusBadge } from "@/components/items/status-badge";
+import { TagChip } from "@/components/items/tag-chip";
 import type { Item } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -109,6 +112,12 @@ export function ItemRow({
         ariaLabel={`Toggle ${item.text}`}
       />
 
+      <PriorityIndicator
+        priority={
+          (item.priority as "low" | "normal" | "high") ?? "normal"
+        }
+      />
+
       <button
         type="button"
         onClick={onEdit}
@@ -124,6 +133,20 @@ export function ItemRow({
       >
         {item.text}
       </button>
+
+      {/* Phase 4.5: status badge (open hidden) + tag chips */}
+      <StatusBadge
+        status={
+          (item.status as
+            | "open"
+            | "in_progress"
+            | "blocked"
+            | "done") ?? "open"
+        }
+      />
+      {(item.tags ?? []).slice(0, 3).map((t) => (
+        <TagChip key={t} tag={t} />
+      ))}
 
       {item.assigneeId !== null && (
         <span
