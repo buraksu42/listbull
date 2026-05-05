@@ -322,6 +322,37 @@ export const restoreListOutputSchema = z.object({
 export type RestoreListInput = z.infer<typeof restoreListInputSchema>;
 export type RestoreListOutput = z.infer<typeof restoreListOutputSchema>;
 
+// ─── 7a. list_members — read-only enumeration of a list's members ─────
+
+export const listMembersInputSchema = z
+  .object({
+    list_id: z.string().uuid().optional(),
+    list_name: z.string().min(1).max(120).optional(),
+  })
+  .refine((v) => v.list_id !== undefined || v.list_name !== undefined, {
+    message: "Either list_id or list_name is required",
+  });
+
+export const listMembersOutputSchema = z.object({
+  list: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    emoji: z.string().nullable(),
+  }),
+  members: z.array(
+    z.object({
+      user_id: z.string().uuid(),
+      telegram_username: z.string().nullable(),
+      telegram_first_name: z.string(),
+      role: z.enum(["owner", "editor", "viewer"]),
+      joined_at: z.string(),
+    }),
+  ),
+});
+
+export type ListMembersInput = z.infer<typeof listMembersInputSchema>;
+export type ListMembersOutput = z.infer<typeof listMembersOutputSchema>;
+
 // ─── 7b. remove_member — kick a member off a shared list (owner-only) ─
 
 export const removeMemberInputSchema = z
@@ -517,6 +548,7 @@ export const TOOL_NAMES = [
   "delete_list",
   "restore_list",
   "share_list",
+  "list_members",
   "remove_member",
   "update_member_role",
   "schedule_reminder",
@@ -683,6 +715,20 @@ export const tools: readonly ToolDefinition[] = [
       "list before calling.",
     inputSchema: shareListInputSchema,
     outputSchema: shareListOutputSchema,
+  },
+  {
+    name: "list_members",
+    description:
+      "READ-ONLY enumeration of a list's members. Any role (owner / " +
+      "editor / viewer) can call this; useful when the user asks " +
+      "'kim bu listede?' / 'who's in my list?' / 'üyeleri göster'. " +
+      "Pass `list_id` (preferred) or `list_name`. Returns the list " +
+      "shell + an array of { user_id, telegram_username, " +
+      "telegram_first_name, role, joined_at }. Use the response to " +
+      "phrase a friendly summary like 'Listede sen + Ali (editör) " +
+      "var'. Inbox membership is always just the owner.",
+    inputSchema: listMembersInputSchema,
+    outputSchema: listMembersOutputSchema,
   },
   {
     name: "remove_member",
