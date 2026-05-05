@@ -43,8 +43,18 @@ export default function AppBoot() {
         }
 
         if (!cancelled) {
-          // Cookie is set; navigate to the list-of-lists view.
-          window.location.replace("/lists");
+          // Cookie is set. If the Mini App was launched via a
+          // `t.me/<bot>?startapp=invite_<token>` deeplink, route to
+          // the invite-accept screen; otherwise fall through to the
+          // list-of-lists view. Future start_param prefixes can be
+          // added here (e.g. `item_<id>` for item-deeplinks).
+          const startParam = tg.initDataUnsafe?.start_param ?? "";
+          if (startParam.startsWith("invite_")) {
+            const token = startParam.slice("invite_".length);
+            window.location.replace(`/invites/${encodeURIComponent(token)}`);
+          } else {
+            window.location.replace("/lists");
+          }
         }
       } catch (err) {
         if (!cancelled) {

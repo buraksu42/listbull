@@ -51,8 +51,18 @@ export type TelegramBackButton = {
   offClick?: (cb: () => void) => void;
 };
 
+/**
+ * Subset of `initDataUnsafe` we read for routing. Telegram populates
+ * `start_param` from the `?startapp=<param>` portion of a t.me link
+ * (or the `?start=<param>` portion when the bot was started in DM).
+ */
+export type TelegramInitDataUnsafe = {
+  start_param?: string;
+};
+
 export type TelegramWebApp = {
   initData?: string;
+  initDataUnsafe?: TelegramInitDataUnsafe;
   themeParams?: TelegramThemeParams;
   colorScheme?: TelegramColorScheme;
   ready?: () => void;

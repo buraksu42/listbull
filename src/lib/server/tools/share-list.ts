@@ -44,10 +44,16 @@ function normalizeUsername(raw: string): string {
 }
 
 function buildDeeplink(token: string): string {
-  // `startapp` lets the Mini App receive `invite_<token>` and route to
-  // the accept screen. The web fallback URL is also fine; we serve the
-  // same path off the app domain.
-  return `${env.NEXT_PUBLIC_APP_URL}/invites/${token}`;
+  // Telegram-native deeplink: tapping this URL inside Telegram opens
+  // the bot's Mini App with `start_param=invite_<token>` (read at boot
+  // via Telegram.WebApp.initDataUnsafe.start_param) which our /app
+  // boot route uses to redirect to /invites/<token>. Outside Telegram
+  // (browser), Telegram's t.me page prompts "Open in Telegram" which
+  // re-launches via the tg:// protocol. The web URL
+  // ${NEXT_PUBLIC_APP_URL}/invites/<token> still works as a backup
+  // (Mini App accept screen renders identically) but isn't the share
+  // surface.
+  return `https://t.me/${env.TELEGRAM_BOT_USERNAME}?startapp=invite_${token}`;
 }
 
 export async function executeShareList(
