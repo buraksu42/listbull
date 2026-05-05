@@ -95,11 +95,12 @@ export async function executeSearchItems(
     });
   }
 
-  // Build conditions.
-  const conds = [
-    inArray(items.listId, scopedListIds),
-    ilike(items.text, `%${escapeLike(query)}%`),
-  ];
+  // Build conditions. Empty query → no text filter (caller wants every
+  // item in scope, e.g. "ev işlerinde ne var?").
+  const conds = [inArray(items.listId, scopedListIds)];
+  if (query.length > 0) {
+    conds.push(ilike(items.text, `%${escapeLike(query)}%`));
+  }
   if (!include_done) conds.push(eq(items.isDone, false));
   if (!include_archived) conds.push(isNull(items.archivedAt));
 

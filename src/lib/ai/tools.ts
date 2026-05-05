@@ -98,11 +98,11 @@ export type CreateItemOutput = z.infer<typeof createItemOutputSchema>;
 // ─── 2. search_items ────────────────────────────────────────────────
 
 export const searchItemsInputSchema = z.object({
-  query: z
-    .string()
-    .trim()
-    .min(1, "query is required")
-    .max(500, "query must be ≤500 chars"),
+  // Empty query is allowed — pair it with `list_id`/`list_name` to dump
+  // every item in a list (the user just asked "ev işlerinde ne var?").
+  // With an empty query AND no list scope, returns the most recent items
+  // across all writable lists up to `limit`.
+  query: z.string().trim().max(500, "query must be ≤500 chars").default(""),
   list_id: z.string().uuid().optional(),
   list_name: z.string().min(1).max(200).optional(),
   include_done: z.boolean().default(false),
@@ -549,13 +549,16 @@ export const tools: readonly ToolDefinition[] = [
   {
     name: "search_items",
     description:
-      "Search the user's items by substring match on item text. " +
-      "Scope to one list with `list_id` or `list_name`; with both " +
-      "absent, search across ALL lists the user has access to (the " +
-      "common case for 'did I add X?'). By default, completed and " +
-      "archived items are excluded. Returns matched items with their " +
-      "list context plus the list of lists actually scanned, so you " +
-      "can answer contextually ('Sapiens'i Okuma listende buldum').",
+      "Search or enumerate the user's items. With a non-empty `query`, " +
+      "performs ILIKE substring match on item text (case-insensitive). " +
+      "With EMPTY query (or query omitted), returns ALL items in scope " +
+      "— use this when the user asks 'ev işlerinde ne var?' / 'what's " +
+      "in my list?' — pair the empty query with `list_name` (or " +
+      "`list_id`) to scope to a single list. Without any list scope, " +
+      "searches across every list the user is a member of. By default " +
+      "completed and archived items are excluded; pass `include_done` " +
+      "or `include_archived: true` to broaden. Returns items with " +
+      "their list context plus the list of scanned lists.",
     inputSchema: searchItemsInputSchema,
     outputSchema: searchItemsOutputSchema,
   },
