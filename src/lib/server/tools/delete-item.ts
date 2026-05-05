@@ -24,7 +24,7 @@ import type { ExecResult } from "./_shared";
 
 export async function executeDeleteItem(
   input: unknown,
-  ctx: { userId: string },
+  ctx: { userId: string; workspaceId: string },
 ): Promise<ExecResult<DeleteItemOutput>> {
   const parsed = deleteItemInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -42,7 +42,11 @@ export async function executeDeleteItem(
       return err(ERR.not_found, "Item not found.");
     }
 
-    const allowed = await userCanWriteList(ctx.userId, current.listId);
+    const allowed = await userCanWriteList(
+      ctx.userId,
+      current.listId,
+      ctx.workspaceId,
+    );
     if (!allowed) {
       return err(ERR.forbidden, "You don't have access to that list.");
     }

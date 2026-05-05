@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { getSessionUserId } from "@/lib/auth/session";
 import { userCanReadList } from "@/lib/db/queries/lists";
 import { listMembersForList } from "@/lib/db/queries/members";
+import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
 import type { MembersListResponse } from "@/lib/validators/members";
 
 export const runtime = "nodejs";
@@ -27,7 +28,8 @@ export async function GET(_request: Request, { params }: RouteCtx) {
   }
 
   const { id } = await params;
-  const canRead = await userCanReadList(userId, id);
+  const workspaceId = await resolveActiveWorkspaceId(userId);
+  const canRead = await userCanReadList(userId, id, workspaceId);
   if (!canRead) {
     return NextResponse.json(
       { ok: false, error: { code: "not_found", message: "List not found" } },

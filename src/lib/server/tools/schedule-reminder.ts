@@ -29,7 +29,7 @@ import type { ExecResult } from "./_shared";
 
 export async function executeScheduleReminder(
   input: unknown,
-  ctx: { userId: string },
+  ctx: { userId: string; workspaceId: string },
 ): Promise<ExecResult<ScheduleReminderOutput>> {
   const parsed = scheduleReminderInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -50,7 +50,11 @@ export async function executeScheduleReminder(
       return err("cannot_schedule_note", "Notes cannot have reminders.");
     }
 
-    const allowed = await userCanWriteList(ctx.userId, current.listId);
+    const allowed = await userCanWriteList(
+      ctx.userId,
+      current.listId,
+      ctx.workspaceId,
+    );
     if (!allowed) {
       return err(ERR.forbidden, "You don't have access to that list.");
     }

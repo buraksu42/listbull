@@ -7,6 +7,7 @@
 import { NextResponse } from "next/server";
 
 import { getSessionUserId } from "@/lib/auth/session";
+import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
 import { executeCompleteItem } from "@/lib/server/tools/complete-item";
 import { executeDeleteItem } from "@/lib/server/tools/delete-item";
 import { executeUpdateItem } from "@/lib/server/tools/update-item";
@@ -66,6 +67,8 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
   }
   const { text, isDone, position, dueAt } = parsed.data;
 
+  const workspaceId = await resolveActiveWorkspaceId(userId);
+
   // The Mini App body can carry `isDone` AND text/position/dueAt edits
   // in the same request. We dispatch:
   //   - `isDone` change → `executeCompleteItem` (its own activity row).
@@ -92,7 +95,7 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
         // dueAt may be `null` (clear), undefined (skip), or string.
         ...(dueAt !== undefined ? { due_at: dueAt } : {}),
       },
-      { userId },
+      { userId, workspaceId },
     );
     if (!updateResult.ok) {
       return NextResponse.json(updateResult, {
@@ -105,7 +108,7 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
   if (isDone !== undefined) {
     const completeResult = await executeCompleteItem(
       { item_id: id, is_done: isDone },
-      { userId },
+      { userId, workspaceId },
     );
     if (!completeResult.ok) {
       return NextResponse.json(completeResult, {
@@ -155,7 +158,11 @@ export async function DELETE(_request: Request, { params }: RouteCtx) {
     );
   }
 
-  const result = await executeDeleteItem({ item_id: id }, { userId });
+  const workspaceId = await resolveActiveWorkspaceId(userId);
+  const result = await executeDeleteItem(
+    { item_id: id },
+    { userId, workspaceId },
+  );
   if (!result.ok) {
     return NextResponse.json(result, {
       status: errorCodeToStatus(result.error.code),

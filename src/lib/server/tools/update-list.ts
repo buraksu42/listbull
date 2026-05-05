@@ -21,7 +21,7 @@ import type { ExecResult } from "./_shared";
 
 export async function executeUpdateList(
   input: unknown,
-  ctx: { userId: string },
+  ctx: { userId: string; workspaceId: string },
 ): Promise<ExecResult<UpdateListOutput>> {
   const parsed = updateListInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -30,7 +30,12 @@ export async function executeUpdateList(
   const { list_id, list_name, name, emoji } = parsed.data;
 
   // Resolve list (owner-only path — search list_members for owner role).
-  const found = await resolveOwnedList(ctx.userId, list_id, list_name);
+  const found = await resolveOwnedList(
+    ctx.userId,
+    ctx.workspaceId,
+    list_id,
+    list_name,
+  );
   if (found.kind === "not_found") {
     return err(ERR.not_found, "No list found you own with that id/name.");
   }
@@ -99,12 +104,16 @@ type Resolution =
 
 async function resolveOwnedList(
   userId: string,
+  workspaceId: string,
   list_id: string | undefined,
   list_name: string | undefined,
 ): Promise<Resolution> {
   if (list_id) {
     const row = await db.query.lists.findFirst({
-      where: eq(lists.id, list_id),
+      where: and(
+        eq(lists.id, list_id),
+        eq(lists.workspaceId, workspaceId),
+      ),
     });
     if (!row) return { kind: "not_found" };
     const member = await db.query.listMembers.findFirst({
@@ -127,6 +136,7 @@ async function resolveOwnedList(
       and(
         eq(listMembers.userId, userId),
         eq(listMembers.role, "owner"),
+        eq(lists.workspaceId, workspaceId),
         ilike(lists.name, list_name ?? ""),
       ),
     );

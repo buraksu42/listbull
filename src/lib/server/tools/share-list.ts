@@ -58,7 +58,7 @@ function buildDeeplink(token: string): string {
 
 export async function executeShareList(
   input: unknown,
-  ctx: { userId: string },
+  ctx: { userId: string; workspaceId: string },
 ): Promise<ExecResult<ShareListOutput>> {
   const parsed = shareListInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -73,7 +73,7 @@ export async function executeShareList(
 
   // List resolution. NO inbox fallback (cannot share inbox).
   const resolution = await resolveList(
-    ctx.userId,
+    ctx,
     { listId: list_id, listName: list_name },
     { inboxFallback: false },
   );

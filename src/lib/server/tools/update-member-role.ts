@@ -7,7 +7,7 @@ import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { listMembers, users } from "@/lib/db/schema";
+import { listMembers, lists, users } from "@/lib/db/schema";
 import {
   updateMemberRoleInputSchema,
   type UpdateMemberRoleOutput,
@@ -19,13 +19,23 @@ import type { ExecResult } from "./_shared";
 
 export async function executeUpdateMemberRole(
   input: unknown,
-  ctx: { userId: string },
+  ctx: { userId: string; workspaceId: string },
 ): Promise<ExecResult<UpdateMemberRoleOutput>> {
   const parsed = updateMemberRoleInputSchema.safeParse(input);
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
   const { list_id, username, user_id, role } = parsed.data;
+
+  // Workspace gate.
+  const [listRow] = await db
+    .select({ workspaceId: lists.workspaceId })
+    .from(lists)
+    .where(eq(lists.id, list_id))
+    .limit(1);
+  if (!listRow || listRow.workspaceId !== ctx.workspaceId) {
+    return err(ERR.not_found, "List not found in this workspace.");
+  }
 
   let targetUserId: string | null = null;
   if (user_id) {

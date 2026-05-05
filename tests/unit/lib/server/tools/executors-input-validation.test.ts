@@ -50,7 +50,10 @@ import { executeSearchItems } from "@/lib/server/tools/search-items";
 import { executeShareList } from "@/lib/server/tools/share-list";
 import { executeUpdateItem } from "@/lib/server/tools/update-item";
 
-const CTX = { userId: "00000000-0000-0000-0000-000000000001" };
+const CTX = {
+  userId: "00000000-0000-0000-0000-000000000001",
+  workspaceId: "00000000-0000-0000-0000-000000000002",
+};
 
 describe("create_item: input validation", () => {
   it("rejects empty text", async () => {

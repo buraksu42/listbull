@@ -7,7 +7,7 @@
  */
 import "server-only";
 
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { items, listMembers, lists } from "@/lib/db/schema";
@@ -22,7 +22,7 @@ import type { ExecResult } from "./_shared";
 
 export async function executeListLists(
   input: unknown,
-  ctx: { userId: string },
+  ctx: { userId: string; workspaceId: string },
 ): Promise<ExecResult<ListListsOutput>> {
   const parsed = listListsInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -52,7 +52,12 @@ export async function executeListLists(
     .from(listMembers)
     .innerJoin(lists, eq(listMembers.listId, lists.id))
     .leftJoin(items, eq(items.listId, lists.id))
-    .where(eq(listMembers.userId, ctx.userId))
+    .where(
+      and(
+        eq(listMembers.userId, ctx.userId),
+        eq(lists.workspaceId, ctx.workspaceId),
+      ),
+    )
     .groupBy(
       lists.id,
       lists.name,

@@ -30,7 +30,7 @@ type ChangeField =
 
 export async function executeUpdateSettings(
   input: unknown,
-  ctx: { userId: string },
+  ctx: { userId: string; workspaceId: string },
 ): Promise<ExecResult<UpdateSettingsOutput>> {
   const parsed = updateSettingsInputSchema.safeParse(input);
   if (!parsed.success) {

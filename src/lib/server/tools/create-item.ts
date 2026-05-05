@@ -21,7 +21,7 @@ import type { ExecResult } from "./_shared";
 
 export async function executeCreateItem(
   input: unknown,
-  ctx: { userId: string },
+  ctx: { userId: string; workspaceId: string },
 ): Promise<ExecResult<CreateItemOutput>> {
   const parsed = createItemInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -32,7 +32,7 @@ export async function executeCreateItem(
   // List resolution lives outside the transaction — read-only and
   // doesn't need to share the write's snapshot. Inv-3 + Inv-2.
   const resolution = await resolveList(
-    ctx.userId,
+    ctx,
     { listId: list_id, listName: list_name },
     { inboxFallback: true },
   );

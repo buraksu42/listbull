@@ -8,6 +8,7 @@
 import { NextResponse } from "next/server";
 
 import { getSessionUserId } from "@/lib/auth/session";
+import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
 import { executeCreateItem } from "@/lib/server/tools/create-item";
 import { createItemBodySchema } from "@/lib/validators/items";
 
@@ -50,6 +51,7 @@ export async function POST(request: Request) {
   // Translate Mini App body shape into the executor's input shape (the
   // executor's input mirrors AI's tool schema with snake_case keys).
   const { text, listId, listName, dueAt, isCheckable } = parsed.data;
+  const workspaceId = await resolveActiveWorkspaceId(userId);
   const result = await executeCreateItem(
     {
       text,
@@ -58,7 +60,7 @@ export async function POST(request: Request) {
       due_at: dueAt,
       is_checkable: isCheckable,
     },
-    { userId },
+    { userId, workspaceId },
   );
 
   if (!result.ok) {

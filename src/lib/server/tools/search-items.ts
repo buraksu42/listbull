@@ -23,7 +23,7 @@ import type { ExecResult } from "./_shared";
 
 export async function executeSearchItems(
   input: unknown,
-  ctx: { userId: string },
+  ctx: { userId: string; workspaceId: string },
 ): Promise<ExecResult<SearchItemsOutput>> {
   const parsed = searchItemsInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -44,7 +44,7 @@ export async function executeSearchItems(
 
   if (list_id || list_name) {
     const resolution = await resolveList(
-      ctx.userId,
+      ctx,
       { listId: list_id, listName: list_name },
       // Don't fall back to inbox for search — explicit references must
       // resolve concretely; ambiguity bubbles up.
@@ -66,8 +66,9 @@ export async function executeSearchItems(
     scopedListIds = [resolution.listId];
     scopedListNameById.set(resolution.listId, resolution.listName);
   } else {
-    // Cross-list mode: every list the user is a member of (any role —
-    // viewers can search even though they can't mutate).
+    // Cross-list mode: every list in the active workspace the user
+    // is a member of (any role — viewers can search even though
+    // they can't mutate).
     const membershipRows = await db
       .select({
         id: lists.id,
@@ -78,6 +79,7 @@ export async function executeSearchItems(
       .where(
         and(
           eq(listMembers.userId, ctx.userId),
+          eq(lists.workspaceId, ctx.workspaceId),
           isNull(lists.archivedAt),
         ),
       );

@@ -7,6 +7,7 @@
 import { NextResponse } from "next/server";
 
 import { getSessionUserId } from "@/lib/auth/session";
+import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
 import { executeShareList } from "@/lib/server/tools/share-list";
 import { postInviteBodySchema } from "@/lib/validators/invites";
 
@@ -50,13 +51,14 @@ export async function POST(request: Request, { params }: RouteCtx) {
     );
   }
 
+  const workspaceId = await resolveActiveWorkspaceId(userId);
   const result = await executeShareList(
     {
       username: parsed.data.username,
       role: parsed.data.role,
       list_id: id,
     },
-    { userId },
+    { userId, workspaceId },
   );
 
   if (!result.ok) {

@@ -14,7 +14,7 @@ import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { listMembers, users } from "@/lib/db/schema";
+import { listMembers, lists, users } from "@/lib/db/schema";
 import {
   removeMemberInputSchema,
   type RemoveMemberOutput,
@@ -26,13 +26,25 @@ import type { ExecResult } from "./_shared";
 
 export async function executeRemoveMember(
   input: unknown,
-  ctx: { userId: string },
+  ctx: { userId: string; workspaceId: string },
 ): Promise<ExecResult<RemoveMemberOutput>> {
   const parsed = removeMemberInputSchema.safeParse(input);
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
   const { list_id, username, user_id } = parsed.data;
+
+  // Workspace gate: caller can only remove members from lists in
+  // their active workspace. Cross-workspace mutations rejected even
+  // if the caller has list_members access elsewhere.
+  const [listRow] = await db
+    .select({ workspaceId: lists.workspaceId })
+    .from(lists)
+    .where(eq(lists.id, list_id))
+    .limit(1);
+  if (!listRow || listRow.workspaceId !== ctx.workspaceId) {
+    return err(ERR.not_found, "List not found in this workspace.");
+  }
 
   // Resolve target userId.
   let targetUserId: string | null = null;

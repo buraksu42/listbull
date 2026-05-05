@@ -24,7 +24,7 @@ import type { ExecResult } from "./_shared";
 
 export async function executeListMembers(
   input: unknown,
-  ctx: { userId: string },
+  ctx: { userId: string; workspaceId: string },
 ): Promise<ExecResult<ListMembersOutput>> {
   const parsed = listMembersInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -32,7 +32,12 @@ export async function executeListMembers(
   }
   const { list_id, list_name } = parsed.data;
 
-  const found = await resolveAccessibleList(ctx.userId, list_id, list_name);
+  const found = await resolveAccessibleList(
+    ctx.userId,
+    ctx.workspaceId,
+    list_id,
+    list_name,
+  );
   if (found.kind === "not_found") {
     return err(ERR.not_found, "No list found with that id/name.");
   }
@@ -69,12 +74,17 @@ type Resolution =
 
 async function resolveAccessibleList(
   userId: string,
+  workspaceId: string,
   list_id: string | undefined,
   list_name: string | undefined,
 ): Promise<Resolution> {
   if (list_id) {
     const row = await db.query.lists.findFirst({
-      where: and(eq(lists.id, list_id), isNull(lists.archivedAt)),
+      where: and(
+        eq(lists.id, list_id),
+        eq(lists.workspaceId, workspaceId),
+        isNull(lists.archivedAt),
+      ),
     });
     if (!row) return { kind: "not_found" };
     const member = await db.query.listMembers.findFirst({
@@ -95,6 +105,7 @@ async function resolveAccessibleList(
     .where(
       and(
         eq(listMembers.userId, userId),
+        eq(lists.workspaceId, workspaceId),
         ilike(lists.name, list_name ?? ""),
         isNull(lists.archivedAt),
       ),

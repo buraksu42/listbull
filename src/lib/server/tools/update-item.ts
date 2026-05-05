@@ -28,7 +28,7 @@ import type { ExecResult } from "./_shared";
 
 export async function executeUpdateItem(
   input: unknown,
-  ctx: { userId: string },
+  ctx: { userId: string; workspaceId: string },
 ): Promise<ExecResult<UpdateItemOutput>> {
   const parsed = updateItemInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -46,7 +46,11 @@ export async function executeUpdateItem(
     if (current.archivedAt) return err(ERR.not_found, "Item not found.");
 
     // Membership check on the item's list.
-    const allowed = await userCanWriteList(ctx.userId, current.listId);
+    const allowed = await userCanWriteList(
+      ctx.userId,
+      current.listId,
+      ctx.workspaceId,
+    );
     if (!allowed) {
       return err(ERR.forbidden, "You don't have access to that list.");
     }

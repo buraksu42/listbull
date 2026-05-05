@@ -72,23 +72,30 @@ type ResolveOpts = {
 };
 
 /**
- * Per Inv-3: resolve a list reference to a single list_id.
- * 1. If `listId` is provided AND the user has write access → ok.
- * 2. Else `listName` exact case-insensitive match → ok.
+ * Per Inv-3: resolve a list reference to a single list_id, scoped to
+ * the caller's ACTIVE WORKSPACE (Phase 4.5).
+ *
+ * 1. If `listId` is provided AND the user has write access AND the
+ *    list belongs to the active workspace → ok.
+ * 2. Else `listName` exact case-insensitive match within the
+ *    workspace → ok.
  * 3. Else `listName` single fuzzy match (ILIKE %name%) → ok.
  * 4. Else multi-fuzzy → ambiguous (caller surfaces error).
- * 5. Else if `inboxFallback` → user's inbox.
+ * 5. Else if `inboxFallback` → workspace's inbox.
  * 6. Else → not_found.
  *
- * Membership filter is applied throughout — we only consider lists the
- * user is an owner|editor of. A list_id pointing to a list the user
- * lacks access to → forbidden (Inv-2).
+ * Filters applied throughout: `list_members.user_id = ctx.userId`
+ * (per-list membership) AND `lists.workspace_id = ctx.workspaceId`
+ * (workspace scope). A list_id in another workspace returns
+ * `forbidden` (don't leak existence across workspaces).
  */
 export async function resolveList(
-  userId: string,
+  ctx: { userId: string; workspaceId: string },
   ref: { listId?: string; listName?: string },
   opts: ResolveOpts = {},
 ): Promise<ListResolution> {
+  const { userId, workspaceId } = ctx;
+
   // 1. explicit id wins.
   if (ref.listId) {
     const explicit = await db
@@ -98,6 +105,7 @@ export async function resolveList(
         emoji: lists.emoji,
         role: listMembers.role,
         archivedAt: lists.archivedAt,
+        workspaceId: lists.workspaceId,
       })
       .from(lists)
       .innerJoin(listMembers, eq(listMembers.listId, lists.id))
@@ -110,6 +118,12 @@ export async function resolveList(
       // we don't distinguish (don't leak existence to non-members).
       return { kind: "forbidden" };
     }
+    if (row.workspaceId !== workspaceId) {
+      // List belongs to a different workspace than the active one.
+      // Surface as forbidden — don't leak that the list exists in
+      // another workspace.
+      return { kind: "forbidden" };
+    }
     if (!WRITE_ROLES.includes(row.role as ListRole)) {
       return { kind: "forbidden" };
     }
@@ -119,7 +133,7 @@ export async function resolveList(
     return { kind: "ok", listId: row.id, listName: row.name, emoji: row.emoji };
   }
 
-  // 2 + 3. Name-based match (only over user's writable lists).
+  // 2 + 3. Name-based match (only over user's writable lists in this workspace).
   if (ref.listName) {
     const candidates = await db
       .select({
@@ -134,6 +148,7 @@ export async function resolveList(
           eq(listMembers.userId, userId),
           inArray(listMembers.role, WRITE_ROLES),
           isNull(lists.archivedAt),
+          eq(lists.workspaceId, workspaceId),
         ),
       );
 
@@ -181,10 +196,18 @@ export async function resolveList(
   }
 
   if (opts.inboxFallback) {
+    // Inbox is now per-workspace (Phase 4.5 schema): one inbox per
+    // workspace, regardless of who owns the workspace. Find the
+    // Inbox bound to ctx.workspaceId.
     const inbox = await db
       .select({ id: lists.id, name: lists.name, emoji: lists.emoji })
       .from(lists)
-      .where(and(eq(lists.ownerId, userId), eq(lists.isInbox, true)))
+      .where(
+        and(
+          eq(lists.workspaceId, workspaceId),
+          eq(lists.isInbox, true),
+        ),
+      )
       .limit(1);
     const inboxRow = inbox[0];
     if (inboxRow) {

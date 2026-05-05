@@ -92,15 +92,30 @@ export async function listListsForUser(userId: string): Promise<ListWithCounts[]
     });
 }
 
-/** Whether the given user has any visibility on the list (owner or member). */
+/**
+ * Whether the given user has any visibility on the list (owner or
+ * member) AND the list is in the active workspace. Phase 4.5: every
+ * Mini App route resolves the active workspace context before
+ * calling this — pass it as `workspaceId`.
+ */
 export async function userCanReadList(
   userId: string,
   listId: string,
+  workspaceId: string,
 ): Promise<boolean> {
-  const member = await db.query.listMembers.findFirst({
-    where: and(eq(listMembers.listId, listId), eq(listMembers.userId, userId)),
-  });
-  return !!member;
+  const rows = await db
+    .select({ id: listMembers.id })
+    .from(listMembers)
+    .innerJoin(lists, eq(lists.id, listMembers.listId))
+    .where(
+      and(
+        eq(listMembers.listId, listId),
+        eq(listMembers.userId, userId),
+        eq(lists.workspaceId, workspaceId),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
 }
 
 /** Get a list by ID; returns undefined if missing or archived. */

@@ -23,7 +23,7 @@ import type { ExecResult } from "./_shared";
 
 export async function executeCompleteItem(
   input: unknown,
-  ctx: { userId: string },
+  ctx: { userId: string; workspaceId: string },
 ): Promise<ExecResult<CompleteItemOutput>> {
   const parsed = completeItemInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -44,7 +44,11 @@ export async function executeCompleteItem(
       return err(ERR.invalid_input, "Notes cannot be completed.");
     }
 
-    const allowed = await userCanWriteList(ctx.userId, current.listId);
+    const allowed = await userCanWriteList(
+      ctx.userId,
+      current.listId,
+      ctx.workspaceId,
+    );
     if (!allowed) {
       return err(ERR.forbidden, "You don't have access to that list.");
     }

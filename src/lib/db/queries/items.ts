@@ -6,7 +6,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { items, listMembers } from "@/lib/db/schema";
+import { items, listMembers, lists } from "@/lib/db/schema";
 import type { Item, ListRole, NewItem } from "@/lib/types";
 
 /** Roles allowed to mutate items in a list. Viewer is read-only. */
@@ -63,19 +63,30 @@ export async function archiveItem(id: string): Promise<Item | undefined> {
 
 /**
  * Membership predicate: does the user have write access (owner|editor)
- * to the given list? Used by every mutation tool executor and Mini App
- * mutation route.
+ * to the given list AND is the list in the given workspace? Used by
+ * every mutation tool executor and Mini App mutation route.
+ *
+ * Phase 4.5: workspace_id check guards against cross-workspace
+ * access — a user with multiple workspaces cannot mutate a list in
+ * the inactive workspace via a stale list_id.
  */
 export async function userCanWriteList(
   userId: string,
   listId: string,
+  workspaceId: string,
 ): Promise<boolean> {
-  const member = await db.query.listMembers.findFirst({
-    where: and(
-      eq(listMembers.listId, listId),
-      eq(listMembers.userId, userId),
-      inArray(listMembers.role, WRITE_ROLES),
-    ),
-  });
-  return !!member;
+  const rows = await db
+    .select({ id: listMembers.id })
+    .from(listMembers)
+    .innerJoin(lists, eq(lists.id, listMembers.listId))
+    .where(
+      and(
+        eq(listMembers.listId, listId),
+        eq(listMembers.userId, userId),
+        inArray(listMembers.role, WRITE_ROLES),
+        eq(lists.workspaceId, workspaceId),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
 }

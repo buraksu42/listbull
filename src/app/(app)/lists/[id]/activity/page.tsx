@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { ActivityList } from "@/components/activity/activity-list";
 import { ListSkeleton } from "@/components/shared/list-skeleton";
 import { getList, userCanReadList } from "@/lib/db/queries/lists";
+import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
 import { requireUser } from "@/lib/server/auth/require-user";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +35,8 @@ export default async function ActivityPage({
 
 async function ActivityScreen({ listId }: { listId: string }) {
   const user = await requireUser();
-  const canRead = await userCanReadList(user.id, listId);
+  const workspaceId = await resolveActiveWorkspaceId(user.id);
+  const canRead = await userCanReadList(user.id, listId, workspaceId);
   if (!canRead) notFound();
 
   const list = await getList(listId);

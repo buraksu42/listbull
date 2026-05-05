@@ -6,6 +6,7 @@ import {
   listItemsInList,
   userCanReadList,
 } from "@/lib/db/queries/lists";
+import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +25,8 @@ export async function GET(
 
   const { id } = await params;
 
-  const canRead = await userCanReadList(userId, id);
+  const workspaceId = await resolveActiveWorkspaceId(userId);
+  const canRead = await userCanReadList(userId, id, workspaceId);
   if (!canRead) {
     return NextResponse.json(
       { ok: false, error: { code: "not_found", message: "List not found" } },

@@ -24,7 +24,7 @@ import type { ExecResult } from "./_shared";
 
 export async function executeRestoreList(
   input: unknown,
-  ctx: { userId: string },
+  ctx: { userId: string; workspaceId: string },
 ): Promise<ExecResult<RestoreListOutput>> {
   const parsed = restoreListInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -33,7 +33,11 @@ export async function executeRestoreList(
   const { list_id } = parsed.data;
 
   const row = await db.query.lists.findFirst({
-    where: and(eq(lists.id, list_id), isNotNull(lists.archivedAt)),
+    where: and(
+      eq(lists.id, list_id),
+      eq(lists.workspaceId, ctx.workspaceId),
+      isNotNull(lists.archivedAt),
+    ),
   });
   if (!row) {
     return err(ERR.not_found, "No archived list found with that id.");

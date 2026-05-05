@@ -32,7 +32,7 @@ function normalizeUsername(raw: string): string {
 
 export async function executeCancelInvite(
   input: unknown,
-  ctx: { userId: string },
+  ctx: { userId: string; workspaceId: string },
 ): Promise<ExecResult<CancelInviteOutput>> {
   const parsed = cancelInviteInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -46,7 +46,7 @@ export async function executeCancelInvite(
   }
 
   const resolution = await resolveList(
-    ctx.userId,
+    ctx,
     { listId: list_id, listName: list_name },
     { inboxFallback: false },
   );
