@@ -39,6 +39,7 @@
     "react-hook-form": "^7.74.0",
     "server-only": "^0.0.1",
     "sonner": "^2.0.7",
+    "stripe": "^22.1.0",
     "tailwind-merge": "^3.5.0",
     "zod": "^4.4.1"
   },

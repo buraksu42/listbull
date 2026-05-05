@@ -21,22 +21,9 @@
  */
 import "server-only";
 
+import { checkTier } from "@/lib/billing/tier-check";
 import { env } from "@/lib/env";
-import type { TierCheckAction, TierCheckResult } from "@/lib/types";
-
-/**
- * Phase 4.5 stub. Replace with `import { checkTier } from "@/lib/billing/tier-check"`
- * once Billing-agent's track B1 ships. The stub always grants — Phase
- * 4.5's promise is "infrastructure wired, no enforcement."
- */
-async function checkTierStub(
-  workspaceId: string,
-  action: TierCheckAction,
-): Promise<TierCheckResult> {
-  void workspaceId;
-  void action;
-  return { ok: true };
-}
+import type { TierCheckAction } from "@/lib/types";
 
 /**
  * Run the tier check for a given workspace + action. Logs the
@@ -53,19 +40,18 @@ export async function enforceTier(
   workspaceId: string,
   action: TierCheckAction,
 ): Promise<TierEnforceResult> {
-  const decision = await checkTierStub(workspaceId, action);
+  const decision = await checkTier(workspaceId, action);
 
   // Always log so Phase 5's enforcement flip has historical data to
-  // audit before going live. Tag with "stub" to distinguish from
-  // post-B1 calls.
+  // audit before going live.
   if (decision.ok) {
     console.log(
-      "[tier-enforce: stub] allow",
+      "[tier-enforce] allow",
       JSON.stringify({ workspaceId, action: action.type }),
     );
   } else {
     console.log(
-      "[tier-enforce: stub] would-deny",
+      "[tier-enforce] would-deny",
       JSON.stringify({
         workspaceId,
         action: action.type,

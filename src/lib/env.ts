@@ -45,6 +45,20 @@ const serverSchema = z.object({
   // Phase 5 sets 'true' to actively reject 402.
   BILLING_ENFORCE: z.enum(["true", "false"]).default("false"),
 
+  // Phase 4.5: Stripe + Iyzico configuration. All optional — when
+  // unset, billing routes return 503 service_unavailable and the
+  // Mini App UI hides upgrade CTAs. Operators wire keys at deploy
+  // time via Dokploy env (never committed).
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PRICE_TEAM: z.string().optional(),
+  STRIPE_PRICE_WORKSPACE: z.string().optional(),
+
+  IYZICO_API_KEY: z.string().optional(),
+  IYZICO_SECRET_KEY: z.string().optional(),
+  IYZICO_BASE_URL: z.string().url().optional(),
+  IYZICO_WEBHOOK_SECRET: z.string().optional(),
+
   // Phase 4.5: license-verify gate (self-host Phase 6 prep). Default
   // 'false' so SaaS deployments are no-op; self-host operators set
   // 'true' once Phase 6 issuance lands.
