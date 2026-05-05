@@ -2,6 +2,10 @@
  * Architect-owned shared types. Frozen after Phase 1 except via Architect-agent invocation.
  * All entity types derived from Drizzle schema via $inferSelect / $inferInsert.
  * If a new shared type is needed, request via the agent contract — never declare equivalents elsewhere.
+ *
+ * Phase 4.5 additions live in dedicated modules — workspace.ts,
+ * billing.ts, bot.ts — and are re-exported below so consumers can
+ * keep `import { Workspace } from '@/lib/types'`.
  */
 import type {
   activityLog,
@@ -12,6 +16,46 @@ import type {
   messages,
   users,
 } from "@/lib/db/schema";
+
+// ─── Phase 4.5 module re-exports ────────────────────────────────────
+export type {
+  Workspace,
+  NewWorkspace,
+  WorkspaceTier,
+  WorkspaceMember,
+  NewWorkspaceMember,
+  WorkspaceRole,
+  WorkspaceSnapshot,
+  WorkspaceMemberSnapshot,
+  WorkspaceListItem,
+} from "./workspace";
+
+export type {
+  Subscription,
+  NewSubscription,
+  SubscriptionStatus,
+  BillingProvider,
+  BillingCustomer,
+  NewBillingCustomer,
+  TierLimits,
+  TierCheckAction,
+  TierCheckResult,
+  LicensePayload,
+  LicenseVerifyResult,
+} from "./billing";
+
+export { TIER_LIMITS } from "./billing";
+
+export type {
+  Bot,
+  NewBot,
+  WorkspaceBot,
+  NewWorkspaceBot,
+  BotUser,
+  NewBotUser,
+  BotPublic,
+  WorkspaceBotBinding,
+} from "./bot";
 
 // ─── User ───────────────────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
@@ -42,7 +86,7 @@ export type NewListInvite = typeof listInvites.$inferInsert;
 // ─── ActivityLog ────────────────────────────────────────────────────
 export type ActivityLog = typeof activityLog.$inferSelect;
 export type NewActivityLog = typeof activityLog.$inferInsert;
-export type ActivityEntityType = "item" | "list" | "member";
+export type ActivityEntityType = "item" | "list" | "member" | "workspace";
 export type ActivityAction =
   | "item_created"
   | "item_completed"
@@ -59,7 +103,13 @@ export type ActivityAction =
   | "list_restored"
   | "member_added"
   | "member_removed"
-  | "member_role_changed";
+  | "member_role_changed"
+  // ─── Phase 4.5: workspace-shell mutations ────────────────────────
+  | "workspace_created"
+  | "workspace_renamed"
+  | "workspace_member_added"
+  | "workspace_member_removed"
+  | "workspace_member_role_changed";
 
 // ─── Generic API envelope ───────────────────────────────────────────
 export type ApiOk<T> = { ok: true; data: T };

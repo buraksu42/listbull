@@ -220,6 +220,14 @@ function _coverage(a: ActivityAction): React.ReactNode {
     case "member_added":
     case "member_removed":
     case "member_role_changed":
+    // Phase 4.5 workspace-shell mutations — feed sentences land in
+    // Phase 5 workspace activity surface; for the per-list feed they
+    // never appear, so collapse to null here.
+    case "workspace_created":
+    case "workspace_renamed":
+    case "workspace_member_added":
+    case "workspace_member_removed":
+    case "workspace_member_role_changed":
       return null;
     default:
       return _exhaust(a);

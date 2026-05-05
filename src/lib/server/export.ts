@@ -59,6 +59,7 @@ export async function generateExportBundle(
       name: lists.name,
       emoji: lists.emoji,
       ownerId: lists.ownerId,
+      workspaceId: lists.workspaceId,
       isInbox: lists.isInbox,
       archivedAt: lists.archivedAt,
       createdAt: lists.createdAt,
