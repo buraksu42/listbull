@@ -31,6 +31,12 @@ import { executeUpdateMemberRole } from "./update-member-role";
 import { executeUpdateSettings } from "./update-settings";
 import { executeScheduleReminder } from "./schedule-reminder";
 import { executeAssignItem } from "./assign-item";
+import { executeSwitchWorkspace } from "./switch-workspace";
+import { executeListWorkspaces } from "./list-workspaces";
+import { executeUpdateWorkspace } from "./update-workspace";
+import { executeInviteToWorkspace } from "./invite-to-workspace";
+import { executeRemoveWorkspaceMember } from "./remove-workspace-member";
+import { executeSetItemAttributes } from "./set-item-attributes";
 import { ERR } from "./_shared";
 
 /**
@@ -101,6 +107,18 @@ async function routeCall(
       return await executeScheduleReminder(input, ctx);
     case "assign_item":
       return await executeAssignItem(input, ctx);
+    case "switch_workspace":
+      return await executeSwitchWorkspace(input, ctx);
+    case "list_workspaces":
+      return await executeListWorkspaces(input, ctx);
+    case "update_workspace":
+      return await executeUpdateWorkspace(input, ctx);
+    case "invite_to_workspace":
+      return await executeInviteToWorkspace(input, ctx);
+    case "remove_workspace_member":
+      return await executeRemoveWorkspaceMember(input, ctx);
+    case "set_item_attributes":
+      return await executeSetItemAttributes(input, ctx);
     default:
       return {
         ok: false,

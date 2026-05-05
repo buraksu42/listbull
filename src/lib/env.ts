@@ -40,6 +40,17 @@ const serverSchema = z.object({
   // Phase 4 · D2 (Inv-18): optional dedicated HMAC key for snapshot
   // URLs. When unset we fall back to BETTER_AUTH_SECRET.
   SNAPSHOT_SIGNING_KEY: z.string().min(32).optional(),
+
+  // Phase 4.5: tier-enforcement gate. Default 'false' (logs only);
+  // Phase 5 sets 'true' to actively reject 402.
+  BILLING_ENFORCE: z.enum(["true", "false"]).default("false"),
+
+  // Phase 4.5: license-verify gate (self-host Phase 6 prep). Default
+  // 'false' so SaaS deployments are no-op; self-host operators set
+  // 'true' once Phase 6 issuance lands.
+  LICENSE_VERIFY_ENABLED: z.enum(["true", "false"]).default("false"),
+  LICENSE_PUBLIC_KEY: z.string().optional(),
+  LICENSE_KEY: z.string().optional(),
 });
 
 const clientSchema = z.object({

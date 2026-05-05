@@ -322,6 +322,196 @@ export const restoreListOutputSchema = z.object({
 export type RestoreListInput = z.infer<typeof restoreListInputSchema>;
 export type RestoreListOutput = z.infer<typeof restoreListOutputSchema>;
 
+// ─── 6f. switch_workspace (Phase 4.5) ─────────────────────────────────
+//
+// Set the user's active workspace. Subsequent tool calls in the same
+// turn — and the user's default workspace until they switch again —
+// operate against this workspace.
+
+export const switchWorkspaceInputSchema = z
+  .object({
+    workspace_id: z.string().uuid().optional(),
+    workspace_name: z.string().min(1).max(120).optional(),
+  })
+  .refine(
+    (v) => v.workspace_id !== undefined || v.workspace_name !== undefined,
+    { message: "Either workspace_id or workspace_name is required" },
+  );
+
+export const switchWorkspaceOutputSchema = z.object({
+  workspace: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    slug: z.string(),
+    tier: z.enum(["free", "team", "workspace"]),
+    role: z.enum(["owner", "admin", "editor", "viewer", "guest"]),
+  }),
+});
+
+export type SwitchWorkspaceInput = z.infer<typeof switchWorkspaceInputSchema>;
+export type SwitchWorkspaceOutput = z.infer<typeof switchWorkspaceOutputSchema>;
+
+// ─── 6g. list_workspaces (Phase 4.5) ──────────────────────────────────
+//
+// Read-only enumeration of every workspace the user belongs to —
+// powers the workspace switcher dropdown in Mini App + the bot's
+// "hangi workspace'lerim var" answer.
+
+export const listWorkspacesInputSchema = z.object({});
+
+export const listWorkspacesOutputSchema = z.object({
+  workspaces: z.array(
+    z.object({
+      id: z.string().uuid(),
+      name: z.string(),
+      slug: z.string(),
+      tier: z.enum(["free", "team", "workspace"]),
+      is_personal: z.boolean(),
+      role: z.enum(["owner", "admin", "editor", "viewer", "guest"]),
+      member_count: z.number().int().nonnegative(),
+      list_count: z.number().int().nonnegative(),
+      is_active: z.boolean(),
+    }),
+  ),
+});
+
+export type ListWorkspacesInput = z.infer<typeof listWorkspacesInputSchema>;
+export type ListWorkspacesOutput = z.infer<typeof listWorkspacesOutputSchema>;
+
+// ─── 6h. update_workspace (Phase 4.5) ─────────────────────────────────
+//
+// Owner-only rename. The slug auto-regenerates from the new name; the
+// `tier` field stays read-only (changing tier requires a billing
+// event, owned by Billing-agent).
+
+export const updateWorkspaceInputSchema = z
+  .object({
+    workspace_id: z.string().uuid().optional(),
+    name: z.string().trim().min(1).max(120),
+  })
+  .refine((v) => v.name !== undefined, {
+    message: "name is required",
+  });
+
+export const updateWorkspaceOutputSchema = z.object({
+  workspace: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    slug: z.string(),
+  }),
+});
+
+export type UpdateWorkspaceInput = z.infer<typeof updateWorkspaceInputSchema>;
+export type UpdateWorkspaceOutput = z.infer<typeof updateWorkspaceOutputSchema>;
+
+// ─── 6i. invite_to_workspace (Phase 4.5) ──────────────────────────────
+//
+// Owner / admin invite a user to the active workspace. Phase 4.5
+// schema-only for shared workspaces (Team/Workspace tier) — Free
+// tier has only the Personal Workspace, so this tool returns
+// `tier_exceeded` log entries (and Phase 5 enforces). Mirrors
+// `share_list`'s deeplink + DM pattern.
+
+export const inviteToWorkspaceInputSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .min(1, "username is required")
+    .max(33, "username must be ≤32 chars (plus optional leading @)"),
+  role: z.enum(["admin", "editor", "viewer", "guest"]).default("editor"),
+});
+
+export const inviteToWorkspaceOutputSchema = z.object({
+  workspace: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    slug: z.string(),
+  }),
+  invitedUsername: z.string(),
+  role: z.enum(["admin", "editor", "viewer", "guest"]),
+  /**
+   * Phase 4.5 ships the schema; the actual invite-token + DM flow
+   * lands when shared workspaces become creatable in Phase 5. Until
+   * then this returns `pending_phase_5` for Free-tier callers; tier
+   * middleware logs the attempt.
+   */
+  status: z.enum(["invite_sent", "already_member", "pending_phase_5"]),
+  warnings: z.array(z.string()).optional(),
+});
+
+export type InviteToWorkspaceInput = z.infer<
+  typeof inviteToWorkspaceInputSchema
+>;
+export type InviteToWorkspaceOutput = z.infer<
+  typeof inviteToWorkspaceOutputSchema
+>;
+
+// ─── 6j. remove_workspace_member (Phase 4.5) ──────────────────────────
+
+export const removeWorkspaceMemberInputSchema = z
+  .object({
+    username: z.string().trim().min(1).max(64).optional(),
+    user_id: z.string().uuid().optional(),
+  })
+  .refine((v) => v.username !== undefined || v.user_id !== undefined, {
+    message: "Either username or user_id is required",
+  });
+
+export const removeWorkspaceMemberOutputSchema = z.object({
+  workspace_id: z.string().uuid(),
+  removed_user_id: z.string().uuid(),
+});
+
+export type RemoveWorkspaceMemberInput = z.infer<
+  typeof removeWorkspaceMemberInputSchema
+>;
+export type RemoveWorkspaceMemberOutput = z.infer<
+  typeof removeWorkspaceMemberOutputSchema
+>;
+
+// ─── 6k. set_item_attributes (Phase 4.5) ──────────────────────────────
+//
+// Set status / priority / tags on an existing item. Replaces ad-hoc
+// "blokladım", "yüksek öncelik" phrasings the LLM otherwise tries to
+// embed in item text. Tags are workspace-scoped vocabulary; the
+// executor enforces the 20-unique-tags-per-workspace cap.
+
+export const setItemAttributesInputSchema = z
+  .object({
+    item_id: z.string().uuid(),
+    status: z
+      .enum(["open", "in_progress", "blocked", "done"])
+      .optional(),
+    priority: z.enum(["low", "normal", "high"]).optional(),
+    tags: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
+  })
+  .refine(
+    (v) =>
+      v.status !== undefined ||
+      v.priority !== undefined ||
+      v.tags !== undefined,
+    {
+      message:
+        "At least one of status, priority, or tags must be supplied",
+    },
+  );
+
+export const setItemAttributesOutputSchema = z.object({
+  item: itemSnapshotSchema,
+  status: z.enum(["open", "in_progress", "blocked", "done"]),
+  priority: z.enum(["low", "normal", "high"]),
+  tags: z.array(z.string()),
+  changes: z.array(z.enum(["status", "priority", "tags"])),
+  warnings: z.array(z.string()).optional(),
+});
+
+export type SetItemAttributesInput = z.infer<
+  typeof setItemAttributesInputSchema
+>;
+export type SetItemAttributesOutput = z.infer<
+  typeof setItemAttributesOutputSchema
+>;
+
 // ─── 7a. list_members — read-only enumeration of a list's members ─────
 
 export const listMembersInputSchema = z
@@ -645,6 +835,13 @@ export const TOOL_NAMES = [
   "update_settings",
   "schedule_reminder",
   "assign_item",
+  // Phase 4.5: workspace + item-discipline tools
+  "switch_workspace",
+  "list_workspaces",
+  "update_workspace",
+  "invite_to_workspace",
+  "remove_workspace_member",
+  "set_item_attributes",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -930,6 +1127,99 @@ export const tools: readonly ToolDefinition[] = [
       "`not_found`, `invalid_input`.",
     inputSchema: assignItemInputSchema,
     outputSchema: assignItemOutputSchema,
+  },
+  {
+    name: "switch_workspace",
+    description:
+      "Switch the user's active workspace. Subsequent tool calls in " +
+      "the same turn — and the user's default workspace until they " +
+      "switch again — operate against the new workspace. Pass " +
+      "`workspace_id` (preferred) or `workspace_name`. Use when the " +
+      "user says 'iş workspace'ine geç' / 'switch to my Personal " +
+      "workspace' / 'change to <name>'. Caller must be a member of " +
+      "the target workspace. Inbox + Today view are workspace-scoped, " +
+      "so a switch changes what `list_lists` and `search_items` " +
+      "return.",
+    inputSchema: switchWorkspaceInputSchema,
+    outputSchema: switchWorkspaceOutputSchema,
+  },
+  {
+    name: "list_workspaces",
+    description:
+      "Enumerate every workspace the user belongs to, with role and " +
+      "member + list counts. Personal Workspace appears first, then " +
+      "by created_at. The active workspace has `is_active: true`. " +
+      "Use when the user asks 'hangi workspace'lerim var' / 'show " +
+      "my workspaces' / when disambiguating an ambiguous workspace " +
+      "reference. Read-only; no mutations.",
+    inputSchema: listWorkspacesInputSchema,
+    outputSchema: listWorkspacesOutputSchema,
+  },
+  {
+    name: "update_workspace",
+    description:
+      "Rename the active workspace. OWNER-ONLY. Pass `name` (1-120). " +
+      "The slug auto-regenerates. Tier change is NOT supported via " +
+      "this tool — that flows through billing. Use when the user " +
+      "says 'workspace adını <X> yap' / 'rename my workspace to <X>'. " +
+      "Personal Workspace can be renamed freely; the `is_personal` " +
+      "flag stays.",
+    inputSchema: updateWorkspaceInputSchema,
+    outputSchema: updateWorkspaceOutputSchema,
+  },
+  {
+    name: "invite_to_workspace",
+    description:
+      "Invite a Telegram user to the active workspace as `admin` " +
+      "(Workspace tier only), `editor` (default), `viewer`, or " +
+      "`guest`. OWNER + ADMIN can call. Operates on the user's " +
+      "ACTIVE workspace — no list_id / list_name argument; switch " +
+      "workspaces first if needed. Pass `username` (with or without " +
+      "leading @ — case is normalized).\n\n" +
+      "Phase 4.5: Free tier users can call this against their " +
+      "Personal Workspace but the executor returns " +
+      "`pending_phase_5` since multi-member workspaces require " +
+      "Team or Workspace tier; tier middleware logs the attempt. " +
+      "Phase 5 enforces tier limits and ships the actual invite-" +
+      "token + DM flow.\n\n" +
+      "Distinct from `share_list` which adds a member to a SINGLE " +
+      "list. Workspace-level invites grant access to ALL lists in " +
+      "the workspace via the workspace_members membership.",
+    inputSchema: inviteToWorkspaceInputSchema,
+    outputSchema: inviteToWorkspaceOutputSchema,
+  },
+  {
+    name: "remove_workspace_member",
+    description:
+      "Remove a member from the active workspace. OWNER-ONLY. " +
+      "Cascades: the removed user loses access to every list in " +
+      "the workspace; their list_members rows are deleted; items " +
+      "they were assigned to have `assignee_id` cleared. Pass " +
+      "`username` (Telegram, with or without @) or `user_id` " +
+      "(UUID). Cannot remove the workspace owner (use " +
+      "`update_workspace` to transfer ownership first).",
+    inputSchema: removeWorkspaceMemberInputSchema,
+    outputSchema: removeWorkspaceMemberOutputSchema,
+  },
+  {
+    name: "set_item_attributes",
+    description:
+      "Set status / priority / tags on an existing item. Use when " +
+      "the user says 'X'i blokla' (status='blocked'), 'yüksek " +
+      "öncelik' (priority='high'), 'etiket ekle: alışveriş' (add " +
+      "tag), 'tamamlandı işaretle' (status='done' — equivalent to " +
+      "complete_item with is_done=true).\n\n" +
+      "Status values: 'open' | 'in_progress' | 'blocked' | 'done'. " +
+      "Setting status='done' also flips is_done=true (dual-write " +
+      "for backward compat). Priority: 'low' | 'normal' | 'high' " +
+      "(default 'normal'). Tags: workspace-scoped vocabulary, max " +
+      "10 per item, max 20 unique tags per workspace (executor " +
+      "enforces; rejects 21st with `tag_limit_exceeded`). Tags " +
+      "REPLACE the existing array; pass [] to clear.\n\n" +
+      "At least one of status/priority/tags must be supplied. " +
+      "Output `changes` lists fields that actually changed.",
+    inputSchema: setItemAttributesInputSchema,
+    outputSchema: setItemAttributesOutputSchema,
   },
 ] as const;
 
