@@ -24,6 +24,7 @@ import { executeUpdateList } from "./update-list";
 import { executeDeleteList } from "./delete-list";
 import { executeRestoreList } from "./restore-list";
 import { executeShareList } from "./share-list";
+import { executeCancelInvite } from "./cancel-invite";
 import { executeListMembers } from "./list-members";
 import { executeRemoveMember } from "./remove-member";
 import { executeUpdateMemberRole } from "./update-member-role";
@@ -74,6 +75,8 @@ async function routeCall(
       return await executeRestoreList(input, ctx);
     case "share_list":
       return await executeShareList(input, ctx);
+    case "cancel_invite":
+      return await executeCancelInvite(input, ctx);
     case "list_members":
       return await executeListMembers(input, ctx);
     case "remove_member":

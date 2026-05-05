@@ -502,6 +502,46 @@ export const shareListOutputSchema = z.object({
 export type ShareListInput = z.infer<typeof shareListInputSchema>;
 export type ShareListOutput = z.infer<typeof shareListOutputSchema>;
 
+// ─── 7d. cancel_invite — revoke a PENDING invite (owner-only) ─────────
+//
+// Closes the gap surfaced when users said "ayselin davetini iptal et":
+// share_list creates an invite row, but until cancel_invite there was
+// no LLM-mediated way to delete it. Owner-only. Operates only on
+// PENDING (non-accepted) invites — once accepted, the user is a list
+// member and the LLM should call `remove_member` instead.
+//
+// Identification: (list_id|list_name) + username. The username is
+// lower-cased + leading-@ stripped before lookup so "Aysel", "@aysel",
+// "aysel" all match the stored row. If a stale ACCEPTED row exists
+// the executor returns `invite_already_accepted` so the LLM can pivot
+// to remove_member.
+
+export const cancelInviteInputSchema = z
+  .object({
+    username: z
+      .string()
+      .trim()
+      .min(1, "username is required")
+      .max(33, "username must be ≤32 chars (plus optional leading @)"),
+    list_id: z.string().uuid().optional(),
+    list_name: z.string().min(1).max(200).optional(),
+  })
+  .refine((v) => v.list_id !== undefined || v.list_name !== undefined, {
+    message: "one of list_id or list_name must be supplied",
+    path: ["list_id"],
+  });
+
+export const cancelInviteOutputSchema = z.object({
+  list: listLiteSchema,
+  /** Lowered, leading-@ stripped username whose invite was canceled. */
+  invitedUsername: z.string(),
+  /** Echoed for symmetry with share_list output; never log/surface. */
+  cancelledInviteId: z.string().uuid(),
+});
+
+export type CancelInviteInput = z.infer<typeof cancelInviteInputSchema>;
+export type CancelInviteOutput = z.infer<typeof cancelInviteOutputSchema>;
+
 // ─── 8. schedule_reminder (Phase 3) ─────────────────────────────────
 //
 // Thin semantic wrapper over `update_item` for the due_at column.
@@ -598,6 +638,7 @@ export const TOOL_NAMES = [
   "delete_list",
   "restore_list",
   "share_list",
+  "cancel_invite",
   "list_members",
   "remove_member",
   "update_member_role",
@@ -766,6 +807,23 @@ export const tools: readonly ToolDefinition[] = [
       "list before calling.",
     inputSchema: shareListInputSchema,
     outputSchema: shareListOutputSchema,
+  },
+  {
+    name: "cancel_invite",
+    description:
+      "Revoke a PENDING invite that share_list created earlier (OWNER-" +
+      "ONLY). Identifies the invite by `list_id` (or `list_name`) plus " +
+      "`username` (Telegram handle, with or without leading @ — case " +
+      "normalized). Use this when the user says 'Aysel'in davetini iptal " +
+      "et' / 'cancel the invite I sent to @ali' / 'davet linkini geri al'. " +
+      "Only pending (non-accepted) invites can be canceled. If the " +
+      "invitee has ALREADY ACCEPTED, the executor returns " +
+      "`invite_already_accepted` — pivot to `remove_member` instead and " +
+      "tell the user 'Aysel daveti zaten kabul etmişti, listeden çıkardım'. " +
+      "Common error envelopes: `forbidden` (caller not owner), " +
+      "`not_found` (no pending invite), `ambiguous_list`, `invite_already_accepted`.",
+    inputSchema: cancelInviteInputSchema,
+    outputSchema: cancelInviteOutputSchema,
   },
   {
     name: "list_members",
