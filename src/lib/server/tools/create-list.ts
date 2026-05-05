@@ -24,7 +24,7 @@ import type { ExecResult } from "./_shared";
 
 export async function executeCreateList(
   input: unknown,
-  ctx: { userId: string },
+  ctx: { userId: string; workspaceId: string },
 ): Promise<ExecResult<CreateListOutput>> {
   const parsed = createListInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -45,6 +45,7 @@ export async function executeCreateList(
         name,
         emoji: finalEmoji,
         ownerId: ctx.userId,
+        workspaceId: ctx.workspaceId,
         isInbox: false,
       })
       .returning();

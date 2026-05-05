@@ -26,6 +26,7 @@ import type { Context } from "grammy";
 import { env } from "@/lib/env";
 import { getRecentMessages, insertMessages } from "@/lib/db/queries/messages";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
+import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
 import { sliceForContext } from "@/lib/ai/conversation";
 import { forwardedMessagePrompt } from "@/lib/ai/prompts/forwarded";
 import {
@@ -209,6 +210,13 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // Persist user message + invoke LLM.
   await insertMessages([userMessageRow]);
 
+  // Resolve the user's active workspace BEFORE the LLM turn so every
+  // tool call routes to the correct workspace. Phase 5 adds a bot-aware
+  // overlay (incoming bot ID overrides users.active_workspace_id when
+  // the bot is workspace-bound) — for Phase 4.5 the default platform
+  // bot serves all workspaces, so this is the only resolution path.
+  const workspaceId = await resolveActiveWorkspaceId(user.id);
+
   let assistantText = "";
   let persisted: ConversationMessage[] = [];
   let toolCalls: ToolCall[] = [];
@@ -223,7 +231,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
       },
       apiKey,
       model: user.llmModel,
-      toolDispatcher: createToolDispatcher({ userId: user.id }),
+      toolDispatcher: createToolDispatcher({ userId: user.id, workspaceId }),
     });
     assistantText = result.assistantText;
     persisted = result.persistedMessages;
@@ -410,6 +418,10 @@ async function handleForwardedMessage(args: {
     forwardedText,
   });
 
+  // Same workspace resolution as the regular text path — forwarded
+  // messages target the user's currently-active workspace.
+  const workspaceId = await resolveActiveWorkspaceId(user.id);
+
   let assistantText = "";
   let persisted: ConversationMessage[] = [];
 
@@ -423,7 +435,7 @@ async function handleForwardedMessage(args: {
       },
       apiKey,
       model: user.llmModel,
-      toolDispatcher: createToolDispatcher({ userId: user.id }),
+      toolDispatcher: createToolDispatcher({ userId: user.id, workspaceId }),
     });
     assistantText = result.assistantText;
     persisted = result.persistedMessages;

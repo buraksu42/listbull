@@ -50,7 +50,10 @@ vi.mock("@/lib/db/client", () => {
 import { createToolDispatcher } from "@/lib/server/tools/dispatcher";
 import type { ToolName } from "@/lib/ai/tools";
 
-const ctx = { userId: "00000000-0000-0000-0000-000000000001" };
+const ctx = {
+  userId: "00000000-0000-0000-0000-000000000001",
+  workspaceId: "00000000-0000-0000-0000-000000000002",
+};
 
 const TOOL_NAMES: ToolName[] = [
   "create_item",

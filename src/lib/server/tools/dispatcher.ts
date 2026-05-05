@@ -34,12 +34,24 @@ import { executeAssignItem } from "./assign-item";
 import { ERR } from "./_shared";
 
 /**
+ * Per-tool execution context. `workspaceId` is the user's currently-
+ * active workspace, resolved by the dispatcher caller (handle-message
+ * for bot, route handler for Mini App) before each LLM turn.
+ *
+ * Phase 4.5: every executor reads `workspaceId` to scope queries.
+ * Phase 5 adds bot-aware overlay (incoming bot ID → bound workspace
+ * → ctx.workspaceId override).
+ */
+export type ExecutorCtx = {
+  userId: string;
+  workspaceId: string;
+};
+
+/**
  * Build a per-user dispatcher. Backend's bot router calls this once per
  * Telegram update and passes the dispatcher into `respond()`.
  */
-export function createToolDispatcher(ctx: {
-  userId: string;
-}): ToolDispatcher {
+export function createToolDispatcher(ctx: ExecutorCtx): ToolDispatcher {
   return async function dispatch(call: ToolCall): Promise<ToolResult> {
     const { id, name, input } = call;
     const output = await routeCall(name as ToolName, input, ctx);
@@ -50,7 +62,7 @@ export function createToolDispatcher(ctx: {
 async function routeCall(
   name: ToolName | string,
   input: unknown,
-  ctx: { userId: string },
+  ctx: ExecutorCtx,
 ): Promise<unknown> {
   switch (name) {
     case "create_item":

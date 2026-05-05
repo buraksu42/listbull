@@ -2,6 +2,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { items, listMembers, lists } from "@/lib/db/schema";
+import { ensurePersonalWorkspace } from "./workspaces";
 import type { Item, List, NewList } from "@/lib/types";
 
 /** A list row with active item counts attached — used for the lists overview. */
@@ -11,13 +12,27 @@ export type ListWithCounts = List & {
 };
 
 /**
- * Ensure the user has an Inbox list. Idempotent — only creates one if missing.
- * Phase 1: called from /start command and any first-touch entry point.
+ * Ensure the user has a Personal Workspace AND an Inbox list inside
+ * it. Idempotent on both — only creates what's missing. Phase 1:
+ * called from /start command and any first-touch entry point.
+ *
+ * Phase 4.5 retrofit: the Inbox now lives inside the user's Personal
+ * Workspace (one Inbox per workspace, per
+ * `lists_workspace_inbox_unique`). `ensurePersonalWorkspace` runs
+ * first to guarantee the workspace exists; the Inbox lookup keys off
+ * `(workspace_id, is_inbox = true)` rather than `(owner_id, is_inbox =
+ * true)` so additional shared workspaces can each have their own
+ * Inbox without clashing with the user's personal one.
  */
 export async function ensureInbox(userId: string): Promise<List> {
+  const workspace = await ensurePersonalWorkspace(userId);
+
   return db.transaction(async (tx) => {
     const existing = await tx.query.lists.findFirst({
-      where: and(eq(lists.ownerId, userId), eq(lists.isInbox, true)),
+      where: and(
+        eq(lists.workspaceId, workspace.id),
+        eq(lists.isInbox, true),
+      ),
     });
     if (existing) return existing;
 
@@ -25,6 +40,7 @@ export async function ensureInbox(userId: string): Promise<List> {
       name: "Inbox",
       emoji: "📥",
       ownerId: userId,
+      workspaceId: workspace.id,
       isInbox: true,
     };
     const [created] = await tx.insert(lists).values(insertValues).returning();
