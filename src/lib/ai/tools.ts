@@ -353,6 +353,56 @@ export const listMembersOutputSchema = z.object({
 export type ListMembersInput = z.infer<typeof listMembersInputSchema>;
 export type ListMembersOutput = z.infer<typeof listMembersOutputSchema>;
 
+// ─── 7a2. update_settings — let the user change their preferences via chat ─
+//
+// Mirrors the PATCH /api/settings shape but exposed as a bot tool so
+// users without easy Mini App access can fix their timezone/locale/etc.
+// from the chat. BYOK key updates intentionally NOT supported here —
+// pasting an API key into a Telegram chat persists in conversation
+// history and is a security smell. Direct users to the Mini App
+// settings page for that.
+
+export const updateSettingsInputSchema = z
+  .object({
+    locale: z.enum(["tr", "en"]).optional(),
+    timezone: z
+      .string()
+      .min(2)
+      .max(64)
+      .regex(/^[A-Za-z][A-Za-z0-9_+\-/]+$/, {
+        message: "timezone must be an IANA name like Europe/Istanbul",
+      })
+      .optional(),
+    llm_model: z
+      .enum([
+        "anthropic/claude-haiku-4.5",
+        "anthropic/claude-sonnet-4",
+        "anthropic/claude-opus-4.7",
+        "google/gemini-2.5-flash",
+        "google/gemini-2.5-pro",
+        "openai/gpt-4o-mini",
+      ])
+      .optional(),
+    notifications_enabled: z.boolean().optional(),
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), {
+    message:
+      "At least one of locale, timezone, llm_model, or notifications_enabled must be supplied",
+  });
+
+export const updateSettingsOutputSchema = z.object({
+  locale: z.enum(["tr", "en"]),
+  timezone: z.string(),
+  llm_model: z.string(),
+  notifications_enabled: z.boolean(),
+  changes: z.array(
+    z.enum(["locale", "timezone", "llm_model", "notifications_enabled"]),
+  ),
+});
+
+export type UpdateSettingsInput = z.infer<typeof updateSettingsInputSchema>;
+export type UpdateSettingsOutput = z.infer<typeof updateSettingsOutputSchema>;
+
 // ─── 7b. remove_member — kick a member off a shared list (owner-only) ─
 
 export const removeMemberInputSchema = z
@@ -551,6 +601,7 @@ export const TOOL_NAMES = [
   "list_members",
   "remove_member",
   "update_member_role",
+  "update_settings",
   "schedule_reminder",
   "assign_item",
 ] as const;
@@ -757,6 +808,23 @@ export const tools: readonly ToolDefinition[] = [
       "or restore writes ('Ali'ye düzenleme izni ver').",
     inputSchema: updateMemberRoleInputSchema,
     outputSchema: updateMemberRoleOutputSchema,
+  },
+  {
+    name: "update_settings",
+    description:
+      "Change the calling user's preferences. Supported fields: " +
+      "`locale` ('tr' | 'en'), `timezone` (IANA name like 'Europe/" +
+      "Istanbul' / 'America/New_York'), `llm_model` (preset list), " +
+      "`notifications_enabled` (boolean — when false, reminder DMs are " +
+      "suppressed). At least one must be supplied. Use this when the " +
+      "user says 'saat dilimi İstanbul olsun' / 'use Istanbul time' / " +
+      "'set my timezone' / 'change to English' / 'turn off reminders'. " +
+      "BYOK API key cannot be set this way (security: chat history " +
+      "would persist the secret) — direct the user to the Mini App " +
+      "settings page for that. Output `changes` lists fields that " +
+      "actually changed; use it to phrase a precise confirmation.",
+    inputSchema: updateSettingsInputSchema,
+    outputSchema: updateSettingsOutputSchema,
   },
   {
     name: "schedule_reminder",

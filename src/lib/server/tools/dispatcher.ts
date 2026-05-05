@@ -27,6 +27,7 @@ import { executeShareList } from "./share-list";
 import { executeListMembers } from "./list-members";
 import { executeRemoveMember } from "./remove-member";
 import { executeUpdateMemberRole } from "./update-member-role";
+import { executeUpdateSettings } from "./update-settings";
 import { executeScheduleReminder } from "./schedule-reminder";
 import { executeAssignItem } from "./assign-item";
 import { ERR } from "./_shared";
@@ -79,6 +80,8 @@ async function routeCall(
       return await executeRemoveMember(input, ctx);
     case "update_member_role":
       return await executeUpdateMemberRole(input, ctx);
+    case "update_settings":
+      return await executeUpdateSettings(input, ctx);
     case "schedule_reminder":
       return await executeScheduleReminder(input, ctx);
     case "assign_item":
