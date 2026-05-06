@@ -31,6 +31,7 @@ import {
   listWorkspacesForUser,
   resolveActiveWorkspaceId,
 } from "@/lib/db/queries/workspaces";
+import { recordLlmUsage } from "@/lib/db/queries/llm-usage";
 import { sliceForContext } from "@/lib/ai/conversation";
 import { forwardedMessagePrompt } from "@/lib/ai/prompts/forwarded";
 import {
@@ -164,9 +165,11 @@ export async function handleMessage(ctx: Context): Promise<void> {
   const workspaceId = await resolveActiveWorkspaceId(user.id);
 
   let apiKey: string | null = null;
+  let keySource: "user" | "workspace" | "operator" | null = null;
   if (user.openrouterApiKeyEncrypted) {
     try {
       apiKey = decrypt(user.openrouterApiKeyEncrypted);
+      keySource = "user";
     } catch {
       // Key blob is unreadable — most likely ENV_KEY rotated.
       await ctx.reply(copy.keyDecryptError);
@@ -179,6 +182,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
     if (orgKeyEnc) {
       try {
         apiKey = decrypt(orgKeyEnc);
+        keySource = "workspace";
       } catch {
         // Org-key blob unreadable — log + fall through to operator
         // fallback / noKey. Workspace admin must rotate.
@@ -192,9 +196,10 @@ export async function handleMessage(ctx: Context): Promise<void> {
 
   if (apiKey === null && env.OPENROUTER_API_KEY) {
     apiKey = env.OPENROUTER_API_KEY;
+    keySource = "operator";
   }
 
-  if (apiKey === null) {
+  if (apiKey === null || keySource === null) {
     await ctx.reply(copy.noKey);
     return;
   }
@@ -210,6 +215,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
       ctx,
       user,
       apiKey,
+      keySource,
       forwardedFrom: forward.forwardedFrom,
       forwardedText: text,
       copy,
@@ -280,6 +286,21 @@ export async function handleMessage(ctx: Context): Promise<void> {
     assistantText = result.assistantText;
     persisted = result.persistedMessages;
     toolCalls = result.toolCalls;
+
+    // Phase 7: persist LLM usage telemetry. Best-effort — failures
+    // here mustn't block the user-visible reply path.
+    try {
+      await recordLlmUsage({
+        userId: user.id,
+        workspaceId,
+        model: user.llmModel,
+        promptTokens: result.usage.promptTokens,
+        completionTokens: result.usage.completionTokens,
+        keySource,
+      });
+    } catch (err) {
+      console.warn("[bot/handle-message] recordLlmUsage failed", err);
+    }
   } catch (error) {
     console.error("[bot/handle-message] respond() threw", error);
     await ctx.reply(copy.transientError);
@@ -427,13 +448,22 @@ async function handleForwardedMessage(args: {
   ctx: Context;
   user: User;
   apiKey: string;
+  keySource: "user" | "workspace" | "operator";
   forwardedFrom: string;
   forwardedText: string;
   copy: (typeof COPY)[keyof typeof COPY];
   chatId: number;
 }): Promise<void> {
-  const { ctx, user, apiKey, forwardedFrom, forwardedText, copy, chatId } =
-    args;
+  const {
+    ctx,
+    user,
+    apiKey,
+    keySource,
+    forwardedFrom,
+    forwardedText,
+    copy,
+    chatId,
+  } = args;
 
   // Persist the synthesized user message immediately. The LLM call below
   // intentionally does NOT include history (forwarded messages are
@@ -492,6 +522,23 @@ async function handleForwardedMessage(args: {
     });
     assistantText = result.assistantText;
     persisted = result.persistedMessages;
+
+    // Phase 7: persist LLM usage telemetry (best-effort).
+    try {
+      await recordLlmUsage({
+        userId: user.id,
+        workspaceId,
+        model: user.llmModel,
+        promptTokens: result.usage.promptTokens,
+        completionTokens: result.usage.completionTokens,
+        keySource,
+      });
+    } catch (err) {
+      console.warn(
+        "[bot/handle-message] forwarded recordLlmUsage failed",
+        err,
+      );
+    }
   } catch (error) {
     console.error("[bot/handle-message] forwarded respond() threw", error);
     await ctx.reply(copy.transientError);

@@ -458,6 +458,49 @@ export const workspaceBots = pgTable(
   ],
 );
 
+// ─── llm_usage (Phase 7) ────────────────────────────────────────────
+//
+// Per-turn LLM token usage telemetry. respond.ts records one row per
+// LLM call. Powers the workspace admin dashboard "spend" surface +
+// future per-user / per-workspace cost-cap features (Phase 7.5+).
+//
+// Cost stored as integer micro-USD (cost_usd_micro) — cents × 10000 —
+// to avoid float drift across aggregates. Workspace admin reads
+// SUM(cost_usd_micro) / 1_000_000 for display.
+export const llmUsage = pgTable(
+  "llm_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    /** Provider model id, e.g. 'anthropic/claude-haiku-4.5'. */
+    model: text("model").notNull(),
+    promptTokens: integer("prompt_tokens").notNull(),
+    completionTokens: integer("completion_tokens").notNull(),
+    /** Cost in micro-USD (cents × 10000). 0 when provider didn't bill. */
+    costUsdMicro: integer("cost_usd_micro").notNull().default(0),
+    /** Where the LLM key came from for this turn. */
+    keySource: text("key_source").notNull(), // 'user' | 'workspace' | 'operator'
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("llm_usage_workspace_recent_idx").on(
+      t.workspaceId,
+      sql`${t.createdAt} desc`,
+    ),
+    index("llm_usage_user_recent_idx").on(
+      t.userId,
+      sql`${t.createdAt} desc`,
+    ),
+  ],
+);
+
 // ─── licenses (Phase 6) ─────────────────────────────────────────────
 //
 // Self-host license records. SaaS-side: each issued license gets a

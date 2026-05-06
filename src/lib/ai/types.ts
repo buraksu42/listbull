@@ -81,4 +81,14 @@ export type RespondOutput = {
   assistantText: string;
   toolCalls: ToolCall[];
   persistedMessages: import("@/lib/types").ConversationMessage[];
+  /**
+   * Phase 7: cumulative token usage across all round-trips this
+   * turn. Sum of every Anthropic response's `usage.input_tokens` /
+   * `output_tokens`. Backend writes one llm_usage row per respond
+   * call carrying these aggregates + the model + key source.
+   */
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+  };
 };

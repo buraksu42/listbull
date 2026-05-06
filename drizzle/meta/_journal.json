@@ -36,6 +36,13 @@
       "when": 1778072386105,
       "tag": "0004_stale_silhouette",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778077354258,
+      "tag": "0005_mean_raider",
+      "breakpoints": true
     }
   ]
 }

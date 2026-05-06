@@ -76,6 +76,7 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
       persistedMessages: [
         { role: "assistant", content: NO_KEY_SENTINEL },
       ],
+      usage: { promptTokens: 0, completionTokens: 0 },
     };
   }
 
@@ -109,6 +110,11 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
   const persisted: ConversationMessage[] = [];
   const toolCallsSeen: ToolCall[] = [];
 
+  // Phase 7: cumulative token usage across every round-trip in this
+  // respond() call. Backend writes one llm_usage row per call.
+  let cumulativePrompt = 0;
+  let cumulativeCompletion = 0;
+
   let lastAssistantText = "";
 
   for (let round = 0; round < MAX_TOOL_ROUNDTRIPS; round++) {
@@ -119,6 +125,17 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
       tools: anthropicTools,
       messages: buffer,
     });
+
+    // Anthropic's response carries `usage.input_tokens` /
+    // `output_tokens`. OpenRouter's Anthropic-compat endpoint
+    // mirrors the shape. Defensive: handle missing/zero fields.
+    const usage = (response as unknown as {
+      usage?: { input_tokens?: number; output_tokens?: number };
+    }).usage;
+    if (usage) {
+      cumulativePrompt += usage.input_tokens ?? 0;
+      cumulativeCompletion += usage.output_tokens ?? 0;
+    }
 
     const { textParts, toolUseBlocks } = splitContent(response.content);
     const assistantText = textParts.join("\n").trim();
@@ -148,6 +165,10 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
         assistantText,
         toolCalls: toolCallsSeen,
         persistedMessages: persisted,
+        usage: {
+          promptTokens: cumulativePrompt,
+          completionTokens: cumulativeCompletion,
+        },
       };
     }
 
@@ -195,6 +216,10 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
         assistantText: lastAssistantText,
         toolCalls: toolCallsSeen,
         persistedMessages: persisted,
+        usage: {
+          promptTokens: cumulativePrompt,
+          completionTokens: cumulativeCompletion,
+        },
       };
     }
   }
@@ -208,6 +233,10 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
     assistantText: fallback,
     toolCalls: toolCallsSeen,
     persistedMessages: persisted,
+    usage: {
+      promptTokens: cumulativePrompt,
+      completionTokens: cumulativeCompletion,
+    },
   };
 }
 
