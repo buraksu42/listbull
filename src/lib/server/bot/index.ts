@@ -15,28 +15,46 @@ import { decrypt } from "@/lib/server/encryption";
 import { env } from "@/lib/env";
 
 /**
- * Bot instance pool. Phase 5 multi-bot support — each registered
- * Telegram bot (default platform bot + workspace-tier white-label
- * bots) gets its own grammY Bot instance with the same handler set.
+ * Bot instance pool with LRU eviction (Phase 5.5).
  *
  * Lookup keys:
- *   - "default" → the platform bot (env.TELEGRAM_BOT_TOKEN)
- *   - <bot_id_uuid> → a workspace's white-label bot from the `bots` table
+ *   - "default" → platform bot (env.TELEGRAM_BOT_TOKEN). Pinned —
+ *     never evicted; it's the highest-traffic instance.
+ *   - <bot_id_uuid> → white-label bot from the `bots` table
  *
- * Init is async + cached: first request per key awaits bot.init();
- * subsequent requests return the cached instance.
+ * Each grammY instance holds ~5MB. With LRU bounded at 50 hot
+ * instances, peak memory ~250MB regardless of how many white-label
+ * bots exist. Cold bots get re-initialized lazily on the next
+ * webhook hit (init = single getMe round-trip, ~50ms).
  *
- * Memory profile: each grammY instance holds ~5MB. Phase 5 cap (15
- * white-label bots × 100 paying customers ≈ 1500 instances) would
- * be ~7.5GB if we keep them all hot. For Phase 5 launch we cache
- * indefinitely; Phase 6+ adds LRU eviction (out of scope here).
+ * Map iteration follows insertion order; we re-insert on access to
+ * bump entries to MRU position. The oldest non-default key is the
+ * eviction candidate when we hit POOL_CAP.
  *
- * Order matters: slash commands are registered FIRST, then the catch-
- * all `message:text` handler. grammY's `bot.command()` filter takes
- * priority over `bot.on("message:text", ...)`.
+ * Order matters in handler registration: slash commands FIRST, then
+ * the catch-all `message:text`. grammY's `bot.command()` filter
+ * takes priority over `bot.on("message:text", ...)`.
  */
+const POOL_CAP = 50;
+
 const cached = new Map<string, Bot>();
 const initPromises = new Map<string, Promise<Bot>>();
+
+function bumpLru(key: string): void {
+  const v = cached.get(key);
+  if (v === undefined) return;
+  // Re-insert moves to MRU position.
+  cached.delete(key);
+  cached.set(key, v);
+}
+
+function evictOldest(): void {
+  for (const key of cached.keys()) {
+    if (key === "default") continue;
+    cached.delete(key);
+    return;
+  }
+}
 
 /**
  * Get the default platform bot (env-token). Maintained as the legacy
@@ -64,7 +82,10 @@ export async function getBotById(botId: string): Promise<Bot | null> {
 
 async function getBotByKey(key: string): Promise<Bot> {
   const existing = cached.get(key);
-  if (existing) return existing;
+  if (existing) {
+    bumpLru(key);
+    return existing;
+  }
   const inFlight = initPromises.get(key);
   if (inFlight) return inFlight;
 
@@ -73,6 +94,7 @@ async function getBotByKey(key: string): Promise<Bot> {
     const bot = new Bot(token);
     registerHandlers(bot);
     await bot.init();
+    if (cached.size >= POOL_CAP) evictOldest();
     cached.set(key, bot);
     return bot;
   })();
