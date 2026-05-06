@@ -15,38 +15,79 @@ DB, the data stays yours.
 
 ## Features
 
-- **Conversational item capture** — natural language → action items via
-  9 LLM tools (`create_item`, `search_items`, `update_item`,
-  `complete_item`, `delete_item`, `list_lists`, `share_list`,
-  `schedule_reminder`, `assign_item`).
-- **Forwarded message extraction** — forward any Telegram message; the
-  bot extracts up to 20 distinct action items in one round-trip.
+### Core (Phase 1–4)
+- **Conversational item capture** — natural language → action items.
+- **Forwarded message extraction** — forward any Telegram message;
+  the bot extracts up to 20 distinct action items in one round-trip.
 - **Inline mode** — `@listbull_bot <query>` in any chat surfaces your
   10 most-recent matching items, deeplinkable.
 - **Shareable list snapshots** — HMAC-signed read-only URLs (default
-  30-day expiry) for any list. No DB-stored snapshot rows; the URL is
-  the contract.
+  30-day expiry).
 - **Cross-account sharing** — owner / editor / viewer roles, real-time
   invite acceptance, full activity log per list.
-- **Audit log + 30-day restore** — owner-only `/lists/[id]/audit` page;
+- **Audit log + 30-day restore** — `/lists/[id]/audit` page;
   any deleted item ≤30 days old is restorable in-place from
   `payload_before`.
-- **Reminders** — natural-language scheduling (`schedule_reminder` tool
-  + per-minute cron container). Idempotent dispatch; persistent-failure
-  detection.
-- **TR + EN at launch** — 151 keys parity (Inv-19 enforced via Vitest).
-  Bot replies follow the user's `language_code`; LLM auto-detects mixed
-  input.
-- **Full data export** — `Settings → Download my data` returns a single
-  JSON bundle (lists, items, activity, messages — caller-only filter,
-  Inv-20). Optional Hetzner Object Storage signed URL when configured.
+- **Reminders** — natural-language scheduling + per-minute cron.
+- **TR + EN at launch** — 151+ keys parity (Inv-19 enforced via Vitest).
+- **Full data export** — `Settings → Download my data` returns JSON
+  bundle. Optional Hetzner Object Storage signed URL when configured.
+- **BYOK encryption-at-rest** — OpenRouter API key encrypted with
+  AES-256-GCM. Plaintext ephemeral, never logged.
+
+### Workspaces + billing (Phase 4.5–5)
+- **Workspaces** — Personal + shared (Team / Workspace tier). Members,
+  per-workspace roles, scoped lists.
+- **Item discipline** — status (open/in_progress/blocked/done),
+  priority (low/normal/high), workspace-scoped tags. Filter chips on
+  the list page.
+- **Multi-bot** — Workspace-tier admins register their own white-label
+  Telegram bot via BotFather; reminder dispatch routes through it,
+  fallback to default platform bot.
+- **24 LLM tools** — Phase 1's 9 tools + 6 workspace tools
+  (switch_workspace, list_workspaces, update_workspace,
+  invite_to_workspace, remove_workspace_member, set_item_attributes)
+  + cancel_invite, list_members, remove_member, update_member_role,
+  update_settings, create_list, update_list, delete_list,
+  restore_list.
+- **Stripe + Iyzico billing** — provider routed by user locale (TR
+  → Iyzico, else Stripe). Webhook idempotency via Upstash KV.
+- **Workspace org-key** — admin sets a workspace-wide OpenRouter key;
+  members without personal BYOK fall back to it.
+
+### Self-host license + admin (Phase 6)
+- **Ed25519 license JWT** — issued by SaaS, verified offline by
+  self-host instances. Workspace-bound payload; revocation list
+  fetched periodically.
+- **Workspace admin dashboard** — `/workspace/admin` for Workspace-
+  tier owner/admin: usage stats, activity timeline, bulk-restore,
+  spend telemetry.
+
+### Telemetry + cost (Phase 7–9)
+- **LLM usage tracking** — every turn writes to `llm_usage` with
+  cost (provider-reported via OpenRouter `usage.cost` when present;
+  client-side rate card otherwise). Per-workspace + per-member +
+  per-model rollups on the admin dashboard.
+- **Spend trend sparkline** — 30-day daily token totals + projection
+  (non-zero-day average × 30).
+- **Per-member spend caps** — workspace admin sets daily/monthly USD
+  caps on org-key usage. Personal BYOK bypasses caps.
+- **Per-user bot rate limit** — `LISTBULL_PER_USER_HOURLY_MSG_LIMIT`
+  env-gated.
+
+### Operations (Phase 10)
+- **Stale-data cleanup cron** — prunes expired invites + activity
+  log past tier retention (free=30d, team=90d, workspace=unlimited).
+- **Extended `/api/health`** — db + bot required (200/503), redis +
+  stripe optional with degraded surface.
+- **Upstash KV** — webhook idempotency + per-route rate limit (admin
+  endpoints + billing checkout) when configured.
+
+### Infrastructure
+- **No managed services** — Postgres, Next.js, cron, optional Upstash.
+  Deploy on Hetzner, Fly, your laptop — same compose file.
 - **Accessibility-first Mini App** — keyboard navigation, ARIA labels,
-  `prefers-reduced-motion` respected, focus rings on every interactive
-  element.
-- **BYOK encryption-at-rest** — your OpenRouter API key is encrypted
-  with AES-256-GCM (Inv-8); plaintext is ephemeral and never logged.
-- **No managed services** — Postgres, Next.js, cron in three Docker
-  containers. Deploy on Hetzner, Fly, your laptop — same compose file.
+  `prefers-reduced-motion` respected, focus rings everywhere.
 
 ## Quickstart (self-host)
 
@@ -76,6 +117,9 @@ docker compose logs -f app   # wait for "Ready on :3000"
 
 # 4. Run migrations (one-shot)
 docker compose run --rm app npm run db:migrate
+# Phase 4.5+ also requires a one-time data backfill:
+docker compose run --rm app npx tsx \
+  src/lib/server/migrations/workspace-pivot.ts
 
 # 5. Wire your bot
 #    a. Open https://your-host.tld in a browser — you'll see the Mini App.
