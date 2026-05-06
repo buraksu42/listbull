@@ -2,6 +2,7 @@ import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { CustomBotSection } from "@/components/workspace/custom-bot-section";
 import { PlanCard } from "@/components/workspace/plan-card";
 import {
   listWorkspacesForUser,
@@ -169,6 +170,12 @@ export default async function WorkspaceSettingsPage() {
           <PlanCard workspace={active} />
         </section>
 
+        <CustomBotSection
+          workspaceId={active.id}
+          canManage={active.role === "owner"}
+          isWorkspaceTier={active.tier === "workspace"}
+        />
+
         <section>
           <div
             style={{
@@ -179,7 +186,7 @@ export default async function WorkspaceSettingsPage() {
               marginBottom: "var(--lb-sp-2)",
             }}
           >
-            Coming in Phase 5
+            Coming next
           </div>
           <ul
             style={{
@@ -193,10 +200,8 @@ export default async function WorkspaceSettingsPage() {
               color: "var(--lb-muted-fg)",
             }}
           >
-            <li>• Workspace member invitations + role management</li>
-            <li>• White-label bot registration (Workspace tier)</li>
-            <li>• Tier upgrade flow (Stripe / Iyzico)</li>
-            <li>• Workspace org-key fallback for OpenRouter</li>
+            <li>• Workspace member invitations + role management UI</li>
+            <li>• Workspace org-level OpenRouter key fallback</li>
           </ul>
         </section>
       </div>

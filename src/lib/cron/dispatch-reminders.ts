@@ -27,7 +27,7 @@ import {
   users,
 } from "@/lib/db/schema";
 import type { ReminderJobItem } from "@/lib/types";
-import { getBot } from "@/lib/server/bot";
+import { getBot, getBotById } from "@/lib/server/bot";
 import { escapeMarkdownV2 } from "@/lib/server/bot/escape-markdown";
 import { pickLocale } from "@/lib/server/bot/i18n";
 import { env } from "@/lib/env";
@@ -90,6 +90,12 @@ type ReminderJob = ReminderJobItem & {
   assigneeTimezone: string | null;
   listName: string;
   listEmoji: string | null;
+  /**
+   * Phase 5 multi-bot: the workspace's primary white-label bot ID
+   * (when registered). Reminder dispatch routes via this bot if
+   * present; falls back to the default platform bot otherwise.
+   */
+  workspaceBotId: string | null;
 };
 
 async function pickDueItems(): Promise<ReminderJob[]> {
@@ -118,6 +124,12 @@ async function pickDueItems(): Promise<ReminderJob[]> {
       ),
       listName: lists.name,
       listEmoji: lists.emoji,
+      // Phase 5: workspace's primary white-label bot (if any). Found
+      // via lists.workspace_id → workspace_bots (is_primary=true) → bots.id.
+      // null when the workspace uses only the default platform bot.
+      workspaceBotId: sql<string | null>`primary_bot.id`.as(
+        "primary_bot_id",
+      ),
     })
     .from(items)
     .innerJoin(lists, eq(lists.id, items.listId))
@@ -130,6 +142,14 @@ async function pickDueItems(): Promise<ReminderJob[]> {
       sql`lm.list_id = ${items.listId} AND lm.user_id = ${items.assigneeId}`,
     )
     .leftJoin(sql`${users} AS assignee`, sql`assignee.id = lm.user_id`)
+    .leftJoin(
+      sql`workspace_bots AS wb`,
+      sql`wb.workspace_id = ${lists.workspaceId} AND wb.is_primary = true`,
+    )
+    .leftJoin(
+      sql`bots AS primary_bot`,
+      sql`primary_bot.id = wb.bot_id AND primary_bot.is_default = false`,
+    )
     .where(
       sql`${items.dueAt} <= now()
           AND ${items.reminderSent} = false
@@ -152,6 +172,7 @@ async function pickDueItems(): Promise<ReminderJob[]> {
       assigneeTimezone: r.assigneeTimezone,
       listName: r.listName,
       listEmoji: r.listEmoji,
+      workspaceBotId: r.workspaceBotId,
     }));
 }
 
@@ -176,7 +197,9 @@ export async function dispatchReminders(): Promise<{
     return { picked: 0, sent: 0, failed: 0 };
   }
 
-  const bot = await getBot();
+  // Default platform bot — always available, used as the fallback
+  // when a workspace's white-label bot is unreachable or absent.
+  const defaultBot = await getBot();
   let sent = 0;
   let failed = 0;
 
@@ -204,19 +227,61 @@ export async function dispatchReminders(): Promise<{
       timezone: targetTimezone,
     });
 
+    // Phase 5: route via workspace's primary white-label bot if
+    // registered; fall back to default platform bot if init fails
+    // OR if the workspace bot returns 403 (recipient hasn't
+    // /start'ed the white-label bot yet — every user has /start'ed
+    // the default).
+    let primaryBot = defaultBot;
+    if (job.workspaceBotId) {
+      const wsBot = await getBotById(job.workspaceBotId);
+      if (wsBot) primaryBot = wsBot;
+    }
+
+    let delivered = false;
     try {
-      await bot.api.sendMessage(targetTelegramId, body, {
+      await primaryBot.api.sendMessage(targetTelegramId, body, {
         parse_mode: "MarkdownV2",
         link_preview_options: { is_disabled: true },
       });
+      delivered = true;
+    } catch (error) {
+      // If we tried a workspace bot and it failed, retry once via
+      // the default platform bot. Common cause: the recipient
+      // hasn't /start'ed the white-label bot yet (Telegram 403).
+      if (primaryBot !== defaultBot) {
+        try {
+          await defaultBot.api.sendMessage(targetTelegramId, body, {
+            parse_mode: "MarkdownV2",
+            link_preview_options: { is_disabled: true },
+          });
+          delivered = true;
+          console.log(
+            "[cron/dispatch-reminders] white-label bot fallback to default",
+            { itemId: job.itemId, workspaceBotId: job.workspaceBotId },
+          );
+        } catch (fallbackError) {
+          console.error(
+            "[cron/dispatch-reminders] both white-label + default failed",
+            {
+              itemId: job.itemId,
+              primaryError: String(error),
+              fallbackError: String(fallbackError),
+            },
+          );
+        }
+      } else {
+        console.error(
+          "[cron/dispatch-reminders] sendMessage failed; will retry next tick",
+          { itemId: job.itemId, error: String(error) },
+        );
+      }
+    }
+
+    if (delivered) {
       await markReminderSent(job.itemId);
       sent += 1;
-    } catch (error) {
-      // Do not log item text (might be sensitive); item id only.
-      console.error(
-        "[cron/dispatch-reminders] sendMessage failed; will retry next tick",
-        { itemId: job.itemId, error: String(error) },
-      );
+    } else {
       failed += 1;
     }
   }
