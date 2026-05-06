@@ -1,8 +1,12 @@
 # listbull
 
+[![CI](https://github.com/buraksu42/listbull/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/buraksu42/listbull/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
 > Telegram-native AI list assistant with persistent shared list memory.
 > A chatty bot + Mini App, BYOK (bring-your-own OpenRouter key),
-> open-source, self-hostable.
+> open-source, self-hostable. Free for solo, paid for your group.
 
 ![demo](docs/demo.gif)
 
