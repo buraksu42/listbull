@@ -11,6 +11,12 @@ import {
   type ItemEditPatch,
 } from "@/components/lists/item-edit-sheet";
 import {
+  applyItemFilters,
+  DEFAULT_FILTERS,
+  ItemFilters,
+  type ItemFilters as ItemFiltersType,
+} from "@/components/lists/item-filters";
+import {
   membersById,
   membersKey,
   type MemberRow,
@@ -86,10 +92,32 @@ export function ItemList({
     initialData: initialMembers,
   });
 
-  const items = itemsQuery.data ?? [];
+  const items = React.useMemo(
+    () => itemsQuery.data ?? [],
+    [itemsQuery.data],
+  );
   const memberLookup = React.useMemo(
     () => membersById(membersQuery.data),
     [membersQuery.data],
+  );
+
+  // ─── Phase 7: filter chips ────────────────────────────────────────
+  const [filters, setFilters] =
+    React.useState<ItemFiltersType>(DEFAULT_FILTERS);
+
+  // Available tag vocabulary derived from currently-loaded items —
+  // saves an extra API call. Sorted alphabetically for stable order.
+  const availableTags = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const it of items) {
+      for (const t of it.tags ?? []) set.add(t);
+    }
+    return Array.from(set).sort();
+  }, [items]);
+
+  const filteredItems = React.useMemo(
+    () => applyItemFilters(items, filters),
+    [items, filters],
   );
 
   // ─── toggle (is_done) ───────────────────────────────────────────────
@@ -233,8 +261,26 @@ export function ItemList({
 
   return (
     <>
+      <ItemFilters
+        filters={filters}
+        onChange={setFilters}
+        availableTags={availableTags}
+      />
+      {filteredItems.length === 0 && (
+        <p
+          style={{
+            padding: "var(--lb-sp-4)",
+            color: "var(--lb-muted-fg)",
+            fontSize: "var(--lb-fs-sm)",
+            margin: 0,
+            textAlign: "center",
+          }}
+        >
+          Bu filtreyle eşleşen item yok.
+        </p>
+      )}
       <DraggableItemList
-        items={items}
+        items={filteredItems}
         onToggle={(id, next) => toggleMutation.mutate({ id, isDone: next })}
         onEdit={(item) => setEditingItem(item)}
         onDelete={(item) => setDeletingItem(item)}
