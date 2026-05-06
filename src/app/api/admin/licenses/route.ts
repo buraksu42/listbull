@@ -13,6 +13,7 @@
 import { NextResponse } from "next/server";
 
 import { issueLicense, listLicenses } from "@/lib/billing/license";
+import { sendEmail } from "@/lib/email/resend";
 import { env } from "@/lib/env";
 
 export const runtime = "nodejs";
@@ -159,8 +160,38 @@ export async function POST(request: Request) {
     );
   }
 
+  // Phase 6.5: best-effort email delivery via Resend. When env unset,
+  // this is a no-op and the operator delivers JWT manually from the
+  // response. We surface the email outcome so the operator knows
+  // whether to follow up.
+  const emailResult = await sendEmail({
+    to: result.license.issuedToEmail,
+    subject: "Your listbull self-host license",
+    text:
+      `Hi,\n\n` +
+      `Your listbull ${result.license.tier}-tier license is ready.\n\n` +
+      `Workspaces (${result.license.seats} seats): ${result.license.workspaces.join(", ")}\n` +
+      `Issued: ${result.license.issuedAt}\n` +
+      (result.license.expiresAt
+        ? `Expires: ${result.license.expiresAt}\n`
+        : `Expires: never (perpetual)\n`) +
+      `\n` +
+      `License key (paste into LICENSE_KEY env on your self-host instance):\n\n` +
+      `${result.jwt}\n\n` +
+      `Set LICENSE_VERIFY_ENABLED=true and restart your container to activate.\n` +
+      `Bundle the same LICENSE_PUBLIC_KEY operators received with your build.\n\n` +
+      `— listbull`,
+  });
+
   return NextResponse.json({
     ok: true,
-    data: { jwt: result.jwt, license: result.license },
+    data: {
+      jwt: result.jwt,
+      license: result.license,
+      email:
+        emailResult.ok
+          ? { sent: true, id: emailResult.id }
+          : { sent: false, reason: emailResult.reason },
+    },
   });
 }

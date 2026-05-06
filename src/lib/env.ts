@@ -82,6 +82,13 @@ const serverSchema = z.object({
   // acceptable for privacy-first deploys; licenses still expire
   // via `exp`. SaaS publishes this list at /api/license-revocations.
   LICENSE_REVOCATION_URL: z.string().url().optional(),
+
+  // Phase 6.5: Resend email delivery for license issuance + general
+  // transactional email. When unset, license issuance still works
+  // — operator delivers JWT manually. RESEND_FROM is the verified
+  // sender (e.g. "listbull <license@listbull.org>").
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM: z.string().optional(),
 });
 
 const clientSchema = z.object({
