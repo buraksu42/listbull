@@ -65,6 +65,44 @@ export type WorkspaceLlmSpendSummary = {
 };
 
 /**
+ * Per-user LLM usage summary (last N days). Lighter view — total
+ * tokens + call count, no per-model breakdown. Powers the settings
+ * page footprint badge.
+ */
+export type UserLlmUsageSummary = {
+  windowDays: number;
+  totalPromptTokens: number;
+  totalCompletionTokens: number;
+  callCount: number;
+};
+
+export async function getUserLlmUsage(
+  userId: string,
+  windowDays: number = 30,
+): Promise<UserLlmUsageSummary> {
+  const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+  const [row] = await db
+    .select({
+      promptTokens: sql<number>`coalesce(sum(${llmUsage.promptTokens}), 0)::int`,
+      completionTokens: sql<number>`coalesce(sum(${llmUsage.completionTokens}), 0)::int`,
+      callCount: sql<number>`count(*)::int`,
+    })
+    .from(llmUsage)
+    .where(
+      and(
+        eq(llmUsage.userId, userId),
+        gte(llmUsage.createdAt, cutoff),
+      ),
+    );
+  return {
+    windowDays,
+    totalPromptTokens: row?.promptTokens ?? 0,
+    totalCompletionTokens: row?.completionTokens ?? 0,
+    callCount: row?.callCount ?? 0,
+  };
+}
+
+/**
  * Last-N-days workspace spend summary. Default 30d window. Returns
  * totals + per-model + per-member breakdowns.
  */

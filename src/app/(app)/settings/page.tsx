@@ -6,6 +6,7 @@ import {
   SettingsForm,
   type SettingsInitial,
 } from "@/components/settings/settings-form";
+import { getUserLlmUsage } from "@/lib/db/queries/llm-usage";
 import { requireUser } from "@/lib/server/auth/require-user";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +23,13 @@ export const dynamic = "force-dynamic";
  * Phase 4 adds the F1 "Download my data" section below the form.
  */
 export default async function SettingsPage() {
-  await requireUser();
-  const initial = await fetchInitialSettings();
-  const t = await getTranslations("settings");
+  const user = await requireUser();
+  const [initial, usage, t] = await Promise.all([
+    fetchInitialSettings(),
+    getUserLlmUsage(user.id, 30),
+    getTranslations("settings"),
+  ]);
+  const totalTokens = usage.totalPromptTokens + usage.totalCompletionTokens;
 
   return (
     <main style={{ paddingBottom: "var(--lb-sp-12)" }}>
@@ -48,6 +53,33 @@ export default async function SettingsPage() {
         </h1>
       </header>
       <SettingsForm initial={initial} />
+
+      {totalTokens > 0 && (
+        <section className="flex flex-col gap-2 px-4 pt-2">
+          <h2 className="text-base font-semibold text-[var(--lb-fg)]">
+            Last 30 days
+          </h2>
+          <div
+            className="flex flex-col gap-1 rounded-[var(--lb-radius-md)] border border-[var(--lb-border)] bg-[var(--lb-card)] p-4"
+            style={{ fontSize: "var(--lb-fs-sm)" }}
+          >
+            <p style={{ color: "var(--lb-muted-fg)" }}>
+              {usage.callCount.toLocaleString()} LLM call
+              {usage.callCount === 1 ? "" : "s"} ·{" "}
+              {totalTokens.toLocaleString()} tokens
+            </p>
+            <p
+              style={{
+                color: "var(--lb-muted-fg)",
+                fontSize: "var(--lb-fs-xs)",
+              }}
+            >
+              {usage.totalPromptTokens.toLocaleString()} prompt /{" "}
+              {usage.totalCompletionTokens.toLocaleString()} completion
+            </p>
+          </div>
+        </section>
+      )}
 
       <section className="flex flex-col gap-3 px-4 pt-2">
         <div className="flex flex-col gap-1">
