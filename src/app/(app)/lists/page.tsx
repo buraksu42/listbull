@@ -1,6 +1,7 @@
 import { ListChecks } from "lucide-react";
 import { Suspense } from "react";
 
+import { PastDueBanner } from "@/components/billing/past-due-banner";
 import { ListRow } from "@/components/lists/list-row";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ListsListSkeleton } from "@/components/shared/list-skeleton";
@@ -48,6 +49,7 @@ async function ListsContent() {
         <WorkspaceSwitcher workspaces={workspaces} />
       </header>
 
+      <PastDueBanner workspaceId={workspaceId} />
       <ListsBody lists={lists} />
     </>
   );

@@ -3,6 +3,7 @@
  * upgrade CTA. Phase 4.5 ships read-only; Phase 5 wires the upgrade
  * flow to /api/billing/checkout.
  */
+import { UpgradeButton } from "@/components/billing/upgrade-button";
 import type { WorkspaceListItem } from "@/lib/types";
 import { TIER_LIMITS } from "@/lib/types";
 
@@ -62,25 +63,16 @@ export function PlanCard({ workspace }: Props) {
             {tierLabel}
           </div>
         </div>
-        {workspace.tier === "free" && (
-          <button
-            type="button"
-            disabled
-            title="Available in Phase 5"
-            style={{
-              background: "var(--lb-accent)",
-              color: "var(--lb-accent-fg)",
-              border: "none",
-              padding: "var(--lb-sp-2) var(--lb-sp-4)",
-              borderRadius: "var(--lb-radius-md)",
-              fontWeight: "var(--lb-fw-medium)",
-              fontSize: "var(--lb-fs-sm)",
-              cursor: "not-allowed",
-              opacity: 0.6,
-            }}
-          >
-            Upgrade
-          </button>
+        {workspace.tier === "free" && workspace.role === "owner" && (
+          <UpgradeButton workspaceId={workspace.id} tier="team" />
+        )}
+        {workspace.tier === "team" && workspace.role === "owner" && (
+          <UpgradeButton
+            workspaceId={workspace.id}
+            tier="workspace"
+            label="Upgrade"
+            variant="secondary"
+          />
         )}
       </div>
 
