@@ -58,6 +58,8 @@ const serverSchema = z.object({
   IYZICO_SECRET_KEY: z.string().optional(),
   IYZICO_BASE_URL: z.string().url().optional(),
   IYZICO_WEBHOOK_SECRET: z.string().optional(),
+  IYZICO_PLAN_TEAM: z.string().optional(),
+  IYZICO_PLAN_WORKSPACE: z.string().optional(),
 
   // Phase 4.5: license-verify gate (self-host Phase 6 prep). Default
   // 'false' so SaaS deployments are no-op; self-host operators set

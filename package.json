@@ -30,6 +30,7 @@
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
     "grammy": "^1.42.0",
+    "iyzipay": "^2.0.67",
     "lucide-react": "^1.14.0",
     "next": "^16.2.4",
     "next-intl": "^4.11.0",
