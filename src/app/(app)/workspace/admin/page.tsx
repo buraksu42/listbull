@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { ActivityTimeline } from "@/components/workspace/activity-timeline";
+import { BulkRestoreSection } from "@/components/workspace/bulk-restore-section";
 import {
   listWorkspacesForUser,
   resolveActiveWorkspaceId,
@@ -124,6 +125,10 @@ export default async function WorkspaceAdminPage() {
         </section>
 
         <ActivityTimeline workspaceId={activeId} />
+
+        {active.role === "owner" && (
+          <BulkRestoreSection workspaceId={activeId} />
+        )}
 
         <section>
           <div
