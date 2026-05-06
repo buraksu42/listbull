@@ -27,6 +27,7 @@ import { env } from "@/lib/env";
 import { getRecentMessages, insertMessages } from "@/lib/db/queries/messages";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import {
+  getWorkspaceOrgKeyEncrypted,
   listWorkspacesForUser,
   resolveActiveWorkspaceId,
 } from "@/lib/db/queries/workspaces";
@@ -152,9 +153,17 @@ export async function handleMessage(ctx: Context): Promise<void> {
   //   1. User's BYOK key wins when set
   //   2. Otherwise, env.OPENROUTER_API_KEY (operator-level) is used
   //   3. If neither, surface the noKey copy
-  // Operator fallback lets self-hosters offer a "no setup needed" experience
-  // for trusted user pools; production BYOK leaves the env unset.
-  let apiKey: string;
+  // OpenRouter API key resolution chain (Phase 5.5 G6):
+  //   1. user's personal BYOK (users.openrouter_api_key_encrypted)
+  //   2. workspace org-key (Workspace tier admin set one)
+  //   3. operator fallback (env.OPENROUTER_API_KEY) — self-host only
+  //   4. nothing → reply with noKey copy
+  //
+  // The active workspace is resolved here too so org-key lookup
+  // can happen before we tell the user "no key configured."
+  const workspaceId = await resolveActiveWorkspaceId(user.id);
+
+  let apiKey: string | null = null;
   if (user.openrouterApiKeyEncrypted) {
     try {
       apiKey = decrypt(user.openrouterApiKeyEncrypted);
@@ -163,9 +172,29 @@ export async function handleMessage(ctx: Context): Promise<void> {
       await ctx.reply(copy.keyDecryptError);
       return;
     }
-  } else if (env.OPENROUTER_API_KEY) {
+  }
+
+  if (apiKey === null) {
+    const orgKeyEnc = await getWorkspaceOrgKeyEncrypted(workspaceId);
+    if (orgKeyEnc) {
+      try {
+        apiKey = decrypt(orgKeyEnc);
+      } catch {
+        // Org-key blob unreadable — log + fall through to operator
+        // fallback / noKey. Workspace admin must rotate.
+        console.warn(
+          "[handle-message] workspace org-key decrypt failed",
+          { workspaceId },
+        );
+      }
+    }
+  }
+
+  if (apiKey === null && env.OPENROUTER_API_KEY) {
     apiKey = env.OPENROUTER_API_KEY;
-  } else {
+  }
+
+  if (apiKey === null) {
     await ctx.reply(copy.noKey);
     return;
   }
@@ -213,12 +242,11 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // Persist user message + invoke LLM.
   await insertMessages([userMessageRow]);
 
-  // Resolve the user's active workspace BEFORE the LLM turn so every
-  // tool call routes to the correct workspace. Phase 5 adds a bot-aware
-  // overlay (incoming bot ID overrides users.active_workspace_id when
-  // the bot is workspace-bound) — for Phase 4.5 the default platform
-  // bot serves all workspaces, so this is the only resolution path.
-  const workspaceId = await resolveActiveWorkspaceId(user.id);
+  // workspaceId already resolved above (BYOK chain); reuse it for
+  // executor ctx + workspace prompt. Phase 5 adds a bot-aware overlay
+  // (incoming bot ID overrides users.active_workspace_id when the bot
+  // is workspace-bound) — for default platform bot serves all
+  // workspaces, so users.active_workspace_id is the only signal.
 
   // Workspace summary for the v4 system prompt — gives the LLM
   // awareness of every workspace the user belongs to (so it can

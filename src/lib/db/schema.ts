@@ -281,6 +281,13 @@ export const workspaces = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     memberLimit: integer("member_limit").notNull(),
+    /**
+     * Phase 5.5 (G6): Workspace-tier admins can set an org-level
+     * OpenRouter key. When a workspace member doesn't have a
+     * personal BYOK, the LLM resolution falls back to this key.
+     * Encrypted via the same AES-256-GCM helper as user BYOK.
+     */
+    openrouterApiKeyEncrypted: text("openrouter_api_key_encrypted"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },

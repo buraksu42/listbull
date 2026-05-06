@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CustomBotSection } from "@/components/workspace/custom-bot-section";
+import { OrgKeySection } from "@/components/workspace/org-key-section";
 import { PlanCard } from "@/components/workspace/plan-card";
 import {
   listWorkspacesForUser,
@@ -176,6 +177,12 @@ export default async function WorkspaceSettingsPage() {
           isWorkspaceTier={active.tier === "workspace"}
         />
 
+        <OrgKeySection
+          workspaceId={active.id}
+          canManage={active.role === "owner" || active.role === "admin"}
+          isWorkspaceTier={active.tier === "workspace"}
+        />
+
         <section>
           <div
             style={{
@@ -201,7 +208,6 @@ export default async function WorkspaceSettingsPage() {
             }}
           >
             <li>• Workspace member invitations + role management UI</li>
-            <li>• Workspace org-level OpenRouter key fallback</li>
           </ul>
         </section>
       </div>

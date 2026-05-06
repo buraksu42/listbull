@@ -213,6 +213,36 @@ export async function setActiveWorkspace(
   return true;
 }
 
+/**
+ * Phase 5.5 (G6): read the workspace's encrypted org-level
+ * OpenRouter key (if Workspace tier admin set one). Returns the
+ * raw encrypted blob — caller decrypts via the same helper as
+ * BYOK keys. Null when:
+ *   - workspace tier is not 'workspace' (org-key gate)
+ *   - admin hasn't set a key
+ *   - workspace doesn't exist
+ *
+ * The org-key is workspace-wide: any member of the workspace can
+ * use it for their LLM calls when they don't have personal BYOK.
+ * Visibility-only via this helper; rotation/replace lives at the
+ * settings PATCH endpoint.
+ */
+export async function getWorkspaceOrgKeyEncrypted(
+  workspaceId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({
+      tier: workspaces.tier,
+      keyEnc: workspaces.openrouterApiKeyEncrypted,
+    })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+  if (!row) return null;
+  if (row.tier !== "workspace") return null;
+  return row.keyEnc;
+}
+
 // Order export, no-op consumer for asc — keeps the import live so
 // drizzle-kit's tree-shaking doesn't accidentally drop the sort dep.
 void asc;
