@@ -1,0 +1,88 @@
+name: E2E (Playwright)
+
+# Phase 4 e2e workflow. Live execution requires:
+#   - LISTBULL_E2E_LIVE=1 (workflow input)
+#   - Real bot token + webhook secret in workflow secrets (Phase 5)
+#
+# Default behavior: runs `npx playwright test --list` to confirm the
+# config + specs compile. Live runs are deferred to staging; this
+# baseline catches Playwright config drift on every PR.
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+    inputs:
+      live:
+        description: "Set to '1' to run live Playwright tests (requires staging secrets)"
+        required: false
+        default: "0"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  playwright:
+    name: Playwright config compile + smoke
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: listbull
+          POSTGRES_USER: listbull
+          POSTGRES_PASSWORD: listbull
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U listbull -d listbull"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Compile Playwright config (list specs)
+        run: npx playwright test --list
+
+      - name: Run live e2e suite
+        if: github.event.inputs.live == '1'
+        run: npx playwright test
+        env:
+          LISTBULL_E2E_LIVE: "1"
+          DATABASE_URL: postgres://listbull:listbull@localhost:5432/listbull
+          # Staging secrets (Phase 5):
+          TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_BOT_TOKEN }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.E2E_WEBHOOK_SECRET }}
+          BETTER_AUTH_SECRET: ${{ secrets.E2E_BETTER_AUTH_SECRET }}
+          BETTER_AUTH_URL: http://127.0.0.1:3000
+          ENV_KEY: ${{ secrets.E2E_ENV_KEY }}
+          NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+          NEXT_PUBLIC_ENV: test
+          TELEGRAM_BOT_USERNAME: ${{ secrets.E2E_BOT_USERNAME }}
+          LISTBULL_E2E_AUTO_WEBSERVER: "1"
+
+      - name: Upload Playwright report on failure
+        if: failure() && github.event.inputs.live == '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7

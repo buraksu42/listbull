@@ -8,9 +8,13 @@ node_modules/
 out/
 build/
 dist/
+*.tsbuildinfo
 
 # Testing
 coverage/
+playwright-report/
+test-results/
+.playwright/
 
 # Env files — NEVER commit secrets (except .env.example)
 .env
@@ -38,3 +42,4 @@ logs/
 
 # Local tool caches
 .claude/
+listbull.zip

@@ -1,9 +1,13 @@
 name: CI
 
-# Minimal CI gate — matches CLAUDE.md L70 documented spec.
-# Safe for fresh `create-next-app` scaffolds: lint + tsc are present by default,
-# test runs only `--if-present` so missing test script does not fail CI.
-# Add stricter steps (format:check, build, etc.) per-project as project matures.
+# Phase 4 strict CI gate. Steps:
+#   1. lint
+#   2. typecheck
+#   3. vitest unit suite
+#   4. SKIP_ENV_VALIDATION build (catches type errors that lint / tsc miss)
+#
+# E2E (Playwright) lives in `e2e.yml` — a separate workflow because
+# it spins up Postgres and is gated behind LISTBULL_E2E_LIVE.
 
 on:
   push:
@@ -15,8 +19,8 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  lint-typecheck-test:
-    name: Lint, Type check, Test
+  lint-typecheck-test-build:
+    name: Lint + Type check + Vitest + Build
     runs-on: ubuntu-latest
 
     steps:
@@ -38,5 +42,10 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
-      - name: Run tests (if any)
-        run: npm test --if-present
+      - name: Run unit tests (Vitest)
+        run: npm test
+
+      - name: Production build (env validation skipped)
+        run: npm run build
+        env:
+          SKIP_ENV_VALIDATION: "1"

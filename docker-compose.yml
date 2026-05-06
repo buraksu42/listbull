@@ -1,0 +1,102 @@
+# listbull — self-host docker-compose stack.
+#
+# Three services:
+#   - postgres:  Postgres 16 alpine, persistent named volume.
+#   - app:       Next.js 16 (web + webhook receiver). Healthcheck at /api/health.
+#   - cron:      Reminder dispatch loop (sleep 60 between ticks).
+#
+# All env-var configuration is sourced from the same `.env` file at
+# repo root. Copy `.env.example` and fill the required fields before
+# running `docker compose up -d` (see README Quickstart).
+#
+# Networks: a single internal bridge. Postgres is NOT exposed publicly;
+# use `docker compose exec postgres psql -U listbull` for DB access.
+#
+# Reverse-proxy: this stack expects to live BEHIND a reverse proxy
+# (Caddy / Traefik / Nginx) terminating TLS. The `app` service exposes
+# port 3000 to the host on 127.0.0.1 ONLY for that proxy to reach.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: listbull-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-listbull}
+      POSTGRES_USER: ${POSTGRES_USER:-listbull}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-listbull}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "pg_isready -U $${POSTGRES_USER:-listbull} -d $${POSTGRES_DB:-listbull}"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks:
+      - listbull-net
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+        NEXT_PUBLIC_ENV: ${NEXT_PUBLIC_ENV:-production}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+        NEXT_PUBLIC_UMAMI_WEBSITE_ID: ${NEXT_PUBLIC_UMAMI_WEBSITE_ID:-}
+    container_name: listbull-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Override DATABASE_URL to the in-network host (overrides .env).
+      DATABASE_URL: postgres://${POSTGRES_USER:-listbull}:${POSTGRES_PASSWORD:-listbull}@postgres:5432/${POSTGRES_DB:-listbull}
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+    ports:
+      # Bind to localhost only — TLS terminates at the reverse proxy.
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - listbull-net
+
+  cron:
+    build:
+      context: .
+      dockerfile: Dockerfile.cron
+    container_name: listbull-cron
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      app:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-listbull}:${POSTGRES_PASSWORD:-listbull}@postgres:5432/${POSTGRES_DB:-listbull}
+    # 60-second sleep loop. The dispatch script's per-row UPDATEs are
+    # conditional on `reminder_sent = false`, so overlap is safe.
+    command:
+      - sh
+      - -c
+      - "while true; do npm run cron; sleep 60; done"
+    networks:
+      - listbull-net
+
+volumes:
+  pgdata:
+
+networks:
+  listbull-net:
+    driver: bridge

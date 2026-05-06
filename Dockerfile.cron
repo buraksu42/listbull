@@ -1,0 +1,53 @@
+# listbull — reminder dispatch cron container.
+#
+# Runs `tsx src/lib/cron/dispatch-reminders.ts` once per minute. The
+# script is idempotent (Inv-11 conditional UPDATE) so duplicate ticks
+# during deploy overlap don't double-send reminders.
+#
+# Two scheduling modes:
+#   1. Container-managed (default in docker-compose.yml):
+#         CMD = sh -c 'while true; do npm run cron; sleep 60; done'
+#      Single long-running container, simple. The compose file sets
+#      this command via `command:`; this Dockerfile leaves the default
+#      to `npm run cron` (one-shot) for use with external schedulers.
+#   2. External scheduler (Dokploy cron, k8s CronJob, etc.):
+#         CMD = npm run cron
+#      The scheduler invokes the container per tick.
+#
+# This image stays small: cron only needs Node + tsx + the project's
+# runtime deps — no Next.js build artifacts.
+ARG NODE_VERSION=22
+
+FROM node:${NODE_VERSION}-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci --omit=optional --no-audit --no-fund
+
+FROM node:${NODE_VERSION}-alpine AS runtime
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV TZ=UTC
+
+# Copy dependency tree from the deps stage and the source tree.
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json* ./
+COPY tsconfig.json tsconfig.cron.json ./
+COPY drizzle.config.ts ./
+COPY src ./src
+
+# Non-root runtime. Username is 'dispatcher' (not 'cron') to avoid clashing
+# with Alpine's pre-existing system user 'cron' from the cronie package.
+RUN addgroup --system --gid 1001 nodejs \
+ && adduser --system --uid 1001 --ingroup nodejs dispatcher \
+ && chown -R dispatcher:nodejs /app
+USER dispatcher
+
+# Default = 60s loop, suitable for Dokploy Application mode and any
+# orchestrator that runs containers continuously (compose, k8s
+# Deployment). The dispatch script is idempotent (Inv-11) so overlap
+# during deploy rollover is safe.
+#
+# To run as a one-shot per tick (Dokploy cron job, k8s CronJob, etc.),
+# override the command at deploy time: `npm run cron`.
+CMD ["sh", "-c", "while true; do npm run cron; sleep 60; done"]
