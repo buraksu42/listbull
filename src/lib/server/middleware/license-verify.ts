@@ -34,6 +34,55 @@ import type { LicensePayload, LicenseVerifyResult } from "@/lib/types";
 let cachedPublicKey: KeyObject | null = null;
 let cachedKeyMaterial: string | null = null;
 
+/**
+ * Phase 6 revocation cache. Self-host instances refresh from
+ * `LICENSE_REVOCATION_URL` on first miss + every REVOCATION_TTL_MS.
+ * On fetch failure, retain the last-known-good list (offline-tolerant).
+ * SaaS instances skip the fetch when the env is unset.
+ */
+const REVOCATION_TTL_MS = 60 * 60 * 1000; // 1 hour
+let revokedIds = new Set<string>();
+let revocationFetchedAt = 0;
+let revocationInFlight: Promise<void> | null = null;
+
+async function refreshRevocationListIfStale(): Promise<void> {
+  if (!env.LICENSE_REVOCATION_URL) return;
+  const now = Date.now();
+  if (now - revocationFetchedAt < REVOCATION_TTL_MS) return;
+  if (revocationInFlight) {
+    await revocationInFlight;
+    return;
+  }
+
+  revocationInFlight = (async () => {
+    try {
+      const res = await fetch(env.LICENSE_REVOCATION_URL!, {
+        headers: { accept: "text/plain" },
+      });
+      if (!res.ok) {
+        console.warn(
+          "[license-verify] revocation fetch failed:",
+          res.status,
+        );
+        return;
+      }
+      const body = await res.text();
+      revokedIds = new Set(
+        body
+          .split("\n")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0),
+      );
+      revocationFetchedAt = Date.now();
+    } catch (err) {
+      console.warn("[license-verify] revocation refresh threw", err);
+    } finally {
+      revocationInFlight = null;
+    }
+  })();
+  await revocationInFlight;
+}
+
 function loadPublicKey(): KeyObject | null {
   const material = env.LICENSE_PUBLIC_KEY;
   if (!material) return null;
@@ -55,11 +104,17 @@ function decodeBase64Url(s: string): Buffer {
  * Returns the parsed payload on success, or a discriminated error
  * variant the admin dashboard surfaces to the operator.
  *
+ * Phase 6 extension: consults the revocation cache (refreshed
+ * lazily from `LICENSE_REVOCATION_URL`). When env is unset, no
+ * revocation check; rely on `exp` claim alone.
+ *
  * Algorithm: EdDSA (Ed25519). The license issuer signs with the
  * private half; this verifier reads the public half from
  * `LICENSE_PUBLIC_KEY` env.
  */
-export function verifyLicense(jwt: string): LicenseVerifyResult {
+export async function verifyLicense(
+  jwt: string,
+): Promise<LicenseVerifyResult> {
   const publicKey = loadPublicKey();
   if (!publicKey) {
     return { ok: false, reason: "missing_key" };
@@ -95,8 +150,13 @@ export function verifyLicense(jwt: string): LicenseVerifyResult {
     return { ok: false, reason: "expired" };
   }
 
-  // Phase 6 will check a revocation list here. For now the field is
-  // populated by `LicensePayload` but not consulted.
+  // Phase 6 revocation lookup. Best-effort refresh; if the URL is
+  // unreachable, fall through with the last-known-good list (or
+  // empty when first call after boot fails).
+  await refreshRevocationListIfStale();
+  if (revokedIds.has(payload.sub)) {
+    return { ok: false, reason: "revoked" };
+  }
 
   return { ok: true, payload };
 }
@@ -115,7 +175,9 @@ export type LicenseEnforceResult =
   | { enforced: false }
   | { enforced: true; reason: string };
 
-export function requireLicense(workspaceId: string): LicenseEnforceResult {
+export async function requireLicense(
+  workspaceId: string,
+): Promise<LicenseEnforceResult> {
   if (env.LICENSE_VERIFY_ENABLED !== "true") {
     return { enforced: false };
   }
@@ -125,7 +187,7 @@ export function requireLicense(workspaceId: string): LicenseEnforceResult {
     return { enforced: true, reason: "missing_key" };
   }
 
-  const result = verifyLicense(license);
+  const result = await verifyLicense(license);
   if (!result.ok) {
     return { enforced: true, reason: result.reason };
   }

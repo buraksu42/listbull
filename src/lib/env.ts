@@ -75,6 +75,13 @@ const serverSchema = z.object({
   // header.
   LICENSE_PRIVATE_KEY: z.string().optional(),
   LICENSE_ADMIN_TOKEN: z.string().optional(),
+
+  // Phase 6: optional URL self-host instances periodically refresh
+  // for the newline-separated list of revoked license IDs. When
+  // unset, revocation can't be propagated without phone-home —
+  // acceptable for privacy-first deploys; licenses still expire
+  // via `exp`. SaaS publishes this list at /api/license-revocations.
+  LICENSE_REVOCATION_URL: z.string().url().optional(),
 });
 
 const clientSchema = z.object({
