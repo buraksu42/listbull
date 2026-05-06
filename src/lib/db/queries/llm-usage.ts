@@ -9,7 +9,7 @@ import { and, desc, eq, gte, sql } from "drizzle-orm";
 
 import { calculateCostUsdMicro } from "@/lib/billing/model-pricing";
 import { db } from "@/lib/db/client";
-import { llmUsage, users } from "@/lib/db/schema";
+import { llmUsage, users, workspaceMemberCaps } from "@/lib/db/schema";
 
 export type LlmKeySource = "user" | "workspace" | "operator";
 
@@ -259,4 +259,161 @@ export async function getWorkspaceLlmSpend(
     byModel: modelRows,
     byMember: memberRows,
   };
+}
+
+// ─── Phase 8: per-member spend caps ─────────────────────────────────
+
+export type MemberCap = {
+  workspaceId: string;
+  userId: string;
+  dailyCapUsdMicro: number;
+  monthlyCapUsdMicro: number;
+};
+
+export async function getMemberCap(
+  workspaceId: string,
+  userId: string,
+): Promise<MemberCap | null> {
+  const [row] = await db
+    .select({
+      workspaceId: workspaceMemberCaps.workspaceId,
+      userId: workspaceMemberCaps.userId,
+      dailyCapUsdMicro: workspaceMemberCaps.dailyCapUsdMicro,
+      monthlyCapUsdMicro: workspaceMemberCaps.monthlyCapUsdMicro,
+    })
+    .from(workspaceMemberCaps)
+    .where(
+      and(
+        eq(workspaceMemberCaps.workspaceId, workspaceId),
+        eq(workspaceMemberCaps.userId, userId),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+export async function listMemberCaps(
+  workspaceId: string,
+): Promise<MemberCap[]> {
+  return await db
+    .select({
+      workspaceId: workspaceMemberCaps.workspaceId,
+      userId: workspaceMemberCaps.userId,
+      dailyCapUsdMicro: workspaceMemberCaps.dailyCapUsdMicro,
+      monthlyCapUsdMicro: workspaceMemberCaps.monthlyCapUsdMicro,
+    })
+    .from(workspaceMemberCaps)
+    .where(eq(workspaceMemberCaps.workspaceId, workspaceId));
+}
+
+export async function upsertMemberCap(input: MemberCap): Promise<void> {
+  // Drizzle supports onConflictDoUpdate; relying on the unique
+  // (workspace_id, user_id) index from the schema.
+  await db
+    .insert(workspaceMemberCaps)
+    .values({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      dailyCapUsdMicro: input.dailyCapUsdMicro,
+      monthlyCapUsdMicro: input.monthlyCapUsdMicro,
+    })
+    .onConflictDoUpdate({
+      target: [workspaceMemberCaps.workspaceId, workspaceMemberCaps.userId],
+      set: {
+        dailyCapUsdMicro: input.dailyCapUsdMicro,
+        monthlyCapUsdMicro: input.monthlyCapUsdMicro,
+        updatedAt: new Date(),
+      },
+    });
+}
+
+export async function deleteMemberCap(
+  workspaceId: string,
+  userId: string,
+): Promise<void> {
+  await db
+    .delete(workspaceMemberCaps)
+    .where(
+      and(
+        eq(workspaceMemberCaps.workspaceId, workspaceId),
+        eq(workspaceMemberCaps.userId, userId),
+      ),
+    );
+}
+
+/**
+ * Pre-call cap check. Returns the action to take based on the
+ * member's current daily + 30d spend vs configured caps. Only
+ * relevant when keySource === 'workspace' — caps don't apply to
+ * personal BYOK or operator fallback.
+ *
+ * Caps of 0 = unlimited (default). Cap exceeded → block. Otherwise
+ * allow.
+ */
+export type CapCheckResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: "daily_cap_exceeded" | "monthly_cap_exceeded";
+      capUsdMicro: number;
+      currentUsdMicro: number;
+    };
+
+export async function checkMemberCap(
+  workspaceId: string,
+  userId: string,
+): Promise<CapCheckResult> {
+  const cap = await getMemberCap(workspaceId, userId);
+  if (!cap) return { ok: true };
+  if (cap.dailyCapUsdMicro === 0 && cap.monthlyCapUsdMicro === 0) {
+    return { ok: true };
+  }
+
+  // Compute current spend (from this user, on this workspace's
+  // org-key — keySource='workspace') in both windows.
+  const today = new Date();
+  const dayCutoff = new Date(
+    Date.UTC(
+      today.getUTCFullYear(),
+      today.getUTCMonth(),
+      today.getUTCDate(),
+    ),
+  );
+  const monthCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const [row] = await db
+    .select({
+      dayCost: sql<number>`coalesce(sum(case when ${llmUsage.createdAt} >= ${dayCutoff.toISOString()} then ${llmUsage.costUsdMicro} else 0 end), 0)::int`,
+      monthCost: sql<number>`coalesce(sum(${llmUsage.costUsdMicro}), 0)::int`,
+    })
+    .from(llmUsage)
+    .where(
+      and(
+        eq(llmUsage.workspaceId, workspaceId),
+        eq(llmUsage.userId, userId),
+        eq(llmUsage.keySource, "workspace"),
+        gte(llmUsage.createdAt, monthCutoff),
+      ),
+    );
+
+  const dayCost = row?.dayCost ?? 0;
+  const monthCost = row?.monthCost ?? 0;
+
+  if (cap.dailyCapUsdMicro > 0 && dayCost >= cap.dailyCapUsdMicro) {
+    return {
+      ok: false,
+      reason: "daily_cap_exceeded",
+      capUsdMicro: cap.dailyCapUsdMicro,
+      currentUsdMicro: dayCost,
+    };
+  }
+  if (cap.monthlyCapUsdMicro > 0 && monthCost >= cap.monthlyCapUsdMicro) {
+    return {
+      ok: false,
+      reason: "monthly_cap_exceeded",
+      capUsdMicro: cap.monthlyCapUsdMicro,
+      currentUsdMicro: monthCost,
+    };
+  }
+  return { ok: true };
 }

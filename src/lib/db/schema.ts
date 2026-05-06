@@ -458,6 +458,43 @@ export const workspaceBots = pgTable(
   ],
 );
 
+// ─── workspace_member_caps (Phase 8) ───────────────────────────────
+//
+// Per-member daily / monthly USD spend cap on workspace-org-key
+// usage. When a member falls back to the workspace org-key (no
+// personal BYOK), handle-message rejects the turn if the cap would
+// be exceeded.
+//
+// Cap values stored as integer micro-USD (matches
+// llm_usage.cost_usd_micro). 0 = unlimited (default). No row =
+// unlimited. Owner/admin sets caps via Mini App; member sees their
+// own cap reflected on the settings page.
+export const workspaceMemberCaps = pgTable(
+  "workspace_member_caps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Daily org-key spend cap in micro-USD; 0 = unlimited. */
+    dailyCapUsdMicro: integer("daily_cap_usd_micro").notNull().default(0),
+    /** Rolling-30d org-key spend cap in micro-USD; 0 = unlimited. */
+    monthlyCapUsdMicro: integer("monthly_cap_usd_micro")
+      .notNull()
+      .default(0),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("workspace_member_caps_pair_uq").on(
+      t.workspaceId,
+      t.userId,
+    ),
+  ],
+);
+
 // ─── llm_usage (Phase 7) ────────────────────────────────────────────
 //
 // Per-turn LLM token usage telemetry. respond.ts records one row per

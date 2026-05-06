@@ -31,7 +31,7 @@ import {
   listWorkspacesForUser,
   resolveActiveWorkspaceId,
 } from "@/lib/db/queries/workspaces";
-import { recordLlmUsage } from "@/lib/db/queries/llm-usage";
+import { checkMemberCap, recordLlmUsage } from "@/lib/db/queries/llm-usage";
 import { sliceForContext } from "@/lib/ai/conversation";
 import { forwardedMessagePrompt } from "@/lib/ai/prompts/forwarded";
 import {
@@ -67,6 +67,10 @@ const COPY = {
     transientError: "Bir şeyler ters gitti, tekrar dener misin?",
     forwardedNoText:
       "İletilen mesajda metin bulamadım — sadece metinli mesajlardan madde çıkarabilirim.",
+    capDaily:
+      "Bu workspace'te günlük harcama limitin doldu. Kendi OpenRouter key'ini ekle ya da yarın tekrar dene.",
+    capMonthly:
+      "Bu workspace'te aylık harcama limitin doldu. Kendi OpenRouter key'ini ekle ya da workspace yöneticine sor.",
   },
   en: {
     noKey:
@@ -76,6 +80,10 @@ const COPY = {
     transientError: "Something went wrong — try again?",
     forwardedNoText:
       "I didn't find any text in the forwarded message — I can only extract items from messages with text.",
+    capDaily:
+      "Your daily spend cap on this workspace is exhausted. Add your own OpenRouter key or try again tomorrow.",
+    capMonthly:
+      "Your monthly spend cap on this workspace is exhausted. Add your own OpenRouter key or ask the workspace admin.",
   },
 } as const;
 
@@ -202,6 +210,21 @@ export async function handleMessage(ctx: Context): Promise<void> {
   if (apiKey === null || keySource === null) {
     await ctx.reply(copy.noKey);
     return;
+  }
+
+  // Phase 8 cap gate: only enforced when the workspace org-key is
+  // funding the call. Personal BYOK + operator fallback bypass caps
+  // (the spend isn't workspace-borne).
+  if (keySource === "workspace") {
+    const cap = await checkMemberCap(workspaceId, user.id);
+    if (!cap.ok) {
+      await ctx.reply(
+        cap.reason === "daily_cap_exceeded"
+          ? copy.capDaily
+          : copy.capMonthly,
+      );
+      return;
+    }
   }
 
   if (forward) {
