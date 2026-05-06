@@ -1,4 +1,4 @@
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Crown } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -192,6 +192,44 @@ export default async function WorkspaceSettingsPage() {
           canManage={active.role === "owner" || active.role === "admin"}
           isWorkspaceTier={active.tier === "workspace"}
         />
+
+        {active.tier === "workspace" &&
+          (active.role === "owner" || active.role === "admin") && (
+            <Link
+              href="/workspace/admin"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "var(--lb-sp-3)",
+                padding: "var(--lb-sp-3) var(--lb-sp-4)",
+                background: "var(--lb-card)",
+                border: "1px solid var(--lb-border)",
+                borderRadius: "var(--lb-radius-md)",
+                color: "var(--lb-fg)",
+                textDecoration: "none",
+                fontSize: "var(--lb-fs-sm)",
+              }}
+            >
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "var(--lb-sp-2)",
+                  fontWeight: "var(--lb-fw-medium)",
+                }}
+              >
+                <Crown
+                  width={14}
+                  height={14}
+                  aria-hidden
+                  style={{ color: "var(--lb-accent)" }}
+                />
+                Admin dashboard
+              </span>
+              <span style={{ color: "var(--lb-muted-fg)" }}>→</span>
+            </Link>
+          )}
       </div>
     </main>
   );
