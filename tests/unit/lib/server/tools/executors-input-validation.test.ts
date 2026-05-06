@@ -44,11 +44,16 @@ import { executeAssignItem } from "@/lib/server/tools/assign-item";
 import { executeCompleteItem } from "@/lib/server/tools/complete-item";
 import { executeCreateItem } from "@/lib/server/tools/create-item";
 import { executeDeleteItem } from "@/lib/server/tools/delete-item";
+import { executeInviteToWorkspace } from "@/lib/server/tools/invite-to-workspace";
 import { executeListLists } from "@/lib/server/tools/list-lists";
+import { executeRemoveWorkspaceMember } from "@/lib/server/tools/remove-workspace-member";
 import { executeScheduleReminder } from "@/lib/server/tools/schedule-reminder";
 import { executeSearchItems } from "@/lib/server/tools/search-items";
+import { executeSetItemAttributes } from "@/lib/server/tools/set-item-attributes";
 import { executeShareList } from "@/lib/server/tools/share-list";
+import { executeSwitchWorkspace } from "@/lib/server/tools/switch-workspace";
 import { executeUpdateItem } from "@/lib/server/tools/update-item";
+import { executeUpdateWorkspace } from "@/lib/server/tools/update-workspace";
 
 const CTX = {
   userId: "00000000-0000-0000-0000-000000000001",
@@ -146,5 +151,139 @@ describe("assign_item: input validation", () => {
     const r = await executeAssignItem({}, CTX);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe("invalid_input");
+  });
+});
+
+// ─── Phase 4.5: workspace + item-discipline executors ───────────────
+
+describe("switch_workspace: input validation", () => {
+  it("rejects when neither workspace_id nor workspace_name provided", async () => {
+    const r = await executeSwitchWorkspace({}, CTX);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("invalid_input");
+  });
+
+  it("rejects non-uuid workspace_id", async () => {
+    const r = await executeSwitchWorkspace(
+      { workspace_id: "not-a-uuid" },
+      CTX,
+    );
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe("list_workspaces: input validation", () => {
+  // No fields to validate — schema is z.object({}). The executor's
+  // unit-test surface here is "import + dispatch reach the executor
+  // without throwing" which is already covered by dispatcher.test.ts.
+  it.skip("trivial schema — covered by dispatcher.test.ts smoke", () => {
+    // intentionally empty
+  });
+});
+
+describe("update_workspace: input validation", () => {
+  it("rejects missing name", async () => {
+    const r = await executeUpdateWorkspace({}, CTX);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("invalid_input");
+  });
+
+  it("rejects empty name", async () => {
+    const r = await executeUpdateWorkspace({ name: "  " }, CTX);
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects name > 120 chars", async () => {
+    const r = await executeUpdateWorkspace({ name: "x".repeat(121) }, CTX);
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe("invite_to_workspace: input validation", () => {
+  it("rejects missing username", async () => {
+    const r = await executeInviteToWorkspace({}, CTX);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("invalid_input");
+  });
+
+  it("rejects empty username", async () => {
+    const r = await executeInviteToWorkspace({ username: "" }, CTX);
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects unknown role", async () => {
+    const r = await executeInviteToWorkspace(
+      { username: "ali", role: "superuser" },
+      CTX,
+    );
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe("remove_workspace_member: input validation", () => {
+  it("rejects when neither username nor user_id provided", async () => {
+    const r = await executeRemoveWorkspaceMember({}, CTX);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("invalid_input");
+  });
+
+  it("rejects non-uuid user_id", async () => {
+    const r = await executeRemoveWorkspaceMember(
+      { user_id: "not-a-uuid" },
+      CTX,
+    );
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe("set_item_attributes: input validation", () => {
+  it("rejects missing item_id", async () => {
+    const r = await executeSetItemAttributes(
+      { status: "blocked" },
+      CTX,
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("invalid_input");
+  });
+
+  it("rejects when no field supplied (item_id alone is meaningless)", async () => {
+    const r = await executeSetItemAttributes(
+      { item_id: "00000000-0000-0000-0000-000000000010" },
+      CTX,
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects unknown status value", async () => {
+    const r = await executeSetItemAttributes(
+      {
+        item_id: "00000000-0000-0000-0000-000000000010",
+        status: "in_review",
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects > 10 tags", async () => {
+    const r = await executeSetItemAttributes(
+      {
+        item_id: "00000000-0000-0000-0000-000000000010",
+        tags: Array.from({ length: 11 }, (_, i) => `tag${i}`),
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects unknown priority", async () => {
+    const r = await executeSetItemAttributes(
+      {
+        item_id: "00000000-0000-0000-0000-000000000010",
+        priority: "urgent",
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(false);
   });
 });

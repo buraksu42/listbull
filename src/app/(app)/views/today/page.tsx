@@ -25,27 +25,17 @@ export default async function TodayPage() {
   const user = await requireUser();
   const workspaceId = await resolveActiveWorkspaceId(user.id);
 
-  // Compute "today" boundaries in the user's timezone. Postgres
-  // doesn't speak IANA names natively in a portable way, so we
-  // bracket [now, end-of-local-day] in UTC by computing the offset
-  // server-side with Intl.
+  // Compute "today" end-of-day in the user's timezone via Postgres
+  // `at time zone`. Postgres handles IANA names natively
+  // (timestamp AT TIME ZONE 'Europe/Istanbul' returns the wall-clock
+  // time in Istanbul as a naive timestamp; date_trunc on that, then
+  // add 1 day - 1 ms, then convert back to timestamptz). This is
+  // DST-correct + host-tz-independent.
+  //
+  // Note: passing `tz` as a SQL parameter is parameterized — the
+  // value goes through pg's bind layer, not string interpolation.
   const tz = user.timezone || "UTC";
-  const now = new Date();
-  const local = new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now);
-  const yyyy = local.find((p) => p.type === "year")?.value ?? "1970";
-  const mm = local.find((p) => p.type === "month")?.value ?? "01";
-  const dd = local.find((p) => p.type === "day")?.value ?? "01";
-  // End-of-day local — convert by parsing 23:59:59 in the timezone.
-  const endLocal = new Date(`${yyyy}-${mm}-${dd}T23:59:59`);
-  // The Date constructor reads as system-local; for tz-correct
-  // comparison we just bracket against the local server's calendar
-  // day. Acceptable approximation when bot's host runs UTC.
-  const endOfDay = endLocal;
+  const endOfDayExpr = sql`((date_trunc('day', (now() AT TIME ZONE ${tz})) + interval '1 day' - interval '1 microsecond') AT TIME ZONE ${tz})`;
 
   const rows = await db
     .select({
@@ -60,26 +50,25 @@ export default async function TodayPage() {
         isNull(items.archivedAt),
         eq(items.isDone, false),
         or(
-          // Due today or overdue
-          and(
-            sql`${items.dueAt} is not null`,
-            lte(items.dueAt, endOfDay),
-          ),
+          // Due today or overdue (dueAt <= end-of-local-day)
+          sql`${items.dueAt} is not null and ${items.dueAt} <= ${endOfDayExpr}`,
           // In-progress regardless of date
           eq(items.status, "in_progress"),
-          // High-priority unassigned items surface here too
+          // High-priority items surface here too
           eq(items.priority, "high"),
         ),
       ),
     )
     .orderBy(
-      // Overdue first (dueAt < now), then today (dueAt <= endOfDay),
-      // then position. Use a sort sentinel so nulls go last.
+      // Overdue first, then today, then position. Sort sentinel
+      // pushes null dueAt rows (status='in_progress' / priority='high'
+      // without a date) to the end.
       asc(sql`coalesce(${items.dueAt}, '2099-01-01'::timestamptz)`),
       asc(items.position),
     );
   // Reference imports kept live for future filters.
   void gte;
+  void lte;
 
   if (rows.length === 0) {
     return (

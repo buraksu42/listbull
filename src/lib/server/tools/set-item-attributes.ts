@@ -12,10 +12,10 @@
  */
 import "server-only";
 
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { activityLog, items, lists } from "@/lib/db/schema";
+import { activityLog, items } from "@/lib/db/schema";
 import {
   setItemAttributesInputSchema,
   type SetItemAttributesOutput,
@@ -93,30 +93,27 @@ export async function executeSetItemAttributes(
         // Tag-vocabulary cap check: count distinct tags currently in
         // use across the workspace, plus the new tags this write
         // introduces. Reject if the union > MAX_WORKSPACE_TAGS.
+        //
+        // Phase 4.5 audit: query is fully parameterized — workspace_id
+        // goes through Drizzle's bind layer via the inline join. No
+        // raw SQL splicing.
         const newTags = normalized.filter((t) => !currentSet.has(t));
         if (newTags.length > 0) {
-          // Existing workspace vocabulary = distinct tags across all
-          // non-archived items in any list in the workspace.
-          const workspaceListIds = (
-            await tx
-              .select({ id: lists.id })
-              .from(lists)
-              .where(eq(lists.workspaceId, ctx.workspaceId))
-          ).map((r) => r.id);
-
-          if (workspaceListIds.length > 0) {
-            const vocab = await tx.execute<{ tag: string }>(
-              sql`SELECT DISTINCT unnest(tags) AS tag FROM items WHERE list_id IN ${sql.raw(`(${workspaceListIds.map((id) => `'${id}'`).join(",")})`)} AND archived_at IS NULL`,
+          const vocab = await tx.execute<{ tag: string }>(
+            sql`SELECT DISTINCT unnest(i.tags) AS tag
+                FROM items i
+                INNER JOIN lists l ON l.id = i.list_id
+                WHERE l.workspace_id = ${ctx.workspaceId}
+                  AND i.archived_at IS NULL`,
+          );
+          const existingVocab = new Set(vocab.map((r) => r.tag));
+          const wouldExist = new Set(existingVocab);
+          for (const t of newTags) wouldExist.add(t);
+          if (wouldExist.size > MAX_WORKSPACE_TAGS) {
+            return err(
+              "tag_limit_exceeded",
+              `Workspace tag vocabulary capped at ${MAX_WORKSPACE_TAGS}; this write would push it to ${wouldExist.size}.`,
             );
-            const existingVocab = new Set(vocab.map((r) => r.tag));
-            const wouldExist = new Set(existingVocab);
-            for (const t of newTags) wouldExist.add(t);
-            if (wouldExist.size > MAX_WORKSPACE_TAGS) {
-              return err(
-                "tag_limit_exceeded",
-                `Workspace tag vocabulary capped at ${MAX_WORKSPACE_TAGS}; this write would push it to ${wouldExist.size}.`,
-              );
-            }
           }
         }
         patch.tags = normalized;
@@ -164,6 +161,3 @@ export async function executeSetItemAttributes(
   });
 }
 
-// Silence unused-import warnings for items array helpers we don't
-// reference directly (kept for potential future tag-counting variants).
-void inArray;
