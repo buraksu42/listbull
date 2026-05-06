@@ -27,6 +27,18 @@ export async function SpendSection({ workspaceId }: Props) {
   const totalTokens = spend.totalPromptTokens + spend.totalCompletionTokens;
   const usdTotal = spend.totalCostUsdMicro / 1_000_000;
 
+  // Phase 9 projection: average over non-zero days × 30. Skip the
+  // last point (partial today). When no usage yet, projection = 0
+  // and we hide the line.
+  const seriesForAvg = series.slice(0, -1);
+  const nonZeroDays = seriesForAvg.filter((p) => p.costUsdMicro > 0);
+  const avgCostMicro =
+    nonZeroDays.length > 0
+      ? nonZeroDays.reduce((acc, p) => acc + p.costUsdMicro, 0) /
+        nonZeroDays.length
+      : 0;
+  const projectionUsd = (avgCostMicro * 30) / 1_000_000;
+
   return (
     <section>
       <div
@@ -68,6 +80,13 @@ export async function SpendSection({ workspaceId }: Props) {
             <Stat
               label="USD"
               value={`$${usdTotal.toFixed(4)}`}
+              isString
+            />
+          )}
+          {projectionUsd > 0 && (
+            <Stat
+              label="30d projection"
+              value={`$${projectionUsd.toFixed(2)}`}
               isString
             />
           )}

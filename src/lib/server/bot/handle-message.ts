@@ -319,6 +319,11 @@ export async function handleMessage(ctx: Context): Promise<void> {
         model: user.llmModel,
         promptTokens: result.usage.promptTokens,
         completionTokens: result.usage.completionTokens,
+        // Phase 9: prefer provider-reported cost when available;
+        // recordLlmUsage falls back to MODEL_PRICING when omitted.
+        costUsdMicro: result.usage.providerReportedCost
+          ? result.usage.costUsdMicro
+          : undefined,
         keySource,
       });
     } catch (err) {
@@ -554,6 +559,11 @@ async function handleForwardedMessage(args: {
         model: user.llmModel,
         promptTokens: result.usage.promptTokens,
         completionTokens: result.usage.completionTokens,
+        // Phase 9: prefer provider-reported cost when available;
+        // recordLlmUsage falls back to MODEL_PRICING when omitted.
+        costUsdMicro: result.usage.providerReportedCost
+          ? result.usage.costUsdMicro
+          : undefined,
         keySource,
       });
     } catch (err) {
