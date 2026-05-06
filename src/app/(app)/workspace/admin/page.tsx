@@ -2,6 +2,7 @@ import { ChevronLeft, Crown } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { ActivityTimeline } from "@/components/workspace/activity-timeline";
 import {
   listWorkspacesForUser,
   resolveActiveWorkspaceId,
@@ -121,6 +122,8 @@ export default async function WorkspaceAdminPage() {
             />
           </div>
         </section>
+
+        <ActivityTimeline workspaceId={activeId} />
 
         <section>
           <div
