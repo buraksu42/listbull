@@ -67,6 +67,12 @@ export default async function SettingsPage() {
               {usage.callCount.toLocaleString()} LLM call
               {usage.callCount === 1 ? "" : "s"} ·{" "}
               {totalTokens.toLocaleString()} tokens
+              {usage.totalCostUsdMicro > 0 && (
+                <>
+                  {" "}
+                  · ${(usage.totalCostUsdMicro / 1_000_000).toFixed(4)}
+                </>
+              )}
             </p>
             <p
               style={{
