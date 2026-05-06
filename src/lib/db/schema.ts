@@ -458,6 +458,50 @@ export const workspaceBots = pgTable(
   ],
 );
 
+// ─── licenses (Phase 6) ─────────────────────────────────────────────
+//
+// Self-host license records. SaaS-side: each issued license gets a
+// row (issuance audit + revocation surface). Self-host operator's
+// instance verifies the license JWT offline against the bundled
+// public key — the SaaS DB row is the source of truth for revocation
+// lookups via the optional revocation-list refresh.
+//
+// `key` stores the SIGNED JWT (header.payload.signature). LicensePayload
+// shape is frozen in src/lib/types/billing.ts. Revocation = setting
+// revoked_at; the offline checker reads a periodic export of revoked
+// JWT ids if configured, or accepts that live revocation is impossible
+// without phone-home (acceptable for self-host privacy posture).
+export const licenses = pgTable(
+  "licenses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Signed JWT — header.payload.signature, base64url. */
+    key: text("key").notNull(),
+    // 'team' | 'workspace'
+    tier: text("tier").notNull(),
+    seats: integer("seats").notNull(),
+    issuedToEmail: text("issued_to_email").notNull(),
+    /** Optional comma-separated workspace_id allowlist (mirrored in JWT payload). */
+    workspaces: text("workspaces"),
+    issuedAt: timestamp("issued_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    /** Set when issuance was driven by a Stripe / Iyzico subscription. */
+    sourceProvider: text("source_provider"),
+    sourceReference: text("source_reference"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("licenses_key_idx").on(t.key),
+    index("licenses_email_idx").on(t.issuedToEmail),
+    index("licenses_revoked_idx").on(t.revokedAt),
+  ],
+);
+
 // ─── workspace_invites ─────────────────────────────────────────────
 //
 // Phase 5.5: workspace-level invites (mirror of list_invites). Issued

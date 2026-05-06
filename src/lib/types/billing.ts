@@ -8,6 +8,7 @@
  */
 import type {
   billingCustomers,
+  licenses,
   subscriptions,
 } from "@/lib/db/schema";
 import type { WorkspaceTier } from "./workspace";
@@ -168,3 +169,25 @@ export type LicenseVerifyResult =
         | "revoked"
         | "workspace_not_allowed";
     };
+
+// ─── License row (Phase 6 SaaS-side audit) ───────────────────────────
+
+export type License = typeof licenses.$inferSelect;
+export type NewLicense = typeof licenses.$inferInsert;
+
+/**
+ * Public-safe view of an issued license. Used by the admin
+ * dashboard list and the self-host operator's email body. The full
+ * JWT (`key`) is included exactly once — at issuance time — and
+ * never displayed afterward.
+ */
+export type LicensePublic = {
+  id: string;
+  tier: "team" | "workspace";
+  seats: number;
+  issuedToEmail: string;
+  issuedAt: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  workspaces: string[];
+};

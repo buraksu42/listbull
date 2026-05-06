@@ -67,6 +67,14 @@ const serverSchema = z.object({
   LICENSE_VERIFY_ENABLED: z.enum(["true", "false"]).default("false"),
   LICENSE_PUBLIC_KEY: z.string().optional(),
   LICENSE_KEY: z.string().optional(),
+
+  // Phase 6: SaaS-side license issuance. PEM-encoded Ed25519 private
+  // key used by the issuer to sign JWTs. The matching public half
+  // ships with each self-host build (LICENSE_PUBLIC_KEY) so verifiers
+  // can validate offline. Admin endpoint requires LICENSE_ADMIN_TOKEN
+  // header.
+  LICENSE_PRIVATE_KEY: z.string().optional(),
+  LICENSE_ADMIN_TOKEN: z.string().optional(),
 });
 
 const clientSchema = z.object({

@@ -45,6 +45,9 @@ export type {
   TierCheckResult,
   LicensePayload,
   LicenseVerifyResult,
+  License,
+  NewLicense,
+  LicensePublic,
 } from "./billing";
 
 export { TIER_LIMITS } from "./billing";
