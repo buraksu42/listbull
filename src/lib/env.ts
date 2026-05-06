@@ -94,6 +94,14 @@ const serverSchema = z.object({
   // sender (e.g. "listbull <license@listbull.org>").
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM: z.string().optional(),
+
+  // Phase 7: Upstash Redis (KV) for cross-pod webhook idempotency +
+  // per-route rate limiting on admin/billing surfaces. When unset,
+  // idempotency falls back to in-memory single-pod cache (existing
+  // Phase 4.5 stub) and rate limiting becomes a no-op. Both safe
+  // defaults — operator opts in by configuring the env.
+  UPSTASH_REDIS_REST_URL: z.string().url().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
 });
 
 const clientSchema = z.object({

@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (isReplay(event.id)) {
+  if (await isReplay(event.id)) {
     // Already processed — Stripe replays on hiccups. Idempotent OK.
     return NextResponse.json({ ok: true, replayed: true });
   }

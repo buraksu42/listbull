@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   }
 
   const eventId = `${event.referenceCode}:${event.iyziEventTime}:${event.iyziEventType}`;
-  if (isReplay(eventId)) {
+  if (await isReplay(eventId)) {
     return NextResponse.json({ ok: true, replayed: true });
   }
 

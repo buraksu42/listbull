@@ -23,6 +23,7 @@ import { getStripe } from "@/lib/billing/stripe";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { getWorkspaceMembership } from "@/lib/db/queries/workspaces";
+import { enforceRateLimit } from "@/lib/server/middleware/rate-limit";
 import { env } from "@/lib/env";
 
 export const runtime = "nodejs";
@@ -36,6 +37,29 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { ok: false, error: { code: "unauthorized", message: "Sign in via Telegram" } },
       { status: 401 },
+    );
+  }
+
+  // Rate limit: 5 checkout sessions per 10 minutes per user. Stripe
+  // Checkout has its own surface for completing the payment; the
+  // limit is on session creation here. Tight enough that hammering
+  // the endpoint can't generate session-spam abuse on Stripe.
+  const rl = await enforceRateLimit({
+    scope: "billing-checkout",
+    identifier: userId,
+    tokens: 5,
+    windowSeconds: 600,
+  });
+  if (rl.limited) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: {
+          code: rl.reason,
+          message: "Too many checkout attempts. Try again in a few minutes.",
+        },
+      },
+      { status: 429 },
     );
   }
 

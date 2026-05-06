@@ -15,6 +15,7 @@ import { NextResponse } from "next/server";
 import { issueLicense, listLicenses } from "@/lib/billing/license";
 import { sendEmail } from "@/lib/email/resend";
 import { env } from "@/lib/env";
+import { enforceRateLimit } from "@/lib/server/middleware/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,6 +62,29 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = authorize(request);
   if (auth) return auth;
+
+  // Rate limit issuance: 10 per hour per admin token. Tight cap —
+  // legitimate operator issuance is rare; this caps damage if the
+  // token leaks. Upstash-backed when configured; no-op otherwise.
+  const adminToken = request.headers.get("x-listbull-admin-token") ?? "anon";
+  const rl = await enforceRateLimit({
+    scope: "admin-license-issue",
+    identifier: adminToken,
+    tokens: 10,
+    windowSeconds: 3600,
+  });
+  if (rl.limited) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: {
+          code: rl.reason,
+          message: "Too many issuance requests. Try again later.",
+        },
+      },
+      { status: 429 },
+    );
+  }
 
   let body: unknown;
   try {
