@@ -32,6 +32,7 @@ import {
   resolveActiveWorkspaceId,
 } from "@/lib/db/queries/workspaces";
 import { checkMemberCap, recordLlmUsage } from "@/lib/db/queries/llm-usage";
+import { enforceRateLimit } from "@/lib/server/middleware/rate-limit";
 import { sliceForContext } from "@/lib/ai/conversation";
 import { forwardedMessagePrompt } from "@/lib/ai/prompts/forwarded";
 import {
@@ -71,6 +72,8 @@ const COPY = {
       "Bu workspace'te günlük harcama limitin doldu. Kendi OpenRouter key'ini ekle ya da yarın tekrar dene.",
     capMonthly:
       "Bu workspace'te aylık harcama limitin doldu. Kendi OpenRouter key'ini ekle ya da workspace yöneticine sor.",
+    rateLimited:
+      "Çok fazla mesaj — biraz yavaşla. Saatlik limitin doldu, biraz sonra tekrar dene.",
   },
   en: {
     noKey:
@@ -84,6 +87,8 @@ const COPY = {
       "Your daily spend cap on this workspace is exhausted. Add your own OpenRouter key or try again tomorrow.",
     capMonthly:
       "Your monthly spend cap on this workspace is exhausted. Add your own OpenRouter key or ask the workspace admin.",
+    rateLimited:
+      "Too many messages — slow down. Your hourly limit is exhausted; try again shortly.",
   },
 } as const;
 
@@ -157,6 +162,23 @@ export async function handleMessage(ctx: Context): Promise<void> {
   const locale = pickLocale(user.locale);
   const copy = COPY[locale];
   const chatId = message.chat.id;
+
+  // Phase 10 per-user hourly rate limit. Activated when
+  // LISTBULL_PER_USER_HOURLY_MSG_LIMIT > 0; disabled at 0 (default).
+  // Backed by Upstash when configured; in-memory fallback otherwise.
+  const hourlyLimit = env.LISTBULL_PER_USER_HOURLY_MSG_LIMIT;
+  if (hourlyLimit > 0) {
+    const rl = await enforceRateLimit({
+      scope: "bot-message",
+      identifier: user.id,
+      tokens: hourlyLimit,
+      windowSeconds: 3600,
+    });
+    if (rl.limited) {
+      await ctx.reply(copy.rateLimited);
+      return;
+    }
+  }
 
   // BYOK gate (with operator-level fallback per architecture.md AI section):
   //   1. User's BYOK key wins when set
