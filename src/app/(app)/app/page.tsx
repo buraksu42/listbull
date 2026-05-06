@@ -43,15 +43,19 @@ export default function AppBoot() {
         }
 
         if (!cancelled) {
-          // Cookie is set. If the Mini App was launched via a
-          // `t.me/<bot>?startapp=invite_<token>` deeplink, route to
-          // the invite-accept screen; otherwise fall through to the
-          // list-of-lists view. Future start_param prefixes can be
-          // added here (e.g. `item_<id>` for item-deeplinks).
+          // Cookie is set. Routes by start_param prefix:
+          //   invite_<token>   → per-list invite accept (Phase 3)
+          //   wsinvite_<token> → workspace invite accept (Phase 5.5)
+          //   <empty> / other  → /lists (default)
           const startParam = tg.initDataUnsafe?.start_param ?? "";
           if (startParam.startsWith("invite_")) {
             const token = startParam.slice("invite_".length);
             window.location.replace(`/invites/${encodeURIComponent(token)}`);
+          } else if (startParam.startsWith("wsinvite_")) {
+            const token = startParam.slice("wsinvite_".length);
+            window.location.replace(
+              `/workspace-invites/${encodeURIComponent(token)}`,
+            );
           } else {
             window.location.replace("/lists");
           }

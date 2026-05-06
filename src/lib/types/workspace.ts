@@ -10,7 +10,11 @@
  * so consumers can `import { Workspace } from '@/lib/types'` exactly
  * like they import `User` or `List`.
  */
-import type { workspaceMembers, workspaces } from "@/lib/db/schema";
+import type {
+  workspaceInvites,
+  workspaceMembers,
+  workspaces,
+} from "@/lib/db/schema";
 
 // ─── Workspace ──────────────────────────────────────────────────────
 export type Workspace = typeof workspaces.$inferSelect;
@@ -123,4 +127,29 @@ export type WorkspaceListItem = {
   memberCount: number;
   listCount: number;
   isActive: boolean;
+};
+
+// ─── WorkspaceInvite (Phase 5.5) ─────────────────────────────────────
+
+export type WorkspaceInvite = typeof workspaceInvites.$inferSelect;
+export type NewWorkspaceInvite = typeof workspaceInvites.$inferInsert;
+
+/**
+ * View-model surfaced by the workspace-invite-accept screen
+ * (`/workspace-invites/[token]`). Caller-derived `isExpired` /
+ * `isAccepted` so the client doesn't recompute (and disagree
+ * with) the same logic.
+ */
+export type WorkspaceInviteTokenInfo = {
+  token: string;
+  workspaceId: string;
+  workspaceName: string;
+  workspaceTier: WorkspaceTier;
+  /** Display name of the user who created the invite. */
+  invitedByName: string;
+  role: WorkspaceRole;
+  /** ISO 8601 string */
+  expiresAt: string;
+  isExpired: boolean;
+  isAccepted: boolean;
 };

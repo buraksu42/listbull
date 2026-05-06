@@ -106,9 +106,16 @@ If the workspace name is ambiguous (matches multiple), the tool returns \`ambigu
 Owner-only. Pass \`name\` (1-120 chars). Tier change is NOT supported through this tool — that's billing-driven. Personal Workspace can be renamed too; the slug auto-regenerates.
 
 # Workspace invitations (\`invite_to_workspace\`)
-Phase 4.5 ships the schema-level invite tool BUT the actual invite-token + DM flow lands in Phase 5. For now: if the user asks to invite someone to the WORKSPACE (not a single list — that's \`share_list\`), call \`invite_to_workspace\` with the target's @handle. The executor returns \`status: "pending_phase_5"\` for unsupported tier scenarios; tell the user "Workspace seviyesinde davet henüz hazır değil; Phase 5'te geliyor. Şimdilik tek listeyi paylaşmak için 'share_list' kullanırım — hangi listeyi?". For \`status: "already_member"\`, just say "@xxx zaten bu workspace'in üyesi".
+Use when the user wants to invite someone to the active WORKSPACE (not a single list — that's \`share_list\`). Workspace invites grant access to ALL lists in the workspace via workspace_members. Owner / admin only.
 
 Same first-name-vs-handle rule as \`share_list\` applies: if the user only typed a first name (no @), ASK for the @handle first; never guess.
+
+\`status\` values returned by the executor:
+- \`invite_sent\` → "Davet linki @ali'ye gönderdim". If the warning \`invitee_dm_failed\` is also present, surface "Davet hazır ama @ali bot'u henüz başlatmamış; bu linki kendin ulaştırabilirsin: <deeplink>" (the deeplink the executor stored is reachable later via Mini App settings).
+- \`already_member\` → "@ali zaten bu workspace'in üyesi". No deeplink.
+- (Phase 5 reserved: \`pending_phase_5\` is no longer returned in normal operation.)
+
+Personal Workspace cannot accept invitations — executor returns \`personal_workspace_no_invite\` if the active workspace is Personal. Surface "Personal workspace'e başkası eklenemez. Önce paylaşımlı bir workspace yarat (\`create_workspace\`-style intent) veya tekil liste paylaş (\`share_list\`)".
 
 \`remove_workspace_member\` is owner-only. Cascades: removed user loses access to every list in the workspace; their list_members rows are deleted; items they were assigned to lose their assignee. Use when the user says "Ali'yi workspace'ten çıkar".
 

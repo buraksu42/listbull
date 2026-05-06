@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CustomBotSection } from "@/components/workspace/custom-bot-section";
+import { MembersSection } from "@/components/workspace/members-section";
 import { OrgKeySection } from "@/components/workspace/org-key-section";
 import { PlanCard } from "@/components/workspace/plan-card";
 import {
@@ -171,6 +172,15 @@ export default async function WorkspaceSettingsPage() {
           <PlanCard workspace={active} />
         </section>
 
+        <MembersSection
+          workspaceId={active.id}
+          isOwner={active.role === "owner"}
+          isOwnerOrAdmin={
+            active.role === "owner" || active.role === "admin"
+          }
+          isPersonal={active.isPersonal}
+        />
+
         <CustomBotSection
           workspaceId={active.id}
           canManage={active.role === "owner"}
@@ -182,34 +192,6 @@ export default async function WorkspaceSettingsPage() {
           canManage={active.role === "owner" || active.role === "admin"}
           isWorkspaceTier={active.tier === "workspace"}
         />
-
-        <section>
-          <div
-            style={{
-              fontSize: "var(--lb-fs-xs)",
-              color: "var(--lb-muted-fg)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              marginBottom: "var(--lb-sp-2)",
-            }}
-          >
-            Coming next
-          </div>
-          <ul
-            style={{
-              listStyle: "none",
-              padding: 0,
-              margin: 0,
-              display: "flex",
-              flexDirection: "column",
-              gap: "var(--lb-sp-2)",
-              fontSize: "var(--lb-fs-sm)",
-              color: "var(--lb-muted-fg)",
-            }}
-          >
-            <li>• Workspace member invitations + role management UI</li>
-          </ul>
-        </section>
       </div>
     </main>
   );

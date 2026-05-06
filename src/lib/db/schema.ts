@@ -458,6 +458,40 @@ export const workspaceBots = pgTable(
   ],
 );
 
+// ─── workspace_invites ─────────────────────────────────────────────
+//
+// Phase 5.5: workspace-level invites (mirror of list_invites). Issued
+// by `invite_to_workspace` tool / Mini App settings invite form.
+// Accept flow lands at `/workspace-invites/[token]`; on accept, a
+// `workspace_members` row is inserted. 7-day TTL by default.
+export const workspaceInvites = pgTable(
+  "workspace_invites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    invitedUsername: text("invited_username").notNull(),
+    invitedBy: uuid("invited_by")
+      .notNull()
+      .references(() => users.id),
+    token: text("token").notNull(),
+    // 'admin' | 'editor' | 'viewer' | 'guest' — workspace owner cannot
+    // be invited via this flow (transfer-ownership is its own surface).
+    role: text("role").notNull().default("editor"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    acceptedByUserId: uuid("accepted_by_user_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("workspace_invites_token_idx").on(t.token),
+    index("workspace_invites_workspace_idx").on(t.workspaceId),
+  ],
+);
+
 // ─── bot_users ─────────────────────────────────────────────────────
 //
 // Records that a user has /start'ed a bot. Required precondition

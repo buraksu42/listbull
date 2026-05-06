@@ -28,6 +28,9 @@ export type {
   WorkspaceSnapshot,
   WorkspaceMemberSnapshot,
   WorkspaceListItem,
+  WorkspaceInvite,
+  NewWorkspaceInvite,
+  WorkspaceInviteTokenInfo,
 } from "./workspace";
 
 export type {

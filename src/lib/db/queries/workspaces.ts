@@ -15,7 +15,12 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { lists, workspaceMembers, workspaces } from "@/lib/db/schema";
+import {
+  lists,
+  users,
+  workspaceMembers,
+  workspaces,
+} from "@/lib/db/schema";
 import { TIER_LIMITS } from "@/lib/types";
 import type {
   Workspace,
@@ -211,6 +216,54 @@ export async function setActiveWorkspace(
     sql`UPDATE users SET active_workspace_id = ${workspaceId} WHERE id = ${userId}`,
   );
   return true;
+}
+
+/**
+ * Phase 5.5: enumerate workspace members with joined user info.
+ * Powers the workspace settings members list + Phase 6+ admin
+ * surfaces.
+ */
+export type WorkspaceMemberWithUser = {
+  memberId: string;
+  userId: string;
+  role: WorkspaceRole;
+  acceptedAt: string;
+  user: {
+    telegramFirstName: string;
+    telegramUsername: string | null;
+    telegramPhotoUrl: string | null;
+  };
+};
+
+export async function listWorkspaceMembers(
+  workspaceId: string,
+): Promise<WorkspaceMemberWithUser[]> {
+  const rows = await db
+    .select({
+      memberId: workspaceMembers.id,
+      userId: workspaceMembers.userId,
+      role: workspaceMembers.role,
+      acceptedAt: workspaceMembers.acceptedAt,
+      telegramFirstName: users.telegramFirstName,
+      telegramUsername: users.telegramUsername,
+      telegramPhotoUrl: users.telegramPhotoUrl,
+    })
+    .from(workspaceMembers)
+    .innerJoin(users, eq(users.id, workspaceMembers.userId))
+    .where(eq(workspaceMembers.workspaceId, workspaceId))
+    .orderBy(asc(workspaceMembers.acceptedAt));
+
+  return rows.map((r) => ({
+    memberId: r.memberId,
+    userId: r.userId,
+    role: r.role as WorkspaceRole,
+    acceptedAt: r.acceptedAt.toISOString(),
+    user: {
+      telegramFirstName: r.telegramFirstName,
+      telegramUsername: r.telegramUsername,
+      telegramPhotoUrl: r.telegramPhotoUrl,
+    },
+  }));
 }
 
 /**
