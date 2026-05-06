@@ -121,6 +121,75 @@ export async function getUserLlmUsage(
 }
 
 /**
+ * Phase 8 daily series for the trend sparkline. Returns one row per
+ * day in the window with token + cost totals. Days with no usage
+ * surface as zero rows so the chart renders a continuous line.
+ */
+export type WorkspaceLlmDailyPoint = {
+  /** ISO date string (YYYY-MM-DD, UTC bucket boundary). */
+  day: string;
+  promptTokens: number;
+  completionTokens: number;
+  costUsdMicro: number;
+  callCount: number;
+};
+
+export async function getWorkspaceLlmDailySeries(
+  workspaceId: string,
+  windowDays: number = 30,
+): Promise<WorkspaceLlmDailyPoint[]> {
+  const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+
+  const rows = await db.execute<{
+    day: string;
+    prompt_tokens: number;
+    completion_tokens: number;
+    cost_usd_micro: number;
+    call_count: number;
+  }>(sql`
+    SELECT
+      to_char(date_trunc('day', created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
+      coalesce(sum(prompt_tokens), 0)::int AS prompt_tokens,
+      coalesce(sum(completion_tokens), 0)::int AS completion_tokens,
+      coalesce(sum(cost_usd_micro), 0)::int AS cost_usd_micro,
+      count(*)::int AS call_count
+    FROM llm_usage
+    WHERE workspace_id = ${workspaceId}
+      AND created_at >= ${cutoff.toISOString()}
+    GROUP BY day
+    ORDER BY day ASC
+  `);
+
+  const byDay = new Map<string, (typeof rows)[number]>();
+  for (const r of rows) byDay.set(r.day, r);
+
+  // Continuous series: fill zero rows for days with no usage so the
+  // chart renders a smooth line.
+  const series: WorkspaceLlmDailyPoint[] = [];
+  const start = new Date(
+    Date.UTC(
+      cutoff.getUTCFullYear(),
+      cutoff.getUTCMonth(),
+      cutoff.getUTCDate(),
+    ),
+  );
+  for (let i = 0; i < windowDays; i++) {
+    const d = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
+    const key = d.toISOString().slice(0, 10);
+    const r = byDay.get(key);
+    series.push({
+      day: key,
+      promptTokens: r?.prompt_tokens ?? 0,
+      completionTokens: r?.completion_tokens ?? 0,
+      costUsdMicro: r?.cost_usd_micro ?? 0,
+      callCount: r?.call_count ?? 0,
+    });
+  }
+
+  return series;
+}
+
+/**
  * Last-N-days workspace spend summary. Default 30d window. Returns
  * totals + per-model + per-member breakdowns.
  */
