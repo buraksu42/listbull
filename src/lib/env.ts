@@ -53,6 +53,11 @@ const serverSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_TEAM: z.string().optional(),
   STRIPE_PRICE_WORKSPACE: z.string().optional(),
+  // Phase 6.5: one-time-payment self-host license SKUs. When the
+  // Stripe webhook receives invoice.payment_succeeded for these
+  // prices, we auto-issue a perpetual license JWT.
+  STRIPE_PRICE_SELFHOST_TEAM: z.string().optional(),
+  STRIPE_PRICE_SELFHOST_WORKSPACE: z.string().optional(),
 
   IYZICO_API_KEY: z.string().optional(),
   IYZICO_SECRET_KEY: z.string().optional(),

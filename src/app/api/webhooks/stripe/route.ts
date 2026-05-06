@@ -15,9 +15,12 @@ import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
 
 import { isReplay } from "@/lib/billing/idempotency";
+import { issueLicense } from "@/lib/billing/license";
 import { priceToTier, verifyStripeWebhook } from "@/lib/billing/stripe";
 import { db } from "@/lib/db/client";
 import { subscriptions, workspaces } from "@/lib/db/schema";
+import { sendEmail } from "@/lib/email/resend";
+import { env } from "@/lib/env";
 import { TIER_LIMITS, type WorkspaceTier } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -50,6 +53,15 @@ export async function POST(request: Request) {
         break;
       case "invoice.payment_failed":
         await handlePaymentFailed(event.data.object);
+        break;
+      case "invoice.payment_succeeded":
+        // Phase 6.5: self-host SKU one-time payments fire this with
+        // a price ID matching STRIPE_PRICE_SELFHOST_*. Subscription
+        // SKUs also fire it but we ignore those here (the
+        // subscription.created/updated handlers already wrote the
+        // subscriptions row). Self-host check first — if no
+        // self-host price match, no-op.
+        await maybeIssueSelfHostLicense(event.data.object);
         break;
       default:
         // Non-essential event — 200 so Stripe stops retrying.
@@ -193,4 +205,95 @@ async function handlePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
     .update(subscriptions)
     .set({ status: "past_due", updatedAt: new Date() })
     .where(eq(subscriptions.providerSubscriptionId, sub));
+}
+
+/**
+ * Phase 6.5: auto-issue a self-host license JWT when an
+ * invoice.payment_succeeded event matches one of the
+ * `STRIPE_PRICE_SELFHOST_*` price IDs. Skips silently when:
+ *   - LICENSE_PRIVATE_KEY is unset (issuer not configured)
+ *   - the invoice's price doesn't match a self-host SKU
+ *   - the invoice has no email + workspace_id metadata
+ *
+ * The `metadata.workspaces` field on the Checkout Session is a
+ * comma-separated list of workspace_ids the license should
+ * authorize. Defaults to a single fresh UUID if absent — the
+ * licensee can re-target via reissue.
+ */
+async function maybeIssueSelfHostLicense(
+  invoice: Stripe.Invoice,
+): Promise<void> {
+  if (!env.LICENSE_PRIVATE_KEY) return;
+
+  // Find the line item's price ID. Stripe.Invoice.lines.data[0].price
+  // is the canonical surface for one-time payments.
+  type InvoiceLine = {
+    price?: { id?: string } | null;
+  };
+  const lines = (invoice as unknown as { lines?: { data?: InvoiceLine[] } })
+    .lines?.data ?? [];
+  const priceId = lines[0]?.price?.id;
+  if (!priceId) return;
+
+  let tier: "team" | "workspace" | null = null;
+  if (priceId === env.STRIPE_PRICE_SELFHOST_TEAM) tier = "team";
+  else if (priceId === env.STRIPE_PRICE_SELFHOST_WORKSPACE)
+    tier = "workspace";
+  if (!tier) return; // Not a self-host SKU; ignore.
+
+  const meta =
+    (invoice as unknown as { metadata?: Record<string, string> })
+      .metadata ?? {};
+  const email =
+    typeof meta.email === "string" && meta.email.length > 0
+      ? meta.email
+      : (invoice as unknown as { customer_email?: string | null })
+          .customer_email ?? "";
+  if (!email) {
+    console.warn(
+      "[stripe webhook] self-host invoice has no email; skipping license issuance",
+      { priceId },
+    );
+    return;
+  }
+
+  const workspaceCsv = typeof meta.workspaces === "string" ? meta.workspaces : "";
+  const workspaceIds =
+    workspaceCsv.length > 0
+      ? workspaceCsv.split(",").map((s) => s.trim()).filter((s) => s.length > 0)
+      : [crypto.randomUUID()];
+
+  const seats = tier === "team" ? 5 : 15;
+
+  const result = await issueLicense({
+    tier,
+    seats,
+    email,
+    workspaces: workspaceIds,
+    sourceProvider: "stripe",
+    sourceReference: invoice.id,
+  });
+  if (!result.ok) {
+    console.error(
+      "[stripe webhook] auto-issuance failed",
+      result.reason,
+      { priceId, email },
+    );
+    return;
+  }
+
+  // Best-effort email delivery; same template as the manual issuance
+  // route. Operator inspects logs if delivery fails.
+  await sendEmail({
+    to: email,
+    subject: "Your listbull self-host license",
+    text:
+      `Hi,\n\n` +
+      `Thanks for your purchase. Your listbull ${tier}-tier ` +
+      `license is ready.\n\n` +
+      `License key (paste into LICENSE_KEY env on your self-host instance):\n\n` +
+      `${result.jwt}\n\n` +
+      `Set LICENSE_VERIFY_ENABLED=true and restart your container ` +
+      `to activate.\n\n— listbull`,
+  });
 }
