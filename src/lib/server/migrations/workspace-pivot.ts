@@ -28,14 +28,51 @@
  *
  * Reverse: not automated. Restore from the hourly Postgres backup
  * (per global CLAUDE.md "Backup heartbeat").
+ *
+ * Note: this file is a standalone CLI script (run via `npx tsx`), not
+ * a server component module. It must NOT import "server-only" — that
+ * package throws on import outside Next.js's bundler-rewrite path,
+ * which would break the script.
  */
-import "server-only";
+import { createCipheriv, randomBytes, type CipherGCM } from "node:crypto";
 
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { encrypt } from "@/lib/server/encryption";
 import { env } from "@/lib/env";
+
+/**
+ * Inlined AES-256-GCM encrypt — mirror of `src/lib/server/encryption.ts`
+ * `encrypt()`, but without the `import "server-only"` it carries.
+ * That import throws when the script runs under raw `tsx` (no Next.js
+ * bundler rewrite), so we duplicate the ~10 lines of crypto here to
+ * keep the production-facing module's safety annotation intact.
+ *
+ * Format: base64(iv || authTag || ciphertext). Round-trips with
+ * `decrypt()` from the production module — same key, same algorithm.
+ */
+function encryptForSeed(plaintext: string): string {
+  const raw = env.ENV_KEY;
+  if (typeof raw !== "string" || raw.length === 0) {
+    throw new Error("ENV_KEY missing — set a 32-byte base64 value in env");
+  }
+  let key = Buffer.from(raw, "base64");
+  if (key.length !== 32) {
+    const utf8 = Buffer.from(raw, "utf8");
+    if (utf8.length < 32) {
+      throw new Error("ENV_KEY must decode to ≥32 bytes");
+    }
+    key = utf8.subarray(0, 32);
+  }
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv) as CipherGCM;
+  const ciphertext = Buffer.concat([
+    cipher.update(plaintext, "utf8"),
+    cipher.final(),
+  ]);
+  const authTag = cipher.getAuthTag();
+  return Buffer.concat([iv, authTag, ciphertext]).toString("base64");
+}
 
 /**
  * Telegram bot tokens have the format `<bot_id>:<secret>`. The numeric
@@ -70,7 +107,7 @@ async function seedDefaultBot(): Promise<string> {
   }
 
   const botId = parseBotIdFromToken(env.TELEGRAM_BOT_TOKEN);
-  const tokenCipher = encrypt(env.TELEGRAM_BOT_TOKEN);
+  const tokenCipher = encryptForSeed(env.TELEGRAM_BOT_TOKEN);
 
   const inserted = await db.execute<{ id: string }>(sql`
     INSERT INTO bots (
