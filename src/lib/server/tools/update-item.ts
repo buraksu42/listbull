@@ -27,7 +27,7 @@ import {
   type UpdateItemOutput,
 } from "@/lib/ai/tools";
 import type { ActivityAction } from "@/lib/types";
-import { ERR, err, isPast, ok, toItemSnapshot } from "./_shared";
+import { ERR, err, isPast, ok, resolveList, toItemSnapshot } from "./_shared";
 import { userCanWriteList } from "@/lib/db/queries/items";
 
 import type { ExecResult } from "./_shared";
@@ -40,7 +40,43 @@ export async function executeUpdateItem(
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
-  const { item_id, text, due_at, position, target_list_id } = parsed.data;
+  const {
+    item_id,
+    text,
+    due_at,
+    position,
+    target_list_id,
+    target_list_name,
+  } = parsed.data;
+
+  // Resolve target list (by id or name). The `resolveList` helper handles
+  // exact / fuzzy / inbox matching with workspace scoping. We use it
+  // outside the transaction since it's read-only; the destination is
+  // re-validated inside the transaction below.
+  let resolvedTargetListId: string | undefined = undefined;
+  if (target_list_id || target_list_name) {
+    const resolution = await resolveList(
+      ctx,
+      { listId: target_list_id, listName: target_list_name },
+      // Inbox fallback ON: "Inbox'a taşı" should always work even if
+      // the user typed a slightly off name.
+      { inboxFallback: true },
+    );
+    switch (resolution.kind) {
+      case "forbidden":
+        return err(ERR.forbidden, "You don't have access to that list.");
+      case "not_found":
+        return err(ERR.not_found, "Target list not found.");
+      case "ambiguous": {
+        const names = resolution.candidates.map((c) => c.name).join(", ");
+        return err(
+          ERR.ambiguous_list,
+          `List name matched multiple lists: ${names}. Specify which one.`,
+        );
+      }
+    }
+    resolvedTargetListId = resolution.listId;
+  }
 
   return await db.transaction(async (tx) => {
     const [current] = await tx
@@ -69,15 +105,19 @@ export async function executeUpdateItem(
     const warnings: string[] = [];
 
     let listIdChanged = false;
-    if (target_list_id !== undefined && target_list_id !== current.listId) {
+    if (
+      resolvedTargetListId !== undefined &&
+      resolvedTargetListId !== current.listId
+    ) {
       // Destination list must exist + sit in the same workspace + caller
-      // must have write access on it.
+      // must have write access on it. resolveList already enforced
+      // workspace scope; re-check inside the txn for archive + write.
       const [dest] = await tx
         .select()
         .from(lists)
         .where(
           and(
-            eq(lists.id, target_list_id),
+            eq(lists.id, resolvedTargetListId),
             eq(lists.workspaceId, ctx.workspaceId),
           ),
         )
@@ -90,13 +130,13 @@ export async function executeUpdateItem(
       }
       const destAllowed = await userCanWriteList(
         ctx.userId,
-        target_list_id,
+        resolvedTargetListId,
         ctx.workspaceId,
       );
       if (!destAllowed) {
         return err(ERR.forbidden, "You don't have access to the target list.");
       }
-      patch.listId = target_list_id;
+      patch.listId = resolvedTargetListId;
       changes.push("list_id");
       listIdChanged = true;
     }
