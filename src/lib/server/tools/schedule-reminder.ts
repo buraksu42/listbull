@@ -35,7 +35,22 @@ export async function executeScheduleReminder(
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
-  const { item_id, due_at } = parsed.data;
+  const { item_id, due_at, recurrence_rule } = parsed.data;
+
+  // Validate the RRULE if provided so we don't silently store garbage.
+  // `recurrence_rule === null` is the explicit "remove recurrence"
+  // signal (handled below); only validate when it's a non-null string.
+  if (typeof recurrence_rule === "string") {
+    try {
+      const { RRule } = await import("rrule");
+      RRule.fromString(`RRULE:${recurrence_rule}`);
+    } catch (e) {
+      return err(
+        ERR.invalid_input,
+        `Invalid RRULE: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
 
   return await db.transaction(async (tx) => {
     const [current] = await tx
@@ -81,9 +96,28 @@ export async function executeScheduleReminder(
       nextDueAt = new Date(due_at);
     }
 
-    // No-op: due_at unchanged from current value.
+    // Resolve target recurrence_rule:
+    //   - undefined  → leave column untouched
+    //   - null       → clear (one-shot or cleared reminder)
+    //   - string     → store the rule (validated above)
+    // When clearing the reminder (`due_at: null`), force-clear the rule
+    // too — recurrence with no anchor is meaningless.
+    const oldRrule = current.recurrenceRule ?? null;
+    let nextRrule: string | null | undefined;
+    if (due_at === null) {
+      nextRrule = null;
+    } else if (recurrence_rule === undefined) {
+      nextRrule = undefined; // unchanged
+    } else {
+      nextRrule = recurrence_rule; // string or null
+    }
+
+    // No-op: due_at + rrule both unchanged from current value.
     const newIso = nextDueAt?.toISOString() ?? null;
-    if (newIso === oldDueAtIso) {
+    const dueAtUnchanged = newIso === oldDueAtIso;
+    const rruleUnchanged =
+      nextRrule === undefined || (nextRrule ?? null) === oldRrule;
+    if (dueAtUnchanged && rruleUnchanged) {
       return ok({
         item: toItemSnapshot(current),
         cleared: false,
@@ -92,14 +126,18 @@ export async function executeScheduleReminder(
     }
 
     const now = new Date();
+    const patch: Partial<typeof items.$inferInsert> = {
+      dueAt: nextDueAt,
+      // Re-arm the cron pickup whenever due_at changes.
+      reminderSent: false,
+      updatedAt: now,
+    };
+    if (nextRrule !== undefined) {
+      patch.recurrenceRule = nextRrule;
+    }
     const [updated] = await tx
       .update(items)
-      .set({
-        dueAt: nextDueAt,
-        // Re-arm the cron pickup whenever due_at changes.
-        reminderSent: false,
-        updatedAt: now,
-      })
+      .set(patch)
       .where(eq(items.id, item_id))
       .returning();
     if (!updated) {

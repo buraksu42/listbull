@@ -40,6 +40,8 @@ export const itemSnapshotSchema = z.object({
   assigneeId: z.string().uuid().nullable(),
   dueAt: z.string().datetime({ offset: true }).nullable(),
   reminderSent: z.boolean(),
+  /** RFC 5545 RRULE body for recurring reminders, or null for one-shot. */
+  recurrenceRule: z.string().nullable().optional(),
   position: z.number().int(),
   createdBy: z.string().uuid(),
   completedAt: z.string().datetime({ offset: true }).nullable(),
@@ -769,6 +771,22 @@ export const scheduleReminderInputSchema = z.object({
    * "clear" must be explicit so we don't conflate them.
    */
   due_at: z.string().datetime({ offset: true }).nullable(),
+  /**
+   * Optional RFC 5545 RRULE body (no `RRULE:` prefix, no DTSTART) for
+   * recurring reminders. Pass null or omit for one-shot. Pass null
+   * explicitly alongside a non-null `due_at` to convert a recurring
+   * reminder back to one-shot. Times in the rule are interpreted in
+   * UTC — convert local times accordingly before emitting.
+   *
+   * Examples:
+   *   - "every Wednesday at 21:00 Europe/Istanbul" (no DST):
+   *       FREQ=WEEKLY;BYDAY=WE;BYHOUR=18;BYMINUTE=0
+   *   - "every weekday at 09:00 UTC":
+   *       FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;BYMINUTE=0
+   *   - "every month on the 1st at 12:00 UTC":
+   *       FREQ=MONTHLY;BYMONTHDAY=1;BYHOUR=12;BYMINUTE=0
+   */
+  recurrence_rule: z.string().trim().min(1).max(500).nullable().optional(),
 });
 
 export const scheduleReminderOutputSchema = z.object({
@@ -1123,11 +1141,21 @@ export const tools: readonly ToolDefinition[] = [
       "do not refuse. Notes (`is_checkable=false`) cannot be " +
       "scheduled (`cannot_schedule_note`). Re-arming an already-fired " +
       "reminder works — the executor resets `reminder_sent` to false. " +
-      "If you want to create a fresh item WITH a reminder, call " +
-      "`create_item` with `due_at` instead — `schedule_reminder` is " +
-      "for already-existing items only. Common error envelopes: " +
-      "`not_found`, `forbidden`, `invalid_input` " +
-      "(`cannot_schedule_note`).",
+      "For RECURRING reminders pass `recurrence_rule` with an RFC 5545 " +
+      "RRULE body (no `RRULE:` prefix). After each fire the cron " +
+      "computes the next occurrence and re-arms automatically — DO " +
+      "NOT delete+recreate. Times in the rule are interpreted in UTC: " +
+      "convert local times before emitting (e.g. `21:00 Europe/Istanbul " +
+      "= 18:00 UTC` since Turkey has no DST). Examples — weekly: " +
+      "`FREQ=WEEKLY;BYDAY=WE;BYHOUR=18;BYMINUTE=0`; weekday daily: " +
+      "`FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;BYMINUTE=0`; monthly " +
+      "first-of-month: `FREQ=MONTHLY;BYMONTHDAY=1;BYHOUR=12;BYMINUTE=0`. " +
+      "Pass `recurrence_rule: null` to convert a recurring reminder " +
+      "back to one-shot. If you want to create a fresh item WITH a " +
+      "reminder, call `create_item` with `due_at` instead — " +
+      "`schedule_reminder` is for already-existing items only. Common " +
+      "error envelopes: `not_found`, `forbidden`, `invalid_input` " +
+      "(`cannot_schedule_note`, invalid RRULE).",
     inputSchema: scheduleReminderInputSchema,
     outputSchema: scheduleReminderOutputSchema,
   },

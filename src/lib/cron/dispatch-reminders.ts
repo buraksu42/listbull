@@ -96,6 +96,14 @@ type ReminderJob = ReminderJobItem & {
    * present; falls back to the default platform bot otherwise.
    */
   workspaceBotId: string | null;
+  /**
+   * Phase 13 recurring reminders: RFC 5545 RRULE body (no `RRULE:`
+   * prefix), or null for one-shot. When non-null, after a successful
+   * dispatch we compute the next occurrence with `RRule.after(due_at)`
+   * and reset `due_at` + `reminder_sent=false` instead of marking it
+   * permanently sent.
+   */
+  recurrenceRule: string | null;
 };
 
 async function pickDueItems(): Promise<ReminderJob[]> {
@@ -112,6 +120,7 @@ async function pickDueItems(): Promise<ReminderJob[]> {
       listId: items.listId,
       text: items.text,
       dueAt: items.dueAt,
+      recurrenceRule: items.recurrenceRule,
       ownerTelegramId: sql<number>`owner.telegram_id`.as("owner_telegram_id"),
       ownerLocale: sql<string>`owner.locale`.as("owner_locale"),
       ownerTimezone: sql<string>`owner.timezone`.as("owner_timezone"),
@@ -173,6 +182,7 @@ async function pickDueItems(): Promise<ReminderJob[]> {
       listName: r.listName,
       listEmoji: r.listEmoji,
       workspaceBotId: r.workspaceBotId,
+      recurrenceRule: r.recurrenceRule ?? null,
     }));
 }
 
@@ -182,6 +192,61 @@ async function markReminderSent(itemId: string): Promise<void> {
     .update(items)
     .set({ reminderSent: true, updatedAt: new Date() })
     .where(sql`${items.id} = ${itemId} AND ${items.reminderSent} = false`);
+}
+
+/**
+ * Recurring reminder advancement. When a reminder fires for an item
+ * whose `recurrence_rule` is non-null, we re-arm it for the next
+ * occurrence instead of marking it permanently sent. Computed in UTC
+ * — see schema docstring for the timezone caveat.
+ *
+ * If the rule yields no future occurrence (e.g. UNTIL or COUNT
+ * exhausted) we fall back to the one-shot path: mark sent + clear
+ * recurrence_rule so the audit trail reflects the natural end.
+ */
+async function advanceRecurringReminder(
+  itemId: string,
+  currentDueAt: string,
+  recurrenceRule: string,
+): Promise<{ advanced: boolean; nextDueAt: Date | null }> {
+  const { RRule } = await import("rrule");
+  let nextDueAt: Date | null = null;
+  try {
+    const rule = RRule.fromString(`RRULE:${recurrenceRule}`);
+    nextDueAt = rule.after(new Date(currentDueAt), false);
+  } catch (error) {
+    console.error("[reminder] invalid RRULE — clearing", {
+      itemId,
+      recurrenceRule,
+      error: String(error),
+    });
+  }
+
+  if (!nextDueAt) {
+    // No more occurrences (or invalid rule): mark sent + clear rule.
+    await db
+      .update(items)
+      .set({
+        reminderSent: true,
+        recurrenceRule: null,
+        updatedAt: new Date(),
+      })
+      .where(sql`${items.id} = ${itemId} AND ${items.reminderSent} = false`);
+    return { advanced: false, nextDueAt: null };
+  }
+
+  // Re-arm: bump due_at to the next occurrence; reset reminderSent so
+  // the next cron tick on or after that time picks it up. Conditional
+  // on reminder_sent=false to keep the Inv-11 idempotency guard.
+  await db
+    .update(items)
+    .set({
+      dueAt: nextDueAt,
+      reminderSent: false,
+      updatedAt: new Date(),
+    })
+    .where(sql`${items.id} = ${itemId} AND ${items.reminderSent} = false`);
+  return { advanced: true, nextDueAt };
 }
 
 export async function dispatchReminders(): Promise<{
@@ -279,7 +344,15 @@ export async function dispatchReminders(): Promise<{
     }
 
     if (delivered) {
-      await markReminderSent(job.itemId);
+      if (job.recurrenceRule) {
+        await advanceRecurringReminder(
+          job.itemId,
+          job.dueAt,
+          job.recurrenceRule,
+        );
+      } else {
+        await markReminderSent(job.itemId);
+      }
       sent += 1;
     } else {
       failed += 1;

@@ -149,6 +149,20 @@ export const items = pgTable(
     }),
     dueAt: timestamp("due_at", { withTimezone: true }),
     reminderSent: boolean("reminder_sent").notNull().default(false),
+    /**
+     * Optional RFC 5545 RRULE for recurring reminders. Stored without
+     * `RRULE:` prefix and without `DTSTART` — the cron dispatcher uses
+     * the current `due_at` as the anchor and parses this column as the
+     * recurrence body. Times are interpreted in UTC (LLM converts to
+     * the user's timezone when phrasing back to them). When a reminder
+     * fires and this column is non-null, the dispatcher computes the
+     * next occurrence and resets `due_at` + `reminder_sent` instead of
+     * marking it sent permanently.
+     *
+     * Example: `FREQ=WEEKLY;BYDAY=WE;BYHOUR=18;BYMINUTE=0` —
+     * "every Wednesday at 18:00 UTC" (= 21:00 Europe/Istanbul, no DST).
+     */
+    recurrenceRule: text("recurrence_rule"),
     position: integer("position").notNull().default(0),
     createdBy: uuid("created_by")
       .notNull()

@@ -1,0 +1,1 @@
+ALTER TABLE "items" ADD COLUMN "recurrence_rule" text;
