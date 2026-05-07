@@ -107,6 +107,15 @@ export const searchItemsInputSchema = z.object({
   list_name: z.string().min(1).max(200).optional(),
   include_done: z.boolean().default(false),
   include_archived: z.boolean().default(false),
+  /**
+   * Restrict to items with an active (future) reminder. `true` = only
+   * items where `due_at IS NOT NULL AND due_at > now() AND
+   * reminder_sent = false`. `false` (default) = no filter on due_at.
+   * Use this to answer "hangi hatırlatıcılar var?" / "what reminders
+   * do I have?" — pair with empty `query` and no list scope to get
+   * a workspace-wide active-reminders list.
+   */
+  has_reminder: z.boolean().default(false),
   limit: z.number().int().min(1).max(50).default(20),
 });
 
@@ -888,8 +897,11 @@ export const tools: readonly ToolDefinition[] = [
       "`list_id`) to scope to a single list. Without any list scope, " +
       "searches across every list the user is a member of. By default " +
       "completed and archived items are excluded; pass `include_done` " +
-      "or `include_archived: true` to broaden. Returns items with " +
-      "their list context plus the list of scanned lists.",
+      "or `include_archived: true` to broaden. Pass `has_reminder: true` " +
+      "to restrict to items with an ACTIVE FUTURE reminder (due_at not " +
+      "null, in the future, not yet sent) — use this for 'hangi " +
+      "hatırlatıcılar var?' / 'what reminders do I have?'. Returns " +
+      "items with their list context plus the list of scanned lists.",
     inputSchema: searchItemsInputSchema,
     outputSchema: searchItemsOutputSchema,
   },

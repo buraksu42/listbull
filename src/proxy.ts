@@ -20,9 +20,15 @@ export function proxy(request: NextRequest) {
 }
 
 /**
- * Gate everything under the Mini App route group EXCEPT /app itself, which
- * runs the initData → session boot flow before a cookie exists.
+ * Gate everything under the Mini App route group EXCEPT:
+ *   - /app — runs the initData → session boot flow before a cookie exists.
+ *   - /invites/[token] + /workspace-invites/[token] — public-facing per
+ *     Inv-10 (256-bit token IS the auth surface; the page renders an
+ *     EmptyState for invalid tokens, an accept screen otherwise; the
+ *     POST accept endpoint still requires session). Without this
+ *     exclusion an invitee who hasn't started the bot yet hits the
+ *     gate and gets bounced to `/` (looks like a 404).
  */
 export const config = {
-  matcher: ["/lists/:path*", "/settings/:path*", "/invites/:path*"],
+  matcher: ["/lists/:path*", "/settings/:path*"],
 };
