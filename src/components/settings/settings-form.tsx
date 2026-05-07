@@ -19,11 +19,11 @@ import { cn } from "@/lib/utils";
  * Architect contract.
  */
 const MODEL_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash (default, cheap)" },
-  { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-  { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5" },
-  { value: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4" },
+  { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5 (default, fast)" },
+  { value: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4 (smartest in family)" },
   { value: "anthropic/claude-opus-4.7", label: "Claude Opus 4.7 (best)" },
+  { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash (cheapest)" },
+  { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
   { value: "openai/gpt-4o-mini", label: "GPT-4o mini" },
 ];
 
