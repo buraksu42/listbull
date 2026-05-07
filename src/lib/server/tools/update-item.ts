@@ -1,21 +1,27 @@
 /**
- * Executor: `update_item`. Edits text, due_at, and/or position.
+ * Executor: `update_item`. Edits text, due_at, position, and/or
+ * target_list_id (cross-list move within the same workspace).
  *
  * Action mapping per Inv-5:
- *   - text or position changed (or any combination including due_at) →
- *     `item_edited`.
+ *   - target_list_id changed alone → `item_moved`.
  *   - due_at is the SOLE changed field → `item_due_set` /
  *     `item_due_cleared` (helps the Phase-3 reminder feed).
+ *   - any other combination (incl. move + edit) → `item_edited`.
  *
  * Past `due_at` values are silently dropped + warning surfaced (matches
  * `create_item`).
+ *
+ * Move semantics: write the activity row to the DESTINATION list. The
+ * source list's audit feed will not show the row; the destination's
+ * will. Restore from the activity_log re-creates the item on the
+ * destination list (payload_after.listId).
  */
 import "server-only";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { activityLog, items } from "@/lib/db/schema";
+import { activityLog, items, lists } from "@/lib/db/schema";
 import {
   updateItemInputSchema,
   type UpdateItemOutput,
@@ -34,7 +40,7 @@ export async function executeUpdateItem(
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
-  const { item_id, text, due_at, position } = parsed.data;
+  const { item_id, text, due_at, position, target_list_id } = parsed.data;
 
   return await db.transaction(async (tx) => {
     const [current] = await tx
@@ -45,7 +51,7 @@ export async function executeUpdateItem(
     if (!current) return err(ERR.not_found, "Item not found.");
     if (current.archivedAt) return err(ERR.not_found, "Item not found.");
 
-    // Membership check on the item's list.
+    // Membership check on the item's source list.
     const allowed = await userCanWriteList(
       ctx.userId,
       current.listId,
@@ -59,8 +65,41 @@ export async function executeUpdateItem(
     const patch: Partial<typeof items.$inferInsert> = {
       updatedAt: new Date(),
     };
-    const changes: Array<"text" | "due_at" | "position"> = [];
+    const changes: Array<"text" | "due_at" | "position" | "list_id"> = [];
     const warnings: string[] = [];
+
+    let listIdChanged = false;
+    if (target_list_id !== undefined && target_list_id !== current.listId) {
+      // Destination list must exist + sit in the same workspace + caller
+      // must have write access on it.
+      const [dest] = await tx
+        .select()
+        .from(lists)
+        .where(
+          and(
+            eq(lists.id, target_list_id),
+            eq(lists.workspaceId, ctx.workspaceId),
+          ),
+        )
+        .limit(1);
+      if (!dest) {
+        return err(ERR.not_found, "Target list not found in this workspace.");
+      }
+      if (dest.archivedAt) {
+        return err(ERR.not_found, "Target list is archived.");
+      }
+      const destAllowed = await userCanWriteList(
+        ctx.userId,
+        target_list_id,
+        ctx.workspaceId,
+      );
+      if (!destAllowed) {
+        return err(ERR.forbidden, "You don't have access to the target list.");
+      }
+      patch.listId = target_list_id;
+      changes.push("list_id");
+      listIdChanged = true;
+    }
 
     if (text !== undefined) {
       const trimmed = text.trim();
@@ -122,9 +161,13 @@ export async function executeUpdateItem(
     // Decide which activity action to write.
     const dueAtIsSole =
       dueAtChanged && changes.length === 1 && changes[0] === "due_at";
+    const moveIsSole =
+      listIdChanged && changes.length === 1 && changes[0] === "list_id";
     let action: ActivityAction;
     if (dueAtIsSole) {
       action = updated.dueAt === null ? "item_due_cleared" : "item_due_set";
+    } else if (moveIsSole) {
+      action = "item_moved";
     } else {
       action = "item_edited";
     }

@@ -98,6 +98,7 @@ export type ActivityAction =
   | "item_completed"
   | "item_uncompleted"
   | "item_edited"
+  | "item_moved"
   | "item_deleted"
   | "item_assigned"
   | "item_unassigned"

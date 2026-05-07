@@ -33,6 +33,7 @@ const FILTER_ACTIONS: Record<Exclude<AuditFilter, "all">, ActivityAction[]> = {
   deletions: ["item_deleted", "list_archived"],
   edits: [
     "item_edited",
+    "item_moved",
     "item_completed",
     "item_uncompleted",
     "item_assigned",

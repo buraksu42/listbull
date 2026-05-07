@@ -74,6 +74,11 @@ export function ActivitySentence({
         en: <>{actor} edited {pillItem(after ?? before)}</>,
         tr: <>{actor} {pillItem(after ?? before)} düzenledi</>,
       });
+    case "item_moved":
+      return template(locale, {
+        en: <>{actor} moved {pillItem(after ?? before)} to this list</>,
+        tr: <>{actor} {pillItem(after ?? before)} öğesini bu listeye taşıdı</>,
+      });
     case "item_deleted":
       return template(locale, {
         en: <>{actor} deleted {pillItem(before ?? after)}</>,
@@ -208,6 +213,7 @@ function _coverage(a: ActivityAction): React.ReactNode {
     case "item_completed":
     case "item_uncompleted":
     case "item_edited":
+    case "item_moved":
     case "item_deleted":
     case "item_assigned":
     case "item_unassigned":

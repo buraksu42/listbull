@@ -180,6 +180,7 @@
       "item_completed": "bir item'ı tamamladı",
       "item_uncompleted": "bir item'ı açtı",
       "item_edited": "bir item'ı düzenledi",
+      "item_moved": "bir item'ı taşıdı",
       "item_deleted": "bir item'ı sildi",
       "item_assigned": "bir item'ı atadı",
       "item_unassigned": "atamayı kaldırdı",

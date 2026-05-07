@@ -140,19 +140,29 @@ export const updateItemInputSchema = z
     text: z.string().trim().min(1).max(2000).optional(),
     due_at: z.string().datetime({ offset: true }).nullable().optional(),
     position: z.number().int().nonnegative().optional(),
+    /**
+     * Move the item to a different list (same workspace). Caller passes
+     * the target list's UUID; executor validates membership + write
+     * access on the destination. Activity row is written to the
+     * destination list with action `item_moved`.
+     */
+    target_list_id: z.string().uuid().optional(),
   })
   .refine(
     (v) =>
-      v.text !== undefined || v.due_at !== undefined || v.position !== undefined,
+      v.text !== undefined ||
+      v.due_at !== undefined ||
+      v.position !== undefined ||
+      v.target_list_id !== undefined,
     {
       message:
-        "at least one of text, due_at, or position must be supplied",
+        "at least one of text, due_at, position, or target_list_id must be supplied",
     },
   );
 
 export const updateItemOutputSchema = z.object({
   item: itemSnapshotSchema,
-  changes: z.array(z.enum(["text", "due_at", "position"])),
+  changes: z.array(z.enum(["text", "due_at", "position", "list_id"])),
   /** Soft warnings (e.g. due_at_in_past). */
   warnings: z.array(z.string()).optional(),
 });
@@ -886,12 +896,16 @@ export const tools: readonly ToolDefinition[] = [
   {
     name: "update_item",
     description:
-      "Edit an existing item's text, due date, or position. At least " +
-      "one of `text`, `due_at`, or `position` must be supplied. Pass " +
-      "`due_at: null` (explicit) to CLEAR a reminder; omitting `due_at` " +
-      "leaves it unchanged. Past `due_at` values are silently dropped " +
-      "with a warning. `changes` in the output names the fields that " +
-      "actually changed — use it to phrase a precise confirmation.",
+      "Edit an existing item's text, due date, position, or move it " +
+      "to a different list (in the same workspace). At least one of " +
+      "`text`, `due_at`, `position`, or `target_list_id` must be " +
+      "supplied. Pass `target_list_id: <list-uuid>` to MOVE the item " +
+      "(history + completion state preserved — prefer this over " +
+      "delete+recreate). Pass `due_at: null` (explicit) to CLEAR a " +
+      "reminder; omitting `due_at` leaves it unchanged. Past `due_at` " +
+      "values are silently dropped with a warning. `changes` in the " +
+      "output names the fields that actually changed — use it to " +
+      "phrase a precise confirmation.",
     inputSchema: updateItemInputSchema,
     outputSchema: updateItemOutputSchema,
   },
