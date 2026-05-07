@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { ActivityTimeline } from "@/components/workspace/activity-timeline";
 import { BulkRestoreSection } from "@/components/workspace/bulk-restore-section";
+import { CapsSection } from "@/components/workspace/caps-section";
 import { SpendSection } from "@/components/workspace/spend-section";
 import {
   listWorkspacesForUser,
@@ -126,6 +127,8 @@ export default async function WorkspaceAdminPage() {
         </section>
 
         <SpendSection workspaceId={activeId} />
+
+        <CapsSection workspaceId={activeId} />
 
         <ActivityTimeline workspaceId={activeId} />
 

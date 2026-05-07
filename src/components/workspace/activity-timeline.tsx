@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 import type { ActivityFeedRow } from "@/lib/types";
@@ -200,6 +201,7 @@ function ActivityRowView({ row }: { row: ActivityFeedRow }) {
     hour: "2-digit",
     minute: "2-digit",
   });
+  const tActions = useTranslations("admin.actions");
 
   return (
     <div
@@ -243,7 +245,7 @@ function ActivityRowView({ row }: { row: ActivityFeedRow }) {
             marginLeft: "var(--lb-sp-2)",
           }}
         >
-          {humanAction(row.action)}
+          {humanAction(row.action, tActions)}
         </span>
       </div>
       <span
@@ -260,30 +262,16 @@ function ActivityRowView({ row }: { row: ActivityFeedRow }) {
   );
 }
 
-function humanAction(action: string): string {
-  // Compact, locale-neutral verbs. Phase 7+ swap to next-intl.
-  const map: Record<string, string> = {
-    item_created: "added an item",
-    item_completed: "marked an item done",
-    item_uncompleted: "marked an item open",
-    item_edited: "edited an item",
-    item_deleted: "deleted an item",
-    item_assigned: "assigned an item",
-    item_unassigned: "unassigned an item",
-    item_due_set: "scheduled an item",
-    item_due_cleared: "cleared a due date",
-    list_created: "created a list",
-    list_renamed: "renamed a list",
-    list_archived: "archived a list",
-    list_restored: "restored a list",
-    member_added: "added a list member",
-    member_removed: "removed a list member",
-    member_role_changed: "changed a list member's role",
-    workspace_created: "created the workspace",
-    workspace_renamed: "renamed the workspace",
-    workspace_member_added: "joined the workspace",
-    workspace_member_removed: "removed a workspace member",
-    workspace_member_role_changed: "changed a workspace member's role",
-  };
-  return map[action] ?? action;
+function humanAction(
+  action: string,
+  t: (key: string) => string,
+): string {
+  // Phase 9 i18n: lookup via next-intl admin.actions namespace.
+  // Falls back to the raw action key when translation missing.
+  try {
+    const translated = t(action);
+    return translated || action;
+  } catch {
+    return action;
+  }
 }

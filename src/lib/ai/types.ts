@@ -90,5 +90,14 @@ export type RespondOutput = {
   usage: {
     promptTokens: number;
     completionTokens: number;
+    /**
+     * Phase 9: provider-reported cost in micro-USD when present
+     * (OpenRouter `usage.cost`). 0 when the provider didn't expose
+     * cost — Backend's recordLlmUsage falls back to MODEL_PRICING
+     * client-side calculation.
+     */
+    costUsdMicro: number;
+    /** True when costUsdMicro came from the provider, not the rate card. */
+    providerReportedCost: boolean;
   };
 };

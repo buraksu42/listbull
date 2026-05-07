@@ -31,7 +31,8 @@ import {
   listWorkspacesForUser,
   resolveActiveWorkspaceId,
 } from "@/lib/db/queries/workspaces";
-import { recordLlmUsage } from "@/lib/db/queries/llm-usage";
+import { checkMemberCap, recordLlmUsage } from "@/lib/db/queries/llm-usage";
+import { enforceRateLimit } from "@/lib/server/middleware/rate-limit";
 import { sliceForContext } from "@/lib/ai/conversation";
 import { forwardedMessagePrompt } from "@/lib/ai/prompts/forwarded";
 import {
@@ -67,6 +68,12 @@ const COPY = {
     transientError: "Bir şeyler ters gitti, tekrar dener misin?",
     forwardedNoText:
       "İletilen mesajda metin bulamadım — sadece metinli mesajlardan madde çıkarabilirim.",
+    capDaily:
+      "Bu workspace'te günlük harcama limitin doldu. Kendi OpenRouter key'ini ekle ya da yarın tekrar dene.",
+    capMonthly:
+      "Bu workspace'te aylık harcama limitin doldu. Kendi OpenRouter key'ini ekle ya da workspace yöneticine sor.",
+    rateLimited:
+      "Çok fazla mesaj — biraz yavaşla. Saatlik limitin doldu, biraz sonra tekrar dene.",
   },
   en: {
     noKey:
@@ -76,6 +83,12 @@ const COPY = {
     transientError: "Something went wrong — try again?",
     forwardedNoText:
       "I didn't find any text in the forwarded message — I can only extract items from messages with text.",
+    capDaily:
+      "Your daily spend cap on this workspace is exhausted. Add your own OpenRouter key or try again tomorrow.",
+    capMonthly:
+      "Your monthly spend cap on this workspace is exhausted. Add your own OpenRouter key or ask the workspace admin.",
+    rateLimited:
+      "Too many messages — slow down. Your hourly limit is exhausted; try again shortly.",
   },
 } as const;
 
@@ -150,6 +163,23 @@ export async function handleMessage(ctx: Context): Promise<void> {
   const copy = COPY[locale];
   const chatId = message.chat.id;
 
+  // Phase 10 per-user hourly rate limit. Activated when
+  // LISTBULL_PER_USER_HOURLY_MSG_LIMIT > 0; disabled at 0 (default).
+  // Backed by Upstash when configured; in-memory fallback otherwise.
+  const hourlyLimit = env.LISTBULL_PER_USER_HOURLY_MSG_LIMIT;
+  if (hourlyLimit > 0) {
+    const rl = await enforceRateLimit({
+      scope: "bot-message",
+      identifier: user.id,
+      tokens: hourlyLimit,
+      windowSeconds: 3600,
+    });
+    if (rl.limited) {
+      await ctx.reply(copy.rateLimited);
+      return;
+    }
+  }
+
   // BYOK gate (with operator-level fallback per architecture.md AI section):
   //   1. User's BYOK key wins when set
   //   2. Otherwise, env.OPENROUTER_API_KEY (operator-level) is used
@@ -202,6 +232,21 @@ export async function handleMessage(ctx: Context): Promise<void> {
   if (apiKey === null || keySource === null) {
     await ctx.reply(copy.noKey);
     return;
+  }
+
+  // Phase 8 cap gate: only enforced when the workspace org-key is
+  // funding the call. Personal BYOK + operator fallback bypass caps
+  // (the spend isn't workspace-borne).
+  if (keySource === "workspace") {
+    const cap = await checkMemberCap(workspaceId, user.id);
+    if (!cap.ok) {
+      await ctx.reply(
+        cap.reason === "daily_cap_exceeded"
+          ? copy.capDaily
+          : copy.capMonthly,
+      );
+      return;
+    }
   }
 
   if (forward) {
@@ -296,6 +341,11 @@ export async function handleMessage(ctx: Context): Promise<void> {
         model: user.llmModel,
         promptTokens: result.usage.promptTokens,
         completionTokens: result.usage.completionTokens,
+        // Phase 9: prefer provider-reported cost when available;
+        // recordLlmUsage falls back to MODEL_PRICING when omitted.
+        costUsdMicro: result.usage.providerReportedCost
+          ? result.usage.costUsdMicro
+          : undefined,
         keySource,
       });
     } catch (err) {
@@ -531,6 +581,11 @@ async function handleForwardedMessage(args: {
         model: user.llmModel,
         promptTokens: result.usage.promptTokens,
         completionTokens: result.usage.completionTokens,
+        // Phase 9: prefer provider-reported cost when available;
+        // recordLlmUsage falls back to MODEL_PRICING when omitted.
+        costUsdMicro: result.usage.providerReportedCost
+          ? result.usage.costUsdMicro
+          : undefined,
         keySource,
       });
     } catch (err) {

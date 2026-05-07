@@ -76,7 +76,12 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
       persistedMessages: [
         { role: "assistant", content: NO_KEY_SENTINEL },
       ],
-      usage: { promptTokens: 0, completionTokens: 0 },
+      usage: {
+        promptTokens: 0,
+        completionTokens: 0,
+        costUsdMicro: 0,
+        providerReportedCost: false,
+      },
     };
   }
 
@@ -111,9 +116,13 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
   const toolCallsSeen: ToolCall[] = [];
 
   // Phase 7: cumulative token usage across every round-trip in this
-  // respond() call. Backend writes one llm_usage row per call.
+  // respond() call. Phase 9: also accumulates provider-reported cost
+  // (OpenRouter exposes `cost` on some routes; Anthropic native
+  // doesn't). When 0, llm-usage falls back to client-side rate-card.
   let cumulativePrompt = 0;
   let cumulativeCompletion = 0;
+  let cumulativeCostUsdMicro = 0;
+  let providerReportedCost = false;
 
   let lastAssistantText = "";
 
@@ -128,13 +137,23 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
 
     // Anthropic's response carries `usage.input_tokens` /
     // `output_tokens`. OpenRouter's Anthropic-compat endpoint
-    // mirrors the shape. Defensive: handle missing/zero fields.
+    // mirrors the shape and adds `usage.cost` (USD float) on routes
+    // where pricing is published. Defensive: any missing field
+    // collapses to 0.
     const usage = (response as unknown as {
-      usage?: { input_tokens?: number; output_tokens?: number };
+      usage?: {
+        input_tokens?: number;
+        output_tokens?: number;
+        cost?: number;
+      };
     }).usage;
     if (usage) {
       cumulativePrompt += usage.input_tokens ?? 0;
       cumulativeCompletion += usage.output_tokens ?? 0;
+      if (typeof usage.cost === "number" && usage.cost > 0) {
+        cumulativeCostUsdMicro += Math.round(usage.cost * 1_000_000);
+        providerReportedCost = true;
+      }
     }
 
     const { textParts, toolUseBlocks } = splitContent(response.content);
@@ -168,6 +187,8 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
         usage: {
           promptTokens: cumulativePrompt,
           completionTokens: cumulativeCompletion,
+          costUsdMicro: cumulativeCostUsdMicro,
+          providerReportedCost,
         },
       };
     }
@@ -219,6 +240,8 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
         usage: {
           promptTokens: cumulativePrompt,
           completionTokens: cumulativeCompletion,
+          costUsdMicro: cumulativeCostUsdMicro,
+          providerReportedCost,
         },
       };
     }
@@ -236,6 +259,8 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
     usage: {
       promptTokens: cumulativePrompt,
       completionTokens: cumulativeCompletion,
+      costUsdMicro: cumulativeCostUsdMicro,
+      providerReportedCost,
     },
   };
 }

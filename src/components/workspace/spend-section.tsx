@@ -1,22 +1,43 @@
 /**
- * LLM spend section for the workspace admin dashboard (Phase 7).
+ * LLM spend section for the workspace admin dashboard (Phase 7 +
+ * Phase 8). Server component — reads getWorkspaceLlmSpend +
+ * getWorkspaceLlmDailySeries in parallel. 30-day window.
  *
- * Server component — reads getWorkspaceLlmSpend directly. 30-day
- * window. Cost is reported in tokens; USD column shows zero until
- * Phase 7.5+ wires provider-specific cost extraction (OpenRouter
- * exposes `cost` on some routes; Anthropic native doesn't).
+ * Phase 8 additions:
+ *  - cost extraction via MODEL_PRICING (no more 0 placeholders for
+ *    common models)
+ *  - sparkline visualization of daily token totals over the window
  */
-import { getWorkspaceLlmSpend } from "@/lib/db/queries/llm-usage";
+import {
+  getWorkspaceLlmDailySeries,
+  getWorkspaceLlmSpend,
+} from "@/lib/db/queries/llm-usage";
+import { SpendSparkline } from "@/components/workspace/spend-sparkline";
 
 type Props = {
   workspaceId: string;
 };
 
 export async function SpendSection({ workspaceId }: Props) {
-  const spend = await getWorkspaceLlmSpend(workspaceId, 30);
+  const [spend, series] = await Promise.all([
+    getWorkspaceLlmSpend(workspaceId, 30),
+    getWorkspaceLlmDailySeries(workspaceId, 30),
+  ]);
 
   const totalTokens = spend.totalPromptTokens + spend.totalCompletionTokens;
   const usdTotal = spend.totalCostUsdMicro / 1_000_000;
+
+  // Phase 9 projection: average over non-zero days × 30. Skip the
+  // last point (partial today). When no usage yet, projection = 0
+  // and we hide the line.
+  const seriesForAvg = series.slice(0, -1);
+  const nonZeroDays = seriesForAvg.filter((p) => p.costUsdMicro > 0);
+  const avgCostMicro =
+    nonZeroDays.length > 0
+      ? nonZeroDays.reduce((acc, p) => acc + p.costUsdMicro, 0) /
+        nonZeroDays.length
+      : 0;
+  const projectionUsd = (avgCostMicro * 30) / 1_000_000;
 
   return (
     <section>
@@ -62,7 +83,34 @@ export async function SpendSection({ workspaceId }: Props) {
               isString
             />
           )}
+          {projectionUsd > 0 && (
+            <Stat
+              label="30d projection"
+              value={`$${projectionUsd.toFixed(2)}`}
+              isString
+            />
+          )}
         </div>
+
+        {totalTokens > 0 && (
+          <div
+            style={{
+              borderTop: "1px solid var(--lb-border)",
+              paddingTop: "var(--lb-sp-3)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "var(--lb-fs-xs)",
+                color: "var(--lb-muted-fg)",
+                marginBottom: "var(--lb-sp-2)",
+              }}
+            >
+              Daily tokens (30 day trend)
+            </div>
+            <SpendSparkline series={series} metric="tokens" />
+          </div>
+        )}
 
         {spend.byModel.length > 0 && (
           <div
