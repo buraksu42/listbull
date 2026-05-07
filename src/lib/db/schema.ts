@@ -44,7 +44,7 @@ export const users = pgTable(
     locale: text("locale").notNull().default("en"),
     timezone: text("timezone").notNull().default("UTC"),
     openrouterApiKeyEncrypted: text("openrouter_api_key_encrypted"),
-    llmModel: text("llm_model").notNull().default("anthropic/claude-sonnet-4"),
+    llmModel: text("llm_model").notNull().default("google/gemini-2.5-flash"),
     notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
     activeWorkspaceId: uuid("active_workspace_id").references(
       (): AnyPgColumn => workspaces.id,

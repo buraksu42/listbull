@@ -1,0 +1,1 @@
+ALTER TABLE "users" ALTER COLUMN "llm_model" SET DEFAULT 'google/gemini-2.5-flash';

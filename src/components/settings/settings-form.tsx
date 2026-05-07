@@ -19,10 +19,12 @@ import { cn } from "@/lib/utils";
  * Architect contract.
  */
 const MODEL_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5 (fast, cheap)" },
-  { value: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4 (default)" },
+  { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash (default, cheap)" },
+  { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+  { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5" },
+  { value: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4" },
   { value: "anthropic/claude-opus-4.7", label: "Claude Opus 4.7 (best)" },
-  { value: "openai/gpt-4o-mini", label: "GPT-4o mini (fast, cheap)" },
+  { value: "openai/gpt-4o-mini", label: "GPT-4o mini" },
 ];
 
 const TIMEZONE_OPTIONS: string[] = [

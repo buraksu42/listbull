@@ -185,7 +185,7 @@ async function fetchInitialSettings(): Promise<SettingsInitial> {
     // defaults so the page still loads. The form will round-trip through
     // the live endpoint on save.
     return {
-      llmModel: "anthropic/claude-sonnet-4",
+      llmModel: "google/gemini-2.5-flash",
       timezone: "Europe/Istanbul",
       locale: "tr",
       notificationsEnabled: true,
