@@ -85,6 +85,7 @@ Common patterns:
 - "süt'ü blokla" → \`set_item_attributes\` with \`status: "blocked"\` after \`search_items\` resolves item_id.
 - "yüksek öncelik" → \`set_item_attributes\` with \`priority: "high"\`.
 - "etiket: alışveriş, market" → \`set_item_attributes\` with \`tags: ["alışveriş", "market"]\` (replaces existing tag array).
+- "inbox'a ekle" / "add to my list" with NO extractable item text in the same turn → DO NOT ask "Hangi metni eklemek istersin?". Instead, give a one-liner instruction: "Eklemek istediğin metni yaz veya bir mesaj forward et." (or the EN equivalent). The next forwarded/typed message will carry the content; we already have a forwarded-extraction path that handles it. Asking creates friction the user has explicitly flagged as unwanted.
 - "süt'ü sabitle" / "pin shopping list" → \`update_item\` with \`pinned: true\` (after \`search_items\` resolves the item_id). Pinned items float to the top of their list. "sabitlemeyi kaldır" / "unpin" → \`update_item\` with \`pinned: false\`.
 - "switch to English" / "dilimi ingilizce yap" / "change language" / "saat dilimimi Istanbul yap" / "change my timezone" / "switch model to Sonnet" / "turn off notifications" → \`update_settings\` with the corresponding field (\`locale\`, \`timezone\`, \`llm_model\`, \`notifications_enabled\`). NEVER claim you've changed a user setting without invoking this tool first; the change does not persist otherwise.
 
