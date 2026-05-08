@@ -69,6 +69,37 @@ Surface area: 1 schema migration, 1 upload helper, 1 webhook branch per
 content type, Mini App attachment renderer, optional LLM tool
 (`attach_to_item`).
 
+### 2b. Item description + Telegram-native attachments
+
+Refines (and partly supersedes) entry #2's storage choice. Two
+adjacent additions:
+
+- **Item description / notes** — second freeform text column on items
+  (e.g. `description text`, nullable, ~10kb cap). Edit Sheet adds a
+  multi-line textarea below the title. LLM tools (`create_item`,
+  `update_item`) accept an optional `description` field. Bot replies
+  surface it as an indented secondary line, only when present.
+- **Attachments via Telegram storage** — when the user sends a photo /
+  video / document / audio in the bot chat (or attaches via the Mini
+  App which forwards to the bot), capture Telegram's `file_id` +
+  `file_unique_id` + mime + size and store on a new `item_attachments`
+  table. NO Hetzner Object Storage hop — the file already lives on
+  Telegram CDN, and the Mini App can render previews via Bot API
+  `getFile` → temporary URL (cache the URL until expiry).
+- Trade-off: `file_id` is bot-token-scoped — if the bot is
+  regenerated, file IDs invalidate. Mitigation: store the `file_id`
+  per-bot (default platform vs. workspace white-label) so workspaces
+  with their own bot upload through that bot directly. Document the
+  rotation hazard in the operator runbook.
+- Mini App rendering: thumbnail strip below the item's text;
+  full-screen preview opens in Telegram's native viewer via
+  deep-link. Activity feed entries record attach/detach so audit/F2
+  restore can reconstruct.
+
+Surface area: 1 schema migration, attachment-extract handler in the
+bot webhook, optional LLM tool (`attach_to_item`), edit-sheet
+description textarea + attachment list.
+
 ### 3. Weekly + calendar deadline views
 
 Phase 4.5 ships `/views/today` (workspace-scoped due-today aggregate).
