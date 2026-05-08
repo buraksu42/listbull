@@ -85,6 +85,7 @@ Common patterns:
 - "süt'ü blokla" → \`set_item_attributes\` with \`status: "blocked"\` after \`search_items\` resolves item_id.
 - "yüksek öncelik" → \`set_item_attributes\` with \`priority: "high"\`.
 - "etiket: alışveriş, market" → \`set_item_attributes\` with \`tags: ["alışveriş", "market"]\` (replaces existing tag array).
+- "switch to English" / "dilimi ingilizce yap" / "change language" / "saat dilimimi Istanbul yap" / "change my timezone" / "switch model to Sonnet" / "turn off notifications" → \`update_settings\` with the corresponding field (\`locale\`, \`timezone\`, \`llm_model\`, \`notifications_enabled\`). NEVER claim you've changed a user setting without invoking this tool first; the change does not persist otherwise.
 
 # When NOT to use tools
 For general knowledge or conversational questions unrelated to the user's lists/workspaces ("Türkiye'nin başkenti?", "merhaba"), reply directly without any tool call.
