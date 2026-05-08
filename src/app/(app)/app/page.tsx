@@ -44,9 +44,12 @@ export default function AppBoot() {
 
         if (!cancelled) {
           // Cookie is set. Routes by start_param prefix:
-          //   invite_<token>   → per-list invite accept (Phase 3)
-          //   wsinvite_<token> → workspace invite accept (Phase 5.5)
-          //   <empty> / other  → /lists (default)
+          //   invite_<token>    → per-list invite accept (Phase 3)
+          //   wsinvite_<token>  → workspace invite accept (Phase 5.5)
+          //   item_<uuid>       → resolve list via /api/items/<uuid>/locate
+          //                       and jump into /lists/<listId> with the
+          //                       item highlighted (inline-mode handoff)
+          //   <empty> / other   → /lists (default)
           const startParam = tg.initDataUnsafe?.start_param ?? "";
           if (startParam.startsWith("invite_")) {
             const token = startParam.slice("invite_".length);
@@ -56,6 +59,30 @@ export default function AppBoot() {
             window.location.replace(
               `/workspace-invites/${encodeURIComponent(token)}`,
             );
+          } else if (startParam.startsWith("item_")) {
+            const itemId = startParam.slice("item_".length);
+            try {
+              const res = await fetch(
+                `/api/items/${encodeURIComponent(itemId)}/locate`,
+                { credentials: "same-origin" },
+              );
+              if (res.ok) {
+                const json = (await res.json()) as {
+                  ok?: boolean;
+                  data?: { listId?: string };
+                };
+                const listId = json?.data?.listId;
+                if (listId) {
+                  window.location.replace(
+                    `/lists/${encodeURIComponent(listId)}?item=${encodeURIComponent(itemId)}`,
+                  );
+                  return;
+                }
+              }
+            } catch {
+              // fall through to /lists
+            }
+            window.location.replace("/lists");
           } else {
             window.location.replace("/lists");
           }
