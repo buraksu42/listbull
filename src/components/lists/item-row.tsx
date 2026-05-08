@@ -1,6 +1,6 @@
 "use client";
 
-import { GripVertical } from "lucide-react";
+import { GripVertical, Pin } from "lucide-react";
 import * as React from "react";
 
 import { ItemActions } from "@/components/lists/item-actions";
@@ -50,6 +50,8 @@ export type ItemRowProps = {
   onToggle: (next: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
+  /** Toggle pinned state; called with the next boolean. */
+  onTogglePin?: (next: boolean) => void;
   /** Truthy when an optimistic mutation hasn't been confirmed yet. */
   pending?: boolean;
   /** Render slot for the drag handle wired to dnd-kit listeners. */
@@ -68,6 +70,7 @@ export function ItemRow({
   onToggle,
   onEdit,
   onDelete,
+  onTogglePin,
   pending = false,
   dragHandle,
   assigneeFirstName = null,
@@ -168,12 +171,62 @@ export function ItemRow({
         </span>
       )}
 
+      {onTogglePin && (
+        <PinButton
+          pinned={item.pinnedAt !== null && item.pinnedAt !== undefined}
+          onToggle={onTogglePin}
+          itemLabel={item.text}
+        />
+      )}
+
       <ItemActions
         onEdit={onEdit}
         onDelete={onDelete}
         itemLabel={item.text}
       />
     </div>
+  );
+}
+
+/**
+ * PinButton — toggle the item's `pinned_at` state. Filled (accent) when
+ * pinned, outline otherwise. Tooltip swaps between Sabitle / Sabitlemeyi
+ * Kaldır.
+ */
+function PinButton({
+  pinned,
+  onToggle,
+  itemLabel,
+}: {
+  pinned: boolean;
+  onToggle: (next: boolean) => void;
+  itemLabel: string;
+}) {
+  const label = pinned
+    ? `Sabitlemeyi kaldır: ${itemLabel}`
+    : `Sabitle: ${itemLabel}`;
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={pinned ? "Sabitlemeyi kaldır" : "Sabitle"}
+      onClick={() => onToggle(!pinned)}
+      className={cn(
+        "shrink-0 rounded-[var(--lb-r-sm)] p-1.5",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)]",
+      )}
+      style={{
+        color: pinned ? "var(--lb-accent)" : "var(--lb-muted-fg)",
+      }}
+    >
+      <Pin
+        size={16}
+        aria-hidden="true"
+        style={{
+          fill: pinned ? "var(--lb-accent)" : "transparent",
+        }}
+      />
+    </button>
   );
 }
 

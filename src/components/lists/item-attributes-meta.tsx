@@ -2,12 +2,12 @@
 
 import {
   CheckCircle2,
-  ChevronDown,
-  ChevronsUp,
   Equal,
+  Flame,
   Hourglass,
   type LucideIcon,
   Play,
+  Snowflake,
   Square,
 } from "lucide-react";
 import * as React from "react";
@@ -51,9 +51,9 @@ export const STATUS_META: StatusMeta[] = [
 ];
 
 export const PRIORITY_META: PriorityMeta[] = [
-  { value: "high", label: "Yüksek", Icon: ChevronsUp, color: "var(--lb-destructive)" },
+  { value: "high", label: "Yüksek", Icon: Flame, color: "var(--lb-destructive)" },
   { value: "normal", label: "Normal", Icon: Equal },
-  { value: "low", label: "Düşük", Icon: ChevronDown, color: "var(--lb-muted-fg)" },
+  { value: "low", label: "Düşük", Icon: Snowflake, color: "var(--lb-muted-fg)" },
 ];
 
 export function statusMeta(value: ItemStatus): StatusMeta {

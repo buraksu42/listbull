@@ -128,7 +128,12 @@ export async function executeSearchItems(
     .from(items)
     .innerJoin(lists, eq(items.listId, lists.id))
     .where(and(...conds))
-    .orderBy(asc(items.isDone), asc(items.position), asc(items.createdAt))
+    .orderBy(
+      sql`${items.pinnedAt} DESC NULLS LAST`,
+      asc(items.isDone),
+      asc(items.position),
+      asc(items.createdAt),
+    )
     .limit(limit);
 
   // Total matched (for capped pagination feedback). Run a count query

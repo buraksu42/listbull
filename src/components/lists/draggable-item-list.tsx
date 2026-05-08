@@ -42,6 +42,7 @@ export function DraggableItemList({
   onToggle,
   onEdit,
   onDelete,
+  onTogglePin,
   onReorder,
   pendingIds,
   membersByUserId,
@@ -50,6 +51,7 @@ export function DraggableItemList({
   onToggle: (id: string, next: boolean) => void;
   onEdit: (item: Item) => void;
   onDelete: (item: Item) => void;
+  onTogglePin?: (id: string, next: boolean) => void;
   onReorder: (id: string, newPosition: number, optimistic: Item[]) => void;
   pendingIds: Set<string>;
   membersByUserId?: Map<string, MemberRow>;
@@ -110,6 +112,11 @@ export function DraggableItemList({
                 onToggle={(next) => onToggle(item.id, next)}
                 onEdit={() => onEdit(item)}
                 onDelete={() => onDelete(item)}
+                onTogglePin={
+                  onTogglePin
+                    ? (next) => onTogglePin(item.id, next)
+                    : undefined
+                }
                 pending={pendingIds.has(item.id)}
                 assigneeFirstName={assignee?.user.telegramFirstName ?? null}
                 assigneePhotoUrl={assignee?.user.telegramPhotoUrl ?? null}
@@ -127,6 +134,7 @@ function SortableItem({
   onToggle,
   onEdit,
   onDelete,
+  onTogglePin,
   pending,
   assigneeFirstName,
   assigneePhotoUrl,
@@ -135,6 +143,7 @@ function SortableItem({
   onToggle: (next: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
+  onTogglePin?: (next: boolean) => void;
   pending: boolean;
   assigneeFirstName: string | null;
   assigneePhotoUrl: string | null;
@@ -177,6 +186,7 @@ function SortableItem({
         onToggle={onToggle}
         onEdit={onEdit}
         onDelete={onDelete}
+        onTogglePin={onTogglePin}
         pending={pending}
         dragHandle={dragHandle}
         assigneeFirstName={assigneeFirstName}

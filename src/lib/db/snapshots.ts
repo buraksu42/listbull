@@ -45,6 +45,7 @@ export function toItemSnapshot(row: Item) {
     dueAt: row.dueAt ? row.dueAt.toISOString() : null,
     reminderSent: row.reminderSent,
     recurrenceRule: row.recurrenceRule ?? null,
+    pinnedAt: row.pinnedAt ? row.pinnedAt.toISOString() : null,
     position: row.position,
     createdBy: row.createdBy,
     completedAt: row.completedAt ? row.completedAt.toISOString() : null,

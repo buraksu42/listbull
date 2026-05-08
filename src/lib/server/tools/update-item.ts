@@ -47,6 +47,7 @@ export async function executeUpdateItem(
     position,
     target_list_id,
     target_list_name,
+    pinned,
   } = parsed.data;
 
   // Resolve target list (by id or name). The `resolveList` helper handles
@@ -101,8 +102,19 @@ export async function executeUpdateItem(
     const patch: Partial<typeof items.$inferInsert> = {
       updatedAt: new Date(),
     };
-    const changes: Array<"text" | "due_at" | "position" | "list_id"> = [];
+    const changes: Array<"text" | "due_at" | "position" | "list_id" | "pinned"> = [];
     const warnings: string[] = [];
+
+    if (pinned !== undefined) {
+      const isPinned = current.pinnedAt !== null;
+      if (pinned && !isPinned) {
+        patch.pinnedAt = new Date();
+        changes.push("pinned");
+      } else if (!pinned && isPinned) {
+        patch.pinnedAt = null;
+        changes.push("pinned");
+      }
+    }
 
     let listIdChanged = false;
     if (

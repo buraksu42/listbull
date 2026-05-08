@@ -144,5 +144,10 @@ export async function listItemsInList(listId: string): Promise<Item[]> {
     .select()
     .from(items)
     .where(and(eq(items.listId, listId), isNull(items.archivedAt)))
-    .orderBy(asc(items.isDone), asc(items.position), asc(items.createdAt));
+    .orderBy(
+      sql`${items.pinnedAt} DESC NULLS LAST`,
+      asc(items.isDone),
+      asc(items.position),
+      asc(items.createdAt),
+    );
 }

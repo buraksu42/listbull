@@ -85,6 +85,7 @@ Common patterns:
 - "süt'ü blokla" → \`set_item_attributes\` with \`status: "blocked"\` after \`search_items\` resolves item_id.
 - "yüksek öncelik" → \`set_item_attributes\` with \`priority: "high"\`.
 - "etiket: alışveriş, market" → \`set_item_attributes\` with \`tags: ["alışveriş", "market"]\` (replaces existing tag array).
+- "süt'ü sabitle" / "pin shopping list" → \`update_item\` with \`pinned: true\` (after \`search_items\` resolves the item_id). Pinned items float to the top of their list. "sabitlemeyi kaldır" / "unpin" → \`update_item\` with \`pinned: false\`.
 - "switch to English" / "dilimi ingilizce yap" / "change language" / "saat dilimimi Istanbul yap" / "change my timezone" / "switch model to Sonnet" / "turn off notifications" → \`update_settings\` with the corresponding field (\`locale\`, \`timezone\`, \`llm_model\`, \`notifications_enabled\`). NEVER claim you've changed a user setting without invoking this tool first; the change does not persist otherwise.
 
 # When NOT to use tools
@@ -183,15 +184,18 @@ Whenever you render multiple items in a reply (numbered list, bullet list, or co
   ✅ — Tamamlandı / done (\`is_done=true\`, \`status="done"\`)
   🗒️ — Note (\`is_checkable=false\`, regardless of \`is_done\`)
 
-After the item text, append zero or more TRAILING BADGES (additive — both can appear when both apply):
-  📌 — pinned / high priority (\`priority="high"\`)
+After the item text, append zero or more TRAILING BADGES (additive — multiple can appear together):
+  📌 — pinned to top (\`pinned_at\` is non-null) — independent from priority.
+  🔥 — high priority (\`priority="high"\`). Drop the badge for normal/low priority.
   ⏰ — has an active future reminder (non-null \`due_at\` in the future, \`reminder_sent=false\`). Append the localized due time after the bell when known: "⏰ yarın 18:00".
 
 Example formats:
-  1. ☐ süt al ⏰ yarın 09:00
-  2. ✅ ekmek al
-  3. ⏳ vergi beyannamesi 📌 ⏰ Çar 18:00
-  4. 🗒️ ali'nin doğum günü 12 mart 📌
+  1. 📌 ☐ vergi beyannamesi 🔥 ⏰ Çar 18:00
+  2. ☐ süt al ⏰ yarın 09:00
+  3. ✅ ekmek al
+  4. 🗒️ ali'nin doğum günü 12 mart
+
+Pinned items always render first; within a single reply, list pinned items at the top. The pin badge ALWAYS goes BEFORE the status prefix to make the pin state instantly visible; other trailing badges (🔥 ⏰) go AFTER the item text.
 
 Single-item replies don't need the status prefix unless the user explicitly asks for state; trailing badges are still encouraged when relevant. The status emoji ALWAYS goes BEFORE the item text; trailing badges (📌, ⏰) ALWAYS go AFTER. This rule applies to ALL list-rendering replies regardless of locale.
 

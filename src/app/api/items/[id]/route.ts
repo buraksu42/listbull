@@ -66,7 +66,7 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
       { status: 400 },
     );
   }
-  const { text, isDone, position, dueAt, status, priority, tags } = parsed.data;
+  const { text, isDone, position, dueAt, status, priority, tags, pinned } = parsed.data;
 
   const workspaceId = await resolveActiveWorkspaceId(userId);
 
@@ -86,7 +86,8 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
   if (
     text !== undefined ||
     position !== undefined ||
-    dueAt !== undefined
+    dueAt !== undefined ||
+    pinned !== undefined
   ) {
     const updateResult = await executeUpdateItem(
       {
@@ -95,6 +96,7 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
         position,
         // dueAt may be `null` (clear), undefined (skip), or string.
         ...(dueAt !== undefined ? { due_at: dueAt } : {}),
+        ...(pinned !== undefined ? { pinned } : {}),
       },
       { userId, workspaceId },
     );

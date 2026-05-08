@@ -11,7 +11,7 @@
  * members, activity. The snapshot is a forwardable read-only artifact,
  * not a fully-functional list view.
  */
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { items, lists, users } from "@/lib/db/schema";
@@ -50,7 +50,12 @@ export async function getSnapshotPublic(
     })
     .from(items)
     .where(and(eq(items.listId, listId), isNull(items.archivedAt)))
-    .orderBy(asc(items.isDone), asc(items.position), asc(items.createdAt));
+    .orderBy(
+      sql`${items.pinnedAt} DESC NULLS LAST`,
+      asc(items.isDone),
+      asc(items.position),
+      asc(items.createdAt),
+    );
 
   const capturedAt = new Date().toISOString();
 

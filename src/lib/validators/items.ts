@@ -50,6 +50,7 @@ export const updateItemBodySchema = z
     status: z.enum(["open", "in_progress", "blocked", "done"]).optional(),
     priority: z.enum(["low", "normal", "high"]).optional(),
     tags: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
+    pinned: z.boolean().optional(),
   })
   .refine(
     (v) =>
@@ -59,10 +60,11 @@ export const updateItemBodySchema = z
       v.dueAt !== undefined ||
       v.status !== undefined ||
       v.priority !== undefined ||
-      v.tags !== undefined,
+      v.tags !== undefined ||
+      v.pinned !== undefined,
     {
       message:
-        "at least one of text, isDone, position, dueAt, status, priority, tags must be supplied",
+        "at least one of text, isDone, position, dueAt, status, priority, tags, pinned must be supplied",
     },
   );
 

@@ -53,6 +53,7 @@ export type ItemEditPatch = {
   status?: ItemStatus;
   priority?: ItemPriority;
   tags?: string[];
+  pinned?: boolean;
 };
 
 export function ItemEditSheet({

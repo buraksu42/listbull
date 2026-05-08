@@ -150,6 +150,13 @@ export const items = pgTable(
     dueAt: timestamp("due_at", { withTimezone: true }),
     reminderSent: boolean("reminder_sent").notNull().default(false),
     /**
+     * Pin-to-top timestamp. NULL = not pinned. Non-null pins the item
+     * to the top of its list, sorted by `pinned_at DESC` (most recent
+     * pin first) — independent from priority. Toggle via the row pin
+     * button or `update_item.pinned`.
+     */
+    pinnedAt: timestamp("pinned_at", { withTimezone: true }),
+    /**
      * Optional RFC 5545 RRULE for recurring reminders. Stored without
      * `RRULE:` prefix and without `DTSTART` — the cron dispatcher uses
      * the current `due_at` as the anchor and parses this column as the

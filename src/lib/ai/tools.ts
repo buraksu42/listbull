@@ -42,6 +42,8 @@ export const itemSnapshotSchema = z.object({
   reminderSent: z.boolean(),
   /** RFC 5545 RRULE body for recurring reminders, or null for one-shot. */
   recurrenceRule: z.string().nullable().optional(),
+  /** ISO timestamp set when the item was pinned to top; null = not pinned. */
+  pinnedAt: z.string().datetime({ offset: true }).nullable().optional(),
   position: z.number().int(),
   createdBy: z.string().uuid(),
   completedAt: z.string().datetime({ offset: true }).nullable(),
@@ -161,6 +163,12 @@ export const updateItemInputSchema = z
      */
     target_list_id: z.string().uuid().optional(),
     target_list_name: z.string().min(1).max(200).optional(),
+    /**
+     * Pin to top of the list (true) or remove the pin (false). Pinned
+     * items sort above all others by `pinned_at DESC` (independent of
+     * priority). Omit to leave the pin state unchanged.
+     */
+    pinned: z.boolean().optional(),
   })
   .refine(
     (v) =>
@@ -168,16 +176,17 @@ export const updateItemInputSchema = z
       v.due_at !== undefined ||
       v.position !== undefined ||
       v.target_list_id !== undefined ||
-      v.target_list_name !== undefined,
+      v.target_list_name !== undefined ||
+      v.pinned !== undefined,
     {
       message:
-        "at least one of text, due_at, position, target_list_id, or target_list_name must be supplied",
+        "at least one of text, due_at, position, target_list_id, target_list_name, or pinned must be supplied",
     },
   );
 
 export const updateItemOutputSchema = z.object({
   item: itemSnapshotSchema,
-  changes: z.array(z.enum(["text", "due_at", "position", "list_id"])),
+  changes: z.array(z.enum(["text", "due_at", "position", "list_id", "pinned"])),
   /** Soft warnings (e.g. due_at_in_past). */
   warnings: z.array(z.string()).optional(),
 });
@@ -930,21 +939,23 @@ export const tools: readonly ToolDefinition[] = [
   {
     name: "update_item",
     description:
-      "Edit an existing item's text, due date, position, or MOVE it " +
-      "to a different list (same workspace). At least one of `text`, " +
-      "`due_at`, `position`, `target_list_id`, or `target_list_name` " +
-      "must be supplied. To MOVE: pass `target_list_name` (e.g. " +
-      "\"Inbox\", \"Muhasebe\") — the executor resolves the name like " +
-      "`create_item` does (exact → fuzzy → Inbox fallback). Use " +
-      "`target_list_id` only when you already have the UUID from a " +
-      "prior `list_lists` / `search_items` call. NEVER fabricate a " +
-      "UUID — the executor returns `not_found` and the move silently " +
-      "fails. History + completion state preserved (always prefer " +
-      "this over delete+recreate). Pass `due_at: null` (explicit) to " +
-      "CLEAR a reminder; omitting `due_at` leaves it unchanged. Past " +
-      "`due_at` values are silently dropped with a warning. `changes` " +
-      "in the output names the fields that actually changed — use it " +
-      "to phrase a precise confirmation.",
+      "Edit an existing item's text, due date, position, MOVE it to " +
+      "a different list (same workspace), or PIN it to top. At least " +
+      "one of `text`, `due_at`, `position`, `target_list_id`, " +
+      "`target_list_name`, or `pinned` must be supplied. To MOVE: " +
+      "pass `target_list_name` (e.g. \"Inbox\", \"Muhasebe\") — the " +
+      "executor resolves the name like `create_item` does (exact → " +
+      "fuzzy → Inbox fallback). Use `target_list_id` only when you " +
+      "already have the UUID from a prior `list_lists`/`search_items` " +
+      "call. NEVER fabricate a UUID. To PIN: pass `pinned: true` " +
+      "(stamps `pinned_at = now()`); the item floats to top of its " +
+      "list, sorted by `pinned_at DESC` independent of priority. Pass " +
+      "`pinned: false` to UNPIN. Phrasings: \"sabitle\", \"pin to top\", " +
+      "\"sabitlemeyi kaldır\", \"unpin\". History + completion state " +
+      "preserved (always prefer over delete+recreate). Pass " +
+      "`due_at: null` to CLEAR a reminder; omitting leaves it " +
+      "unchanged. Past `due_at` silently dropped with warning. " +
+      "`changes` names the fields that actually changed.",
     inputSchema: updateItemInputSchema,
     outputSchema: updateItemOutputSchema,
   },

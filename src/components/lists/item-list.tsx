@@ -175,6 +175,9 @@ export function ItemList({
           if (patch.status !== undefined) next.status = patch.status;
           if (patch.priority !== undefined) next.priority = patch.priority;
           if (patch.tags !== undefined) next.tags = patch.tags;
+          if (patch.pinned !== undefined) {
+            next.pinnedAt = patch.pinned ? new Date() : null;
+          }
           return next;
         }),
       );
@@ -287,6 +290,9 @@ export function ItemList({
         onToggle={(id, next) => toggleMutation.mutate({ id, isDone: next })}
         onEdit={(item) => setEditingItem(item)}
         onDelete={(item) => setDeletingItem(item)}
+        onTogglePin={(id, next) =>
+          editMutation.mutate({ id, patch: { pinned: next } })
+        }
         onReorder={(id, newPosition, optimisticItems) => {
           // Apply optimistic reorder to the cache so the UI doesn't snap back
           // before the request lands.
