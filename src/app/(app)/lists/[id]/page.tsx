@@ -3,8 +3,10 @@ import { Suspense } from "react";
 
 import { ListHeader } from "@/components/lists/list-header";
 import { ItemList } from "@/components/lists/item-list";
+import { ListViewToggle } from "@/components/lists/list-view-toggle";
 import { MemberList } from "@/components/lists/member-list";
 import { ListSkeleton } from "@/components/shared/list-skeleton";
+import { KanbanBoard } from "@/components/views/kanban-board";
 import { listMembersForList } from "@/lib/db/queries/members";
 import {
   getList,
@@ -18,21 +20,31 @@ export const dynamic = "force-dynamic";
 
 export default async function ListDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ view?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
+  const view: "list" | "board" = sp.view === "board" ? "board" : "list";
 
   return (
     <main style={{ paddingBottom: "var(--lb-sp-12)" }}>
       <Suspense fallback={<ListDetailHeaderSkeleton />}>
-        <ListDetail listId={id} />
+        <ListDetail listId={id} view={view} />
       </Suspense>
     </main>
   );
 }
 
-async function ListDetail({ listId }: { listId: string }) {
+async function ListDetail({
+  listId,
+  view,
+}: {
+  listId: string;
+  view: "list" | "board";
+}) {
   const user = await requireUser();
   const workspaceId = await resolveActiveWorkspaceId(user.id);
   const canRead = await userCanReadList(user.id, listId, workspaceId);
@@ -73,11 +85,31 @@ async function ListDetail({ listId }: { listId: string }) {
         />
       )}
 
-      <ItemList
-        listId={listId}
-        initialItems={items}
-        initialMembers={members}
-      />
+      <div
+        style={{
+          padding: "var(--lb-sp-2) var(--lb-sp-4)",
+          display: "flex",
+          justifyContent: "flex-end",
+        }}
+      >
+        <ListViewToggle listId={listId} current={view} />
+      </div>
+
+      {view === "board" ? (
+        <KanbanBoard
+          listId={listId}
+          items={items}
+          canWrite={
+            currentUserRole === "owner" || currentUserRole === "editor"
+          }
+        />
+      ) : (
+        <ItemList
+          listId={listId}
+          initialItems={items}
+          initialMembers={members}
+        />
+      )}
     </>
   );
 }
