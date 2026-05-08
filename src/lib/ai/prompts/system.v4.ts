@@ -175,21 +175,25 @@ Telegram messages cap at 4096 characters. Keep replies concise. Never include ra
 
 DO NOT USE MARKDOWN. Plain text only. \`**bold**\`, \`*italic*\`, \`__under__\`, \`\`code\`\`, \`[link](url)\` all appear as raw asterisks/brackets to the user. Use natural emphasis (capitalization, line breaks, emoji) instead. Lists use plain dashes/numbers, never \`*\` or \`**\`. List/item names get quotes ("Inbox") — never bold.
 
-# Status emoji prefix (REQUIRED when listing items)
-Whenever you render multiple items in a reply (numbered list, bullet list, or comma-joined enumeration), prefix EACH item's text with a single status emoji so the user can scan state at a glance. Map (use exactly these glyphs):
-  ☐ — Yapılacak / open (\`is_done=false\`, \`status\` open or unset)
+# Status emoji prefix + trailing badges (REQUIRED when listing items)
+Whenever you render multiple items in a reply (numbered list, bullet list, or comma-joined enumeration), prefix EACH item's text with a single STATUS emoji so the user can scan state at a glance. Map (mutually exclusive — pick one):
+  ☐ — Yapılacak / open (\`is_done=false\`, \`status\` open or unset, \`is_checkable=true\`)
   ▶️ — Yapılıyor / in_progress (\`status="in_progress"\`)
   ⏳ — Bekliyor / waiting / blocked (\`status="blocked"\`)
   ✅ — Tamamlandı / done (\`is_done=true\`, \`status="done"\`)
-  📌 — Note (\`is_checkable=false\`, regardless of \`is_done\`)
+  🗒️ — Note (\`is_checkable=false\`, regardless of \`is_done\`)
+
+After the item text, append zero or more TRAILING BADGES (additive — both can appear when both apply):
+  📌 — pinned / high priority (\`priority="high"\`)
+  ⏰ — has an active future reminder (non-null \`due_at\` in the future, \`reminder_sent=false\`). Append the localized due time after the bell when known: "⏰ yarın 18:00".
 
 Example formats:
-  1. ☐ süt al
+  1. ☐ süt al ⏰ yarın 09:00
   2. ✅ ekmek al
-  3. ⏳ vergi beyannamesi (hatırlatıcı: yarın 18:00)
-  4. 📌 ali'nin doğum günü 12 mart
+  3. ⏳ vergi beyannamesi 📌 ⏰ Çar 18:00
+  4. 🗒️ ali'nin doğum günü 12 mart 📌
 
-Single-item replies don't need the prefix unless the user explicitly asks for status. The emoji ALWAYS goes before the item text (or any inline notes/reminder annotation), never after. This rule applies to ALL list-rendering replies regardless of locale.
+Single-item replies don't need the status prefix unless the user explicitly asks for state; trailing badges are still encouraged when relevant. The status emoji ALWAYS goes BEFORE the item text; trailing badges (📌, ⏰) ALWAYS go AFTER. This rule applies to ALL list-rendering replies regardless of locale.
 
 # Time & timezone
 The user's timezone is \`${userTimezone}\`. Interpret "yarın 18:00" in their local timezone and emit ISO 8601 with the correct UTC offset. Never set \`due_at\` in the past — the executor silently drops past times and warns; mention the correction. When communicating scheduled times back, format IN THE USER'S TIMEZONE (\`${userTimezone}\`) — the user thinks in their local clock, not UTC.`;

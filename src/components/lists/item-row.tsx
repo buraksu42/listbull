@@ -6,6 +6,7 @@ import * as React from "react";
 import { ItemActions } from "@/components/lists/item-actions";
 import { Avatar } from "@/components/lists/member-list";
 import { PriorityIndicator } from "@/components/items/priority-indicator";
+import { ReminderIndicator } from "@/components/items/reminder-indicator";
 import { StatusBadge } from "@/components/items/status-badge";
 import { TagChip } from "@/components/items/tag-chip";
 import type { Item } from "@/lib/types";
@@ -116,6 +117,11 @@ export function ItemRow({
         priority={
           (item.priority as "low" | "normal" | "high") ?? "normal"
         }
+      />
+
+      <ReminderIndicator
+        dueAt={item.dueAt ?? null}
+        reminderSent={Boolean(item.reminderSent)}
       />
 
       <button
