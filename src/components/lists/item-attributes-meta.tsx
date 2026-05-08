@@ -32,28 +32,46 @@ export type StatusMeta = {
   value: ItemStatus;
   label: string;
   Icon: LucideIcon;
-  /** CSS color token. Falls back to currentColor when omitted. */
-  color?: string;
+  /**
+   * Semantic CSS color token used for BOTH the inactive icon tint and
+   * the active chip background. Each status gets its own hue so a row
+   * of selected chips stays visually distinct (not all teal).
+   */
+  color: string;
 };
 
 export type PriorityMeta = {
   value: ItemPriority;
   label: string;
   Icon: LucideIcon;
-  color?: string;
+  color: string;
 };
 
+// Status colors — the semantic palette listbull's StatusBadge already
+// uses (warning amber for blocked, success green for done, accent teal
+// for in_progress). Open inherits the muted-fg neutral so an active
+// "Yapılacak" chip doesn't accidentally read as the brand color.
 export const STATUS_META: StatusMeta[] = [
-  { value: "open", label: "Yapılacak", Icon: Square },
+  { value: "open", label: "Yapılacak", Icon: Square, color: "var(--lb-muted-fg)" },
   { value: "in_progress", label: "Yapılıyor", Icon: Play, color: "var(--lb-accent)" },
-  { value: "blocked", label: "Bekliyor", Icon: Hourglass, color: "var(--lb-muted-fg)" },
-  { value: "done", label: "Tamamlandı", Icon: CheckCircle2, color: "var(--lb-accent)" },
+  {
+    value: "blocked",
+    label: "Bekliyor",
+    Icon: Hourglass,
+    color: "var(--lb-warning, #F0A020)",
+  },
+  {
+    value: "done",
+    label: "Tamamlandı",
+    Icon: CheckCircle2,
+    color: "var(--lb-success, #2EB872)",
+  },
 ];
 
 export const PRIORITY_META: PriorityMeta[] = [
   { value: "high", label: "Yüksek", Icon: Flame, color: "var(--lb-destructive)" },
-  { value: "normal", label: "Normal", Icon: Equal },
-  { value: "low", label: "Düşük", Icon: Snowflake, color: "var(--lb-muted-fg)" },
+  { value: "normal", label: "Normal", Icon: Equal, color: "var(--lb-muted-fg)" },
+  { value: "low", label: "Düşük", Icon: Snowflake, color: "var(--lb-info, #3B82F6)" },
 ];
 
 export function statusMeta(value: ItemStatus): StatusMeta {

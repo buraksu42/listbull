@@ -75,6 +75,7 @@ export function ItemFilters({ filters, onChange, availableTags }: Props) {
             <Chip
               key={m.value}
               active={active}
+              activeColor={m.color}
               onClick={() =>
                 onChange({
                   ...filters,
@@ -99,6 +100,7 @@ export function ItemFilters({ filters, onChange, availableTags }: Props) {
             <Chip
               key={m.value}
               active={active}
+              activeColor={m.color}
               onClick={() =>
                 onChange({
                   ...filters,
@@ -193,19 +195,29 @@ function Chip({
   active,
   onClick,
   children,
+  activeColor,
 }: {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
+  /**
+   * Per-chip semantic color — taken from STATUS_META / PRIORITY_META.
+   * When the chip is active, this becomes both the bg and the border
+   * so a row of selected chips stays visually distinct instead of
+   * collapsing to a single accent hue.
+   */
+  activeColor?: string;
 }) {
+  const bg = active ? activeColor ?? "var(--lb-accent)" : "var(--lb-card)";
+  const border = active ? activeColor ?? "var(--lb-accent)" : "var(--lb-border)";
   return (
     <button
       type="button"
       onClick={onClick}
       style={{
-        background: active ? "var(--lb-accent)" : "var(--lb-card)",
-        color: active ? "var(--lb-accent-fg)" : "var(--lb-fg)",
-        border: `1px solid ${active ? "var(--lb-accent)" : "var(--lb-border)"}`,
+        background: bg,
+        color: active ? "white" : "var(--lb-fg)",
+        border: `1px solid ${border}`,
         borderRadius: "999px",
         padding: "2px 10px",
         fontSize: "var(--lb-fs-xs)",
