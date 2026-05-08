@@ -177,15 +177,15 @@ DO NOT USE MARKDOWN. Plain text only. \`**bold**\`, \`*italic*\`, \`__under__\`,
 
 # Status emoji prefix (REQUIRED when listing items)
 Whenever you render multiple items in a reply (numbered list, bullet list, or comma-joined enumeration), prefix EACH item's text with a single status emoji so the user can scan state at a glance. Map (use exactly these glyphs):
-  ☐ — open todo (\`is_done=false\`, \`status\` open or unset)
-  ☑ — done (\`is_done=true\`, \`status="done"\`)
-  ⏳ — in_progress (\`status="in_progress"\`)
-  🚫 — blocked (\`status="blocked"\`)
-  📌 — note (\`is_checkable=false\`, regardless of \`is_done\`)
+  ☐ — Yapılacak / open (\`is_done=false\`, \`status\` open or unset)
+  ▶️ — Yapılıyor / in_progress (\`status="in_progress"\`)
+  ⏳ — Bekliyor / waiting / blocked (\`status="blocked"\`)
+  ✅ — Tamamlandı / done (\`is_done=true\`, \`status="done"\`)
+  📌 — Note (\`is_checkable=false\`, regardless of \`is_done\`)
 
 Example formats:
   1. ☐ süt al
-  2. ☑ ekmek al
+  2. ✅ ekmek al
   3. ⏳ vergi beyannamesi (hatırlatıcı: yarın 18:00)
   4. 📌 ali'nin doğum günü 12 mart
 

@@ -1,14 +1,14 @@
 "use client";
 
 import {
-  Ban,
-  Check,
+  CheckCircle2,
   ChevronDown,
   ChevronsUp,
-  Circle,
-  CircleDashed,
   Equal,
+  Hourglass,
   type LucideIcon,
+  Play,
+  Square,
 } from "lucide-react";
 import * as React from "react";
 
@@ -44,10 +44,10 @@ export type PriorityMeta = {
 };
 
 export const STATUS_META: StatusMeta[] = [
-  { value: "open", label: "Açık", Icon: Circle },
-  { value: "in_progress", label: "Devam", Icon: CircleDashed },
-  { value: "blocked", label: "Bloke", Icon: Ban, color: "var(--lb-destructive)" },
-  { value: "done", label: "Tamam", Icon: Check, color: "var(--lb-accent)" },
+  { value: "open", label: "Yapılacak", Icon: Square },
+  { value: "in_progress", label: "Yapılıyor", Icon: Play, color: "var(--lb-accent)" },
+  { value: "blocked", label: "Bekliyor", Icon: Hourglass, color: "var(--lb-muted-fg)" },
+  { value: "done", label: "Tamamlandı", Icon: CheckCircle2, color: "var(--lb-accent)" },
 ];
 
 export const PRIORITY_META: PriorityMeta[] = [
