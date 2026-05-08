@@ -83,6 +83,11 @@ export default function AppBoot() {
               // fall through to /lists
             }
             window.location.replace("/lists");
+          } else if (startParam.startsWith("list_")) {
+            const listId = startParam.slice("list_".length);
+            window.location.replace(
+              `/lists/${encodeURIComponent(listId)}`,
+            );
           } else {
             window.location.replace("/lists");
           }
