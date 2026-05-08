@@ -133,6 +133,49 @@ schema update, 1 picker component swap, ~5 call-site touch-ups. Not
 bot-blocking but high visibility: the format flips silently between
 devices today.
 
+### 2d. Decouple deadline from reminder
+
+Today `items.due_at` is the SAME column as the cron firing time —
+setting a deadline ALWAYS schedules a DM at that exact moment, with
+no option for "due Friday but ping me Thursday at 18:00." UX-wise the
+two concepts are independent and the bot should treat them so.
+
+Plan:
+
+- `items.deadline_at` (nullable timestamptz) — semantic deadline,
+  used for sort order, overdue badge, /views/today + /views/week
+  aggregates. No cron pickup off this column.
+- `item_reminders` table (1-to-many: `id`, `item_id`, `remind_at`,
+  `offset_minutes_before_deadline` nullable, `reminder_sent` boolean,
+  `recurrence_rule` text nullable). Cron picks up rows where
+  `remind_at <= now() AND reminder_sent = false`. `offset_*` lets
+  users say "1 hour before deadline" — when deadline shifts, the
+  reminder shifts too.
+- Migration plan: existing `due_at` becomes `deadline_at` AND we
+  back-fill an `item_reminders` row per item so existing reminder
+  semantics keep firing. `recurrence_rule` migrates onto the new
+  reminders table (it already lives on items today, so a 1-row
+  attachment).
+- Tool surface:
+  - `create_item` / `update_item`: `deadline_at` becomes the deadline
+    field. `due_at` stays as a deprecated alias for one release.
+  - `schedule_reminder` becomes `add_reminder` (multi-shot) plus
+    `clear_reminders`. Each reminder accepts absolute time OR
+    relative offset (`{ offset: { minutes_before_deadline: 60 } }`).
+  - LLM prompt examples cover "yarın 18:00 deadline + 1 saat önce
+    bana hatırlat" → both fields filled.
+- UI (Mini App): edit-sheet splits into two rows — "Deadline" (date+
+  time picker, optional) and "Reminders" (chip list with quick presets
+  "deadline'da", "1 saat önce", "1 gün önce" + "custom"). Bot reply
+  rendering keeps the trailing ⏰ badge but learns to combine the two
+  pieces of info ("deadline yarın 18:00, hatırlatma 17:00").
+- Surface area: 1 schema migration (sizeable — new table), cron
+  pickup query rewrite, 6 LLM tool descriptions touched, 2 Mini App
+  components, ~12 call-site touch-ups.
+
+This is the single biggest semantic refactor in the queue — promote
+to its own phase rather than bundling with anything else.
+
 ### 3. Weekly + calendar deadline views
 
 Phase 4.5 ships `/views/today` (workspace-scoped due-today aggregate).
