@@ -90,3 +90,29 @@ export async function userCanWriteList(
     .limit(1);
   return rows.length > 0;
 }
+
+/**
+ * Membership predicate: does the user have ANY role (owner | editor |
+ * viewer) on the given list within the active workspace? Used by
+ * read-only Mini App routes (e.g. attachment GET) where viewers
+ * should still be able to fetch bytes.
+ */
+export async function userCanReadList(
+  userId: string,
+  listId: string,
+  workspaceId: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: listMembers.id })
+    .from(listMembers)
+    .innerJoin(lists, eq(lists.id, listMembers.listId))
+    .where(
+      and(
+        eq(listMembers.listId, listId),
+        eq(listMembers.userId, userId),
+        eq(lists.workspaceId, workspaceId),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}

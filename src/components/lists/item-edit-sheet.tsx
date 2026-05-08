@@ -18,6 +18,7 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Sheet,
   SheetBody,
@@ -28,7 +29,20 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useTelegramMainButton } from "@/hooks/use-telegram-main-button";
-import type { Item } from "@/lib/types";
+import {
+  attachmentBytesUrl,
+  useAttachments,
+  useDeleteAttachment,
+} from "@/hooks/use-attachments";
+import type { AttachmentKind, AttachmentSnapshot, Item } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import {
+  FileText as FileIcon,
+  Mic,
+  Paperclip,
+  Trash2,
+  Video,
+} from "lucide-react";
 
 /**
  * Local form schema. Backend's authoritative validator (zod, server-side)
@@ -36,9 +50,11 @@ import type { Item } from "@/lib/types";
  */
 const itemEditFormSchema = z.object({
   text: z.string().trim().min(1, "Required").max(2000, "≤2000 chars"),
+  /** Phase 14a: optional long-form body, max 5000 chars. */
+  description: z.string().max(5000, "≤5000 chars").optional(),
   // <input type="datetime-local"> emits "YYYY-MM-DDTHH:mm" without timezone.
   // We coerce to ISO at submit time; empty string ↔ null.
-  dueAtLocal: z.string().optional(),
+  deadlineAtLocal: z.string().optional(),
   status: z.enum(["open", "in_progress", "blocked", "done"]),
   priority: z.enum(["low", "normal", "high"]),
   /** Comma-separated freeform tags; trimmed/dedup'd before submit. */
@@ -49,7 +65,8 @@ type ItemEditFormValues = z.infer<typeof itemEditFormSchema>;
 
 export type ItemEditPatch = {
   text?: string;
-  dueAt?: string | null;
+  description?: string | null;
+  deadlineAt?: string | null;
   status?: ItemStatus;
   priority?: ItemPriority;
   tags?: string[];
@@ -77,7 +94,8 @@ export function ItemEditSheet({
     resolver: zodResolver(itemEditFormSchema),
     defaultValues: {
       text: item?.text ?? "",
-      dueAtLocal: dateToLocalInput(item?.dueAt ?? null),
+      description: item?.description ?? "",
+      deadlineAtLocal: dateToLocalInput(item?.deadlineAt ?? null),
       status: (item?.status as ItemStatus) ?? "open",
       priority: (item?.priority as ItemPriority) ?? "normal",
       tagsRaw: (item?.tags ?? []).join(", "),
@@ -89,7 +107,8 @@ export function ItemEditSheet({
     if (!item) return;
     reset({
       text: item.text,
-      dueAtLocal: dateToLocalInput(item.dueAt),
+      description: item.description ?? "",
+      deadlineAtLocal: dateToLocalInput(item.deadlineAt),
       status: (item.status as ItemStatus) ?? "open",
       priority: (item.priority as ItemPriority) ?? "normal",
       tagsRaw: (item.tags ?? []).join(", "),
@@ -138,7 +157,7 @@ export function ItemEditSheet({
 
           <SheetBody className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="item-edit-text">Text</Label>
+              <Label htmlFor="item-edit-text">Başlık</Label>
               <Input
                 id="item-edit-text"
                 autoFocus
@@ -152,6 +171,28 @@ export function ItemEditSheet({
                   className="text-sm text-[var(--lb-destructive)]"
                 >
                   {errors.text.message}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="item-edit-description">Açıklama (opsiyonel)</Label>
+              <Textarea
+                id="item-edit-description"
+                rows={4}
+                placeholder="Daha uzun bağlam, notlar veya bağlantılar (≤5000 karakter, düz metin)"
+                {...register("description")}
+                aria-invalid={Boolean(errors.description)}
+                aria-describedby={
+                  errors.description ? "item-edit-description-error" : undefined
+                }
+              />
+              {errors.description && (
+                <p
+                  id="item-edit-description-error"
+                  className="text-sm text-[var(--lb-destructive)]"
+                >
+                  {errors.description.message}
                 </p>
               )}
             </div>
@@ -197,14 +238,15 @@ export function ItemEditSheet({
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="item-edit-due">Due (optional)</Label>
+              <Label htmlFor="item-edit-deadline">Son tarih (opsiyonel)</Label>
               <Input
-                id="item-edit-due"
+                id="item-edit-deadline"
                 type="datetime-local"
-                {...register("dueAtLocal")}
+                {...register("deadlineAtLocal")}
               />
               <p className="text-xs text-[var(--lb-muted-fg)]">
-                Leave empty to clear the reminder.
+                Boş bırakırsan son tarih ve süreye-bağlı hatırlatmalar
+                temizlenir.
               </p>
             </div>
 
@@ -219,6 +261,8 @@ export function ItemEditSheet({
                 Virgülle ayır. Workspace içinde en fazla 20 farklı etiket.
               </p>
             </div>
+
+            <AttachmentsSection itemId={item.id} />
           </SheetBody>
 
           <SheetFooter>
@@ -275,9 +319,9 @@ function PickerRow<T extends string>({
               borderRadius: "999px",
               fontSize: "var(--lb-fs-sm)",
               cursor: "pointer",
-              background: active ? "var(--lb-accent)" : "var(--lb-card)",
-              color: active ? "var(--lb-accent-fg)" : o.color ?? "var(--lb-fg)",
-              border: `1px solid ${active ? "var(--lb-accent)" : "var(--lb-border)"}`,
+              background: active ? o.color ?? "var(--lb-accent)" : "var(--lb-card)",
+              color: active ? "white" : o.color ?? "var(--lb-fg)",
+              border: `1px solid ${active ? o.color ?? "var(--lb-accent)" : "var(--lb-border)"}`,
             }}
           >
             <o.Icon size={14} aria-hidden="true" />
@@ -325,10 +369,18 @@ function diffPatch(item: Item, values: ItemEditFormValues): ItemEditPatch {
   if (values.text.trim() !== item.text) {
     patch.text = values.text.trim();
   }
-  const nextDue = localInputToIso(values.dueAtLocal ?? "");
-  const currentDue = item.dueAt ? new Date(item.dueAt).toISOString() : null;
+  // Description: empty/whitespace string ↔ null. Compare normalized
+  // values so the form doesn't dirty-flag a no-op edit.
+  const nextDescriptionRaw = (values.description ?? "").trim();
+  const nextDescription = nextDescriptionRaw.length > 0 ? nextDescriptionRaw : null;
+  const currentDescription = item.description ?? null;
+  if (nextDescription !== currentDescription) {
+    patch.description = nextDescription;
+  }
+  const nextDue = localInputToIso(values.deadlineAtLocal ?? "");
+  const currentDue = item.deadlineAt ? new Date(item.deadlineAt).toISOString() : null;
   if (nextDue !== currentDue) {
-    patch.dueAt = nextDue;
+    patch.deadlineAt = nextDue;
   }
   const currentStatus = (item.status as ItemStatus) ?? "open";
   if (values.status !== currentStatus) {
@@ -344,4 +396,224 @@ function diffPatch(item: Item, values: ItemEditFormValues): ItemEditPatch {
     patch.tags = nextTags;
   }
   return patch;
+}
+
+/**
+ * Phase 14b: per-item attachments section. Renders a thumbnail grid;
+ * photos use the proxy URL as <img src>, other kinds get a typed icon
+ * + filename + size. Lightbox: clicking a photo opens it full-screen
+ * over the sheet (Escape / backdrop closes). Delete is per-row.
+ *
+ * Read-only render when the user lacks write access — `useDeleteAttachment`
+ * returns 403 from the API, which surfaces as a toast.
+ */
+function AttachmentsSection({ itemId }: { itemId: string }) {
+  const { data: attachments, isLoading, isError } = useAttachments(itemId);
+  const deleteMutation = useDeleteAttachment(itemId);
+  const [lightboxId, setLightboxId] = React.useState<string | null>(null);
+
+  const lightboxAttachment =
+    lightboxId !== null
+      ? (attachments ?? []).find((a) => a.id === lightboxId) ?? null
+      : null;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Label>
+        <span className="inline-flex items-center gap-1.5">
+          <Paperclip size={14} aria-hidden="true" />
+          Ekler
+        </span>
+      </Label>
+      {isLoading && (
+        <p className="text-xs text-[var(--lb-muted-fg)]">Yükleniyor…</p>
+      )}
+      {isError && (
+        <p className="text-xs text-[var(--lb-destructive)]">
+          Ekler getirilemedi.
+        </p>
+      )}
+      {!isLoading && (attachments?.length ?? 0) === 0 && (
+        <p className="text-xs text-[var(--lb-muted-fg)]">
+          Henüz ek yok. Bot&apos;a dosya gönderip &ldquo;bu maddeye ekle&rdquo;
+          dersen iliştirir.
+        </p>
+      )}
+      {(attachments?.length ?? 0) > 0 && (
+        <ul
+          className="grid grid-cols-3 gap-2"
+          aria-label={`${attachments?.length ?? 0} ek`}
+        >
+          {(attachments ?? []).map((att) => (
+            <AttachmentTile
+              key={att.id}
+              itemId={itemId}
+              attachment={att}
+              onOpen={() => setLightboxId(att.id)}
+              onDelete={() =>
+                deleteMutation.mutate(att.id, {
+                  onError: (err) => {
+                    console.warn("[attachments] delete failed", err);
+                  },
+                })
+              }
+              deleting={
+                deleteMutation.isPending && deleteMutation.variables === att.id
+              }
+            />
+          ))}
+        </ul>
+      )}
+      {lightboxAttachment && (
+        <Lightbox
+          itemId={itemId}
+          attachment={lightboxAttachment}
+          onClose={() => setLightboxId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function AttachmentTile({
+  itemId,
+  attachment,
+  onOpen,
+  onDelete,
+  deleting,
+}: {
+  itemId: string;
+  attachment: AttachmentSnapshot;
+  onOpen: () => void;
+  onDelete: () => void;
+  deleting: boolean;
+}) {
+  const isPhoto = attachment.kind === "photo";
+  const url = attachmentBytesUrl(itemId, attachment.id);
+  return (
+    <li className="relative">
+      <button
+        type="button"
+        onClick={onOpen}
+        className={cn(
+          "flex h-24 w-full items-center justify-center overflow-hidden rounded-[var(--lb-r-md)] border border-[var(--lb-border)] bg-[var(--lb-card)]",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)]",
+        )}
+        aria-label={
+          attachment.originalFilename ?? `${attachment.kind} ${attachment.id}`
+        }
+      >
+        {isPhoto ? (
+          // eslint-disable-next-line @next/next/no-img-element -- Telegram CDN through our proxy; <Image> would require domain config.
+          <img
+            src={url}
+            alt={attachment.originalFilename ?? "Fotoğraf"}
+            loading="lazy"
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <KindIcon kind={attachment.kind} />
+        )}
+      </button>
+      <div className="mt-1 flex items-center justify-between gap-1 text-[10px]">
+        <span
+          className="truncate text-[var(--lb-muted-fg)]"
+          title={attachment.originalFilename ?? attachment.kind}
+        >
+          {attachment.originalFilename ?? attachment.kind}
+        </span>
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={deleting}
+          className="text-[var(--lb-destructive)] hover:opacity-80 disabled:opacity-40"
+          aria-label="Eki sil"
+        >
+          <Trash2 size={12} aria-hidden="true" />
+        </button>
+      </div>
+      {!attachment.hasBackup && (
+        <span
+          className="absolute right-1 top-1 rounded-full bg-[var(--lb-bg)]/80 px-1 text-[9px] text-[var(--lb-muted-fg)]"
+          title="Henüz yedeklenmedi"
+        >
+          ⏳
+        </span>
+      )}
+    </li>
+  );
+}
+
+function KindIcon({ kind }: { kind: AttachmentKind }) {
+  const iconColor = "var(--lb-muted-fg)";
+  const size = 28;
+  switch (kind) {
+    case "video":
+    case "video_note":
+      return <Video size={size} color={iconColor} aria-hidden="true" />;
+    case "audio":
+    case "voice":
+      return <Mic size={size} color={iconColor} aria-hidden="true" />;
+    case "document":
+    case "photo":
+    default:
+      return <FileIcon size={size} color={iconColor} aria-hidden="true" />;
+  }
+}
+
+function Lightbox({
+  itemId,
+  attachment,
+  onClose,
+}: {
+  itemId: string;
+  attachment: AttachmentSnapshot;
+  onClose: () => void;
+}) {
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const url = attachmentBytesUrl(itemId, attachment.id);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Ek önizleme"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4"
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute right-3 top-3 rounded-full bg-white/10 p-2 text-white"
+        aria-label="Kapat"
+      >
+        ✕
+      </button>
+      {attachment.kind === "photo" ? (
+        // eslint-disable-next-line @next/next/no-img-element -- proxied bytes
+        <img
+          src={url}
+          alt={attachment.originalFilename ?? "Ek"}
+          className="max-h-[90vh] max-w-[90vw] object-contain"
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <a
+          href={url}
+          download={attachment.originalFilename ?? undefined}
+          className="rounded-md bg-[var(--lb-card)] px-4 py-3 text-[var(--lb-fg)] underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {attachment.originalFilename ?? "Dosyayı indir"}
+        </a>
+      )}
+    </div>
+  );
 }

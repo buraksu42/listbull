@@ -129,7 +129,11 @@ function registerHandlers(bot: Bot): void {
   bot.command("reset", handleReset);
   bot.command("snapshot", handleSnapshot);
   bot.on("inline_query", handleInlineQuery);
-  bot.on("message:text", handleMessage);
+  // Phase 14b: register on `message` (not `message:text`) so photos /
+  // videos / documents / audio / voice / video_note also flow into
+  // handleMessage. Slash commands stay routed via `bot.command()`
+  // because grammY filters those before this catch-all.
+  bot.on("message", handleMessage);
 }
 
 /**

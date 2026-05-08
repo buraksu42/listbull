@@ -1,6 +1,6 @@
 "use client";
 
-import { GripVertical, Pin } from "lucide-react";
+import { FileText, GripVertical, Pin } from "lucide-react";
 import * as React from "react";
 
 import { ItemActions } from "@/components/lists/item-actions";
@@ -63,6 +63,12 @@ export type ItemRowProps = {
    */
   assigneeFirstName?: string | null;
   assigneePhotoUrl?: string | null;
+  /**
+   * Phase 16: when true (checklist mode) hide every metadata badge
+   * (priority / reminder / description / status / tags / assignee).
+   * Only the drag handle, checkbox, text body, and actions remain.
+   */
+  compact?: boolean;
 };
 
 export function ItemRow({
@@ -75,6 +81,7 @@ export function ItemRow({
   dragHandle,
   assigneeFirstName = null,
   assigneePhotoUrl = null,
+  compact = false,
 }: ItemRowProps) {
   const assignedTo =
     item.assigneeId !== null ? assigneeFirstName ?? "?" : null;
@@ -116,16 +123,35 @@ export function ItemRow({
         ariaLabel={`Toggle ${item.text}`}
       />
 
-      <PriorityIndicator
-        priority={
-          (item.priority as "low" | "normal" | "high") ?? "normal"
-        }
-      />
+      {!compact && (
+        <>
+          <PriorityIndicator
+            priority={
+              (item.priority as "low" | "normal" | "high") ?? "normal"
+            }
+          />
 
-      <ReminderIndicator
-        dueAt={item.dueAt ?? null}
-        reminderSent={Boolean(item.reminderSent)}
-      />
+          <ReminderIndicator deadlineAt={item.deadlineAt ?? null} />
+
+          {item.description ? (
+            <span
+              aria-label="açıklama mevcut"
+              title={
+                item.description.length > 80
+                  ? `${item.description.slice(0, 80)}…`
+                  : item.description
+              }
+              style={{
+                display: "inline-flex",
+                color: "var(--lb-muted-fg)",
+                flexShrink: 0,
+              }}
+            >
+              <FileText size={14} aria-hidden="true" />
+            </span>
+          ) : null}
+        </>
+      )}
 
       <button
         type="button"
@@ -143,32 +169,36 @@ export function ItemRow({
         {item.text}
       </button>
 
-      {/* Phase 4.5: status badge (open hidden) + tag chips */}
-      <StatusBadge
-        status={
-          (item.status as
-            | "open"
-            | "in_progress"
-            | "blocked"
-            | "done") ?? "open"
-        }
-      />
-      {(item.tags ?? []).slice(0, 3).map((t) => (
-        <TagChip key={t} tag={t} />
-      ))}
-
-      {item.assigneeId !== null && (
-        <span
-          aria-hidden
-          title={assignedTo ?? undefined}
-          className="shrink-0"
-        >
-          <Avatar
-            name={assigneeFirstName}
-            photoUrl={assigneePhotoUrl}
-            size={28}
+      {!compact && (
+        <>
+          {/* Phase 4.5: status badge (open hidden) + tag chips */}
+          <StatusBadge
+            status={
+              (item.status as
+                | "open"
+                | "in_progress"
+                | "blocked"
+                | "done") ?? "open"
+            }
           />
-        </span>
+          {(item.tags ?? []).slice(0, 3).map((t) => (
+            <TagChip key={t} tag={t} />
+          ))}
+
+          {item.assigneeId !== null && (
+            <span
+              aria-hidden
+              title={assignedTo ?? undefined}
+              className="shrink-0"
+            >
+              <Avatar
+                name={assigneeFirstName}
+                photoUrl={assigneePhotoUrl}
+                size={28}
+              />
+            </span>
+          )}
+        </>
       )}
 
       {onTogglePin && (

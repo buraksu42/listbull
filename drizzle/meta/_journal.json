@@ -78,6 +78,48 @@
       "when": 1778230634747,
       "tag": "0010_lush_rictor",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1778889600000,
+      "tag": "0011_phase14d_reminders_split",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1778889700000,
+      "tag": "0012_phase14a_item_description",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1778889800000,
+      "tag": "0013_phase14c_user_date_format",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1778889900000,
+      "tag": "0014_phase14b_item_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1778890000000,
+      "tag": "0015_phase16_checklists",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1778890100000,
+      "tag": "0016_phase15_daily_digest",
+      "breakpoints": true
     }
   ]
 }

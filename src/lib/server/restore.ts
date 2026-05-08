@@ -42,6 +42,11 @@ const RESTORE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 /**
  * Zod schema mirroring `ItemSnapshot`. Used to validate raw JSONB so
  * a malformed payload returns a structured error rather than crashing.
+ *
+ * Phase 14d: legacy `dueAt` / `reminderSent` fields are accepted for
+ * backwards compatibility with old activity_log rows captured under
+ * the previous schema. The newer field is `deadlineAt`. Restore
+ * normalizes the two by preferring `deadlineAt` when present.
  */
 const itemSnapshotSchema = z.object({
   id: z.string(),
@@ -50,8 +55,10 @@ const itemSnapshotSchema = z.object({
   isCheckable: z.boolean(),
   isDone: z.boolean(),
   assigneeId: z.string().nullable(),
-  dueAt: z.string().nullable(),
-  reminderSent: z.boolean(),
+  // Either-or: deadlineAt (Phase 14d+) or dueAt (legacy) may be present.
+  deadlineAt: z.string().nullable().optional(),
+  dueAt: z.string().nullable().optional(),
+  reminderSent: z.boolean().optional(),
   position: z.number(),
   createdBy: z.string(),
   completedAt: z.string().nullable(),
@@ -139,8 +146,11 @@ export async function restoreFromActivityLog(args: {
       };
     }
 
-    const dueAt = snap.dueAt ? new Date(snap.dueAt) : null;
-    const reminderSent = dueAt ? dueAt.getTime() <= Date.now() : false;
+    // Phase 14d: prefer the newer `deadlineAt` field, fall back to
+    // legacy `dueAt`. Reminder rows are NOT recreated on restore —
+    // pings for a soft-deleted item won't be retroactively re-armed.
+    const deadlineSource = snap.deadlineAt ?? snap.dueAt ?? null;
+    const deadlineAt = deadlineSource ? new Date(deadlineSource) : null;
 
     const [created] = await tx
       .insert(items)
@@ -150,8 +160,7 @@ export async function restoreFromActivityLog(args: {
         isCheckable: snap.isCheckable,
         isDone: false,
         assigneeId: null, // assignee membership may have changed; reset.
-        dueAt,
-        reminderSent,
+        deadlineAt,
         position: snap.position,
         createdBy: snap.createdBy,
         completedAt: null,

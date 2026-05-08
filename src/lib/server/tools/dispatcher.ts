@@ -30,7 +30,12 @@ import { executeListMembers } from "./list-members";
 import { executeRemoveMember } from "./remove-member";
 import { executeUpdateMemberRole } from "./update-member-role";
 import { executeUpdateSettings } from "./update-settings";
-import { executeScheduleReminder } from "./schedule-reminder";
+import { executeSetDeadline } from "./set-deadline";
+import { executeAddReminder } from "./add-reminder";
+import { executeRemoveReminder } from "./remove-reminder";
+import { executeAttachFileToItem } from "./attach-file-to-item";
+import { executeStartChecklistRun } from "./start-checklist-run";
+import { executeCompleteChecklistRun } from "./complete-checklist-run";
 import { executeAssignItem } from "./assign-item";
 import { executeCreateWorkspace } from "./create-workspace";
 import { executeSwitchWorkspace } from "./switch-workspace";
@@ -107,8 +112,18 @@ async function routeCall(
       return await executeUpdateMemberRole(input, ctx);
     case "update_settings":
       return await executeUpdateSettings(input, ctx);
-    case "schedule_reminder":
-      return await executeScheduleReminder(input, ctx);
+    case "set_deadline":
+      return await executeSetDeadline(input, ctx);
+    case "add_reminder":
+      return await executeAddReminder(input, ctx);
+    case "remove_reminder":
+      return await executeRemoveReminder(input, ctx);
+    case "attach_file_to_item":
+      return await executeAttachFileToItem(input, ctx);
+    case "start_checklist_run":
+      return await executeStartChecklistRun(input, ctx);
+    case "complete_checklist_run":
+      return await executeCompleteChecklistRun(input, ctx);
     case "assign_item":
       return await executeAssignItem(input, ctx);
     case "create_workspace":

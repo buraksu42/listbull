@@ -1,7 +1,8 @@
 /**
  * ReminderIndicator — small calendar glyph next to items with an
- * active future reminder. Renders nothing for items without due_at,
- * past due_at (already fired), or already-sent reminders.
+ * active future deadline. Phase 14d: renders based on `deadlineAt`
+ * only; reminders themselves are surfaced separately when needed.
+ * Returns null for items without a deadline or with a past deadline.
  *
  * Changed from AlarmClock → Calendar 2026-05-08 per user feedback —
  * the calendar metaphor reads as "scheduled for a date" rather than
@@ -10,14 +11,14 @@
 import { Calendar } from "lucide-react";
 
 type Props = {
-  dueAt: Date | string | null;
-  reminderSent: boolean;
+  deadlineAt: Date | string | null;
 };
 
-export function ReminderIndicator({ dueAt, reminderSent }: Props) {
-  if (!dueAt || reminderSent) return null;
-  const d = typeof dueAt === "string" ? new Date(dueAt) : dueAt;
+export function ReminderIndicator({ deadlineAt }: Props) {
+  if (!deadlineAt) return null;
+  const d = typeof deadlineAt === "string" ? new Date(deadlineAt) : deadlineAt;
   if (Number.isNaN(d.getTime())) return null;
+  // eslint-disable-next-line react-hooks/purity -- 1-frame staleness is fine for this read-only glyph; React re-renders on parent updates anyway.
   if (d.getTime() <= Date.now()) return null;
 
   const formatted = new Intl.DateTimeFormat(undefined, {
@@ -27,7 +28,7 @@ export function ReminderIndicator({ dueAt, reminderSent }: Props) {
 
   return (
     <span
-      aria-label={`reminder: ${formatted}`}
+      aria-label={`deadline: ${formatted}`}
       title={formatted}
       style={{
         display: "inline-flex",

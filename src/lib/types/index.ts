@@ -9,9 +9,12 @@
  */
 import type {
   activityLog,
+  itemAttachments,
+  itemReminders,
   items,
   listInvites,
   listMembers,
+  listRuns,
   lists,
   messages,
   users,
@@ -76,9 +79,29 @@ export type ListMember = typeof listMembers.$inferSelect;
 export type NewListMember = typeof listMembers.$inferInsert;
 export type ListRole = "owner" | "editor" | "viewer";
 
+// ─── ListRun (Phase 16, checklists) ─────────────────────────────────
+export type ListRun = typeof listRuns.$inferSelect;
+export type NewListRun = typeof listRuns.$inferInsert;
+
 // ─── Item ───────────────────────────────────────────────────────────
 export type Item = typeof items.$inferSelect;
 export type NewItem = typeof items.$inferInsert;
+
+// ─── ItemReminder (Phase 14d) ───────────────────────────────────────
+export type ItemReminder = typeof itemReminders.$inferSelect;
+export type NewItemReminder = typeof itemReminders.$inferInsert;
+export type ItemReminderKind = "absolute" | "before_deadline";
+
+// ─── ItemAttachment (Phase 14b) ─────────────────────────────────────
+export type ItemAttachment = typeof itemAttachments.$inferSelect;
+export type NewItemAttachment = typeof itemAttachments.$inferInsert;
+export type AttachmentKind =
+  | "photo"
+  | "video"
+  | "document"
+  | "audio"
+  | "voice"
+  | "video_note";
 
 // ─── Message (LLM conversation) ─────────────────────────────────────
 export type Message = typeof messages.$inferSelect;
@@ -102,8 +125,22 @@ export type ActivityAction =
   | "item_deleted"
   | "item_assigned"
   | "item_unassigned"
+  // Phase 1-3 deadline actions (kept in union so historical activity_log
+  // rows still validate; new writes use the Phase 14d actions below).
   | "item_due_set"
   | "item_due_cleared"
+  // ─── Phase 14d: deadline / reminder split ─────────────────────────
+  | "item_deadline_set"
+  | "item_deadline_cleared"
+  | "item_reminder_added"
+  | "item_reminder_removed"
+  | "item_reminder_fired"
+  // ─── Phase 14b: attachments ───────────────────────────────────────
+  | "item_attachment_added"
+  | "item_attachment_removed"
+  // ─── Phase 16: checklists ─────────────────────────────────────────
+  | "checklist_run_started"
+  | "checklist_run_completed"
   | "list_created"
   | "list_renamed"
   | "list_archived"
@@ -200,17 +237,28 @@ export type MessageWithToolCalls = Omit<Message, "toolCalls"> & {
  *
  * Used as the value type of `activity_log.payload_before` and
  * `payload_after` whenever `entity_type = 'item'`.
+ *
+ * Phase 14d: `dueAt` / `reminderSent` / `recurrenceRule` removed; use
+ * `deadlineAt` and the sibling `ItemReminderSnapshot` for reminders.
+ * Old activity_log rows with the legacy field names are still valid
+ * jsonb — readers narrow on field presence when migrating UI surfaces.
  */
 export type ItemSnapshot = {
   id: string;
   listId: string;
   text: string;
+  /** Phase 14a: optional long-form context (≤5000 chars). */
+  description: string | null;
   isCheckable: boolean;
   isDone: boolean;
+  status: string;
+  priority: string;
+  tags: string[];
   assigneeId: string | null;
   /** ISO 8601 string, e.g. "2026-05-01T18:00:00.000Z" */
-  dueAt: string | null;
-  reminderSent: boolean;
+  deadlineAt: string | null;
+  /** ISO 8601 string — pin-to-top marker. */
+  pinnedAt: string | null;
   position: number;
   createdBy: string;
   /** ISO 8601 string */
@@ -221,6 +269,56 @@ export type ItemSnapshot = {
   createdAt: string;
   /** ISO 8601 string */
   updatedAt: string;
+};
+
+/**
+ * JSON-safe snapshot of an `item_reminders` row (Phase 14d). Mirror of
+ * `ItemReminder` with all `Date` fields serialized as ISO 8601 strings.
+ *
+ * Used in activity_log payloads for `item_reminder_added` /
+ * `item_reminder_removed` / `item_reminder_fired` actions, and as the
+ * client-facing shape returned alongside items in API responses.
+ */
+export type ItemReminderSnapshot = {
+  id: string;
+  itemId: string;
+  /** ISO 8601 UTC timestamp — the moment to fire. */
+  remindAt: string;
+  kind: ItemReminderKind;
+  offsetMinutes: number | null;
+  recurrenceRule: string | null;
+  sent: boolean;
+  /** ISO 8601 string — last successful fire time. */
+  lastSentAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * JSON-safe snapshot of an `item_attachments` row (Phase 14b).
+ *
+ * Used in activity_log payloads (`item_attachment_added` /
+ * `item_attachment_removed`) and as the client-facing shape returned
+ * to the Mini App. The raw `telegramFileId` is intentionally NOT
+ * exposed to the client — clients fetch bytes via the proxy route
+ * `/api/attachments/[itemId]/[attachmentId]` keyed by attachment id.
+ */
+export type AttachmentSnapshot = {
+  id: string;
+  itemId: string;
+  workspaceId: string;
+  kind: AttachmentKind;
+  mimeType: string | null;
+  fileSize: number | null;
+  durationSeconds: number | null;
+  width: number | null;
+  height: number | null;
+  originalFilename: string | null;
+  /** True when the Hetzner backup completed; false = Telegram-only. */
+  hasBackup: boolean;
+  uploadedByUserId: string;
+  /** ISO 8601 string. */
+  createdAt: string;
 };
 
 // ─── Phase 3 additions ─────────────────────────────────────────────
@@ -249,12 +347,35 @@ export type ListSnapshot = {
   emoji: string | null;
   ownerId: string;
   isInbox: boolean;
+  /** Phase 16: when true, the list is a repeatable checklist. */
+  isChecklist: boolean;
   /** ISO 8601 string — soft-delete marker. */
   archivedAt: string | null;
   /** ISO 8601 string */
   createdAt: string;
   /** ISO 8601 string */
   updatedAt: string;
+};
+
+/**
+ * JSON-safe snapshot of a `list_runs` row (Phase 16). Used in
+ * activity_log payloads (`checklist_run_started` /
+ * `checklist_run_completed`) and as the wire shape returned to the
+ * Mini App when rendering run history.
+ */
+export type ListRunSnapshot = {
+  id: string;
+  listId: string;
+  /** ISO 8601 string. */
+  startedAt: string;
+  /** ISO 8601 string — null while the run is still open. */
+  completedAt: string | null;
+  startedByUserId: string;
+  completedByUserId: string | null;
+  itemsTotal: number;
+  itemsCompleted: number | null;
+  /** ISO 8601 string. */
+  createdAt: string;
 };
 
 /**
@@ -352,26 +473,35 @@ export type ActivityFeedRow = {
  * loop, the DM sender, and any future test harness all share the same
  * row contract.
  *
- * The query joins `items` → `lists` → `users` (owner via
- * `lists.owner_id`) and LEFT JOINs `users` again on `items.assignee_id`
- * to surface the assignee's Telegram chat target when present. The
- * dispatcher DMs `assigneeTelegramId` if non-null, else falls back to
- * `ownerTelegramId` (Inv-12).
+ * Phase 14d: pickup is now `item_reminders` JOIN `items` JOIN `lists`
+ * JOIN `users`. `reminderId` is the unsent row to mark fired; `itemId`
+ * is the parent for context. `deadlineAt` rides along so the DM body
+ * can render both the reminder time and the deadline when they differ.
  *
- * `dueAt` is ISO 8601 (UTC). All comparisons are done in UTC because
- * `items.due_at` is `timestamptz` and Dokploy cron runs in UTC; user
- * timezone is presentation-only.
+ * The dispatcher DMs `assigneeTelegramId` if non-null, else falls back
+ * to `ownerTelegramId` (Inv-12). All times are UTC because Dokploy cron
+ * runs in UTC; user timezone is presentation-only.
  */
 export type ReminderJobItem = {
+  reminderId: string;
   itemId: string;
   listId: string;
   text: string;
-  /** ISO 8601 UTC timestamp. */
-  dueAt: string;
+  /** ISO 8601 UTC timestamp — the reminder fire time. */
+  remindAt: string;
+  /** ISO 8601 UTC timestamp — the parent item's deadline. */
+  deadlineAt: string | null;
+  /** 'absolute' | 'before_deadline'. */
+  kind: ItemReminderKind;
+  offsetMinutes: number | null;
+  /** RFC 5545 RRULE body (no 'RRULE:' prefix), or null for one-shot. */
+  recurrenceRule: string | null;
   ownerTelegramId: number;
   ownerLocale: string;
+  ownerTimezone: string;
   assigneeTelegramId: number | null;
   assigneeLocale: string | null;
+  assigneeTimezone: string | null;
 };
 
 // ─── Phase 4 additions (FROZEN after Phase 4 — Phase 5 is launch only) ─
@@ -411,7 +541,7 @@ export type SnapshotPublic = {
     text: string;
     isDone: boolean;
     /** ISO 8601 or null — only the date is shown to viewers; assignee not exposed. */
-    dueAt: string | null;
+    deadlineAt: string | null;
   }>;
   /** Owner's display first-name only — no username or photo (light privacy). */
   ownerFirstName: string;

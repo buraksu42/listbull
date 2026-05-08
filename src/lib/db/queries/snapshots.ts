@@ -43,7 +43,7 @@ export async function getSnapshotPublic(
     .select({
       text: items.text,
       isDone: items.isDone,
-      dueAt: items.dueAt,
+      deadlineAt: items.deadlineAt,
       isCheckable: items.isCheckable,
       position: items.position,
       createdAt: items.createdAt,
@@ -68,7 +68,7 @@ export async function getSnapshotPublic(
     items: itemRows.map((r) => ({
       text: r.text,
       isDone: r.isDone,
-      dueAt: r.dueAt ? r.dueAt.toISOString() : null,
+      deadlineAt: r.deadlineAt ? r.deadlineAt.toISOString() : null,
     })),
     ownerFirstName: listRow.ownerFirstName,
   };

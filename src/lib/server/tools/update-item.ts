@@ -1,15 +1,17 @@
 /**
- * Executor: `update_item`. Edits text, due_at, position, and/or
+ * Executor: `update_item`. Edits text, deadline_at, position, and/or
  * target_list_id (cross-list move within the same workspace).
  *
  * Action mapping per Inv-5:
  *   - target_list_id changed alone → `item_moved`.
- *   - due_at is the SOLE changed field → `item_due_set` /
- *     `item_due_cleared` (helps the Phase-3 reminder feed).
+ *   - deadline_at is the SOLE changed field → `item_deadline_set` /
+ *     `item_deadline_cleared` (Phase 14d).
  *   - any other combination (incl. move + edit) → `item_edited`.
  *
- * Past `due_at` values are silently dropped + warning surfaced (matches
- * `create_item`).
+ * Past `deadline_at` values are silently dropped + warning surfaced
+ * (matches `create_item`). Phase 14d: when deadline changes,
+ * `recomputeOffsetReminders` updates every `before_deadline` reminder
+ * for the item in the same transaction.
  *
  * Move semantics: write the activity row to the DESTINATION list. The
  * source list's audit feed will not show the row; the destination's
@@ -27,7 +29,15 @@ import {
   type UpdateItemOutput,
 } from "@/lib/ai/tools";
 import type { ActivityAction } from "@/lib/types";
-import { ERR, err, isPast, ok, resolveList, toItemSnapshot } from "./_shared";
+import {
+  ERR,
+  err,
+  isPast,
+  ok,
+  recomputeOffsetReminders,
+  resolveList,
+  toItemSnapshot,
+} from "./_shared";
 import { userCanWriteList } from "@/lib/db/queries/items";
 
 import type { ExecResult } from "./_shared";
@@ -43,7 +53,8 @@ export async function executeUpdateItem(
   const {
     item_id,
     text,
-    due_at,
+    description,
+    deadline_at,
     position,
     target_list_id,
     target_list_name,
@@ -102,7 +113,14 @@ export async function executeUpdateItem(
     const patch: Partial<typeof items.$inferInsert> = {
       updatedAt: new Date(),
     };
-    const changes: Array<"text" | "due_at" | "position" | "list_id" | "pinned"> = [];
+    const changes: Array<
+      | "text"
+      | "description"
+      | "deadline_at"
+      | "position"
+      | "list_id"
+      | "pinned"
+    > = [];
     const warnings: string[] = [];
 
     if (pinned !== undefined) {
@@ -164,26 +182,42 @@ export async function executeUpdateItem(
       }
     }
 
-    let dueAtChanged = false;
-    if (due_at !== undefined) {
-      if (due_at === null) {
-        if (current.dueAt !== null) {
-          patch.dueAt = null;
-          patch.reminderSent = false;
-          changes.push("due_at");
-          dueAtChanged = true;
+    if (description !== undefined) {
+      // Empty/whitespace string normalized to null so the "has
+      // description" indicator stays consistent with reality.
+      const next =
+        description === null
+          ? null
+          : description.trim().length > 0
+            ? description.trim()
+            : null;
+      if (next !== (current.description ?? null)) {
+        patch.description = next;
+        changes.push("description");
+      }
+    }
+
+    let deadlineChanged = false;
+    let nextDeadline: Date | null = current.deadlineAt;
+    if (deadline_at !== undefined) {
+      if (deadline_at === null) {
+        if (current.deadlineAt !== null) {
+          patch.deadlineAt = null;
+          changes.push("deadline_at");
+          deadlineChanged = true;
+          nextDeadline = null;
         }
       } else {
-        if (isPast(due_at)) {
-          warnings.push("due_at_in_past");
+        if (isPast(deadline_at)) {
+          warnings.push("deadline_at_in_past");
         } else {
-          const newDate = new Date(due_at);
-          const oldIso = current.dueAt?.toISOString() ?? null;
+          const newDate = new Date(deadline_at);
+          const oldIso = current.deadlineAt?.toISOString() ?? null;
           if (oldIso !== newDate.toISOString()) {
-            patch.dueAt = newDate;
-            patch.reminderSent = false;
-            changes.push("due_at");
-            dueAtChanged = true;
+            patch.deadlineAt = newDate;
+            changes.push("deadline_at");
+            deadlineChanged = true;
+            nextDeadline = newDate;
           }
         }
       }
@@ -210,14 +244,23 @@ export async function executeUpdateItem(
       .returning();
     if (!updated) throw new Error("update-item: update returned no row");
 
+    // Phase 14d: when deadline changed, recompute every
+    // before_deadline reminder for this item (clear / re-anchor).
+    if (deadlineChanged) {
+      await recomputeOffsetReminders(tx, item_id, nextDeadline);
+    }
+
     // Decide which activity action to write.
-    const dueAtIsSole =
-      dueAtChanged && changes.length === 1 && changes[0] === "due_at";
+    const deadlineIsSole =
+      deadlineChanged && changes.length === 1 && changes[0] === "deadline_at";
     const moveIsSole =
       listIdChanged && changes.length === 1 && changes[0] === "list_id";
     let action: ActivityAction;
-    if (dueAtIsSole) {
-      action = updated.dueAt === null ? "item_due_cleared" : "item_due_set";
+    if (deadlineIsSole) {
+      action =
+        updated.deadlineAt === null
+          ? "item_deadline_cleared"
+          : "item_deadline_set";
     } else if (moveIsSole) {
       action = "item_moved";
     } else {

@@ -18,6 +18,10 @@ import {
   updateSettingsInputSchema,
   type UpdateSettingsOutput,
 } from "@/lib/ai/tools";
+import type {
+  AllowedDateFormat,
+  AllowedTimeFormat,
+} from "@/lib/validators/settings";
 import { ERR, err, ok } from "./_shared";
 
 import type { ExecResult } from "./_shared";
@@ -26,7 +30,9 @@ type ChangeField =
   | "locale"
   | "timezone"
   | "llm_model"
-  | "notifications_enabled";
+  | "notifications_enabled"
+  | "date_format"
+  | "time_format";
 
 export async function executeUpdateSettings(
   input: unknown,
@@ -41,6 +47,8 @@ export async function executeUpdateSettings(
     timezone,
     llm_model,
     notifications_enabled,
+    date_format,
+    time_format,
   } = parsed.data;
 
   const current = await db.query.users.findFirst({
@@ -74,6 +82,14 @@ export async function executeUpdateSettings(
     patch.notificationsEnabled = notifications_enabled;
     changes.push("notifications_enabled");
   }
+  if (date_format !== undefined && date_format !== current.dateFormat) {
+    patch.dateFormat = date_format;
+    changes.push("date_format");
+  }
+  if (time_format !== undefined && time_format !== current.timeFormat) {
+    patch.timeFormat = time_format;
+    changes.push("time_format");
+  }
 
   // Idempotent no-op when no fields actually change.
   if (changes.length === 0) {
@@ -82,6 +98,8 @@ export async function executeUpdateSettings(
       timezone: current.timezone,
       llm_model: current.llmModel,
       notifications_enabled: current.notificationsEnabled,
+      date_format: current.dateFormat as AllowedDateFormat,
+      time_format: current.timeFormat as AllowedTimeFormat,
       changes: [],
     });
   }
@@ -100,6 +118,8 @@ export async function executeUpdateSettings(
     timezone: updated.timezone,
     llm_model: updated.llmModel,
     notifications_enabled: updated.notificationsEnabled,
+    date_format: updated.dateFormat as AllowedDateFormat,
+    time_format: updated.timeFormat as AllowedTimeFormat,
     changes,
   });
 }

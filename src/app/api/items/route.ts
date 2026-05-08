@@ -50,14 +50,16 @@ export async function POST(request: Request) {
 
   // Translate Mini App body shape into the executor's input shape (the
   // executor's input mirrors AI's tool schema with snake_case keys).
-  const { text, listId, listName, dueAt, isCheckable } = parsed.data;
+  const { text, description, listId, listName, deadlineAt, isCheckable } =
+    parsed.data;
   const workspaceId = await resolveActiveWorkspaceId(userId);
   const result = await executeCreateItem(
     {
       text,
+      ...(description !== undefined ? { description } : {}),
       list_id: listId,
       list_name: listName,
-      due_at: dueAt,
+      deadline_at: deadlineAt,
       is_checkable: isCheckable,
     },
     { userId, workspaceId },

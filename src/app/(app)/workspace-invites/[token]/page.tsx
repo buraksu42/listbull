@@ -1,5 +1,4 @@
-import { notFound } from "next/navigation";
-
+import { EmptyState } from "@/components/shared/empty-state";
 import { WorkspaceInviteAccept } from "@/components/workspace/invite-accept";
 import { getWorkspaceInviteContextByToken } from "@/lib/db/queries/workspace-invites";
 import type { WorkspaceInviteTokenInfo, WorkspaceRole, WorkspaceTier } from "@/lib/types";
@@ -22,8 +21,29 @@ export default async function WorkspaceInviteAcceptPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
+
+  if (!token || token.length < 16) {
+    return (
+      <main style={{ paddingTop: "var(--lb-sp-12)" }}>
+        <EmptyState
+          title="Davet bulunamadı"
+          description="Bu davet linki geçersiz ya da kaldırılmış."
+        />
+      </main>
+    );
+  }
+
   const ctxRow = await getWorkspaceInviteContextByToken(token);
-  if (!ctxRow) notFound();
+  if (!ctxRow) {
+    return (
+      <main style={{ paddingTop: "var(--lb-sp-12)" }}>
+        <EmptyState
+          title="Davet bulunamadı"
+          description="Bu davet linki geçersiz, süresi dolmuş ya da iptal edilmiş olabilir. Davet eden kişiyle iletişime geç."
+        />
+      </main>
+    );
+  }
 
   const now = new Date();
   const info: WorkspaceInviteTokenInfo = {

@@ -189,6 +189,8 @@ async function fetchInitialSettings(): Promise<SettingsInitial> {
       timezone: "Europe/Istanbul",
       locale: "tr",
       notificationsEnabled: true,
+      dateFormat: "DD.MM.YYYY",
+      timeFormat: "24h",
       hasApiKey: false,
       byokKeyPreview: null,
     };
