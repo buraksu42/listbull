@@ -714,6 +714,7 @@ export const updateSettingsInputSchema = z
         "google/gemini-2.5-pro",
         "x-ai/grok-3",
         "deepseek/deepseek-chat",
+        "deepseek/deepseek-r1",
         "meta-llama/llama-3.3-70b-instruct",
       ])
       .optional(),
