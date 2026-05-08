@@ -9,23 +9,27 @@ type Props = {
   status: "open" | "in_progress" | "blocked" | "done";
 };
 
+// Labels aligned with the new chip vocabulary (Yapılacak/Yapılıyor/
+// Bekliyor/Tamamlandı, 2026-05-08). Open is intentionally invisible
+// — most items are in this state and rendering a badge for the
+// default would clutter the row.
 const PALETTE: Record<
   Props["status"],
   { label: string; bg: string; fg: string } | null
 > = {
   open: null,
   in_progress: {
-    label: "active",
+    label: "Yapılıyor",
     bg: "color-mix(in srgb, var(--lb-accent) 15%, transparent)",
     fg: "var(--lb-accent)",
   },
   blocked: {
-    label: "blocked",
+    label: "Bekliyor",
     bg: "color-mix(in srgb, var(--lb-warning, #F0A020) 18%, transparent)",
     fg: "var(--lb-warning, #F0A020)",
   },
   done: {
-    label: "done",
+    label: "Tamamlandı",
     bg: "color-mix(in srgb, var(--lb-success, #2EB872) 15%, transparent)",
     fg: "var(--lb-success, #2EB872)",
   },

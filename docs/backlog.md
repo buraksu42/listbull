@@ -5,6 +5,39 @@
 > `project-state.md` § "What's NOT shipped" still apply; entries below
 > are wedge-aligned (Telegram-native AI list assistant).
 
+## Mini App full i18n pass
+
+Today many Mini App strings are hard-coded TR in client components
+(`item-filters.tsx` "Durum"/"Öncelik"/"Filtreleri sıfırla";
+`item-edit-sheet.tsx` "Durum/Öncelik/Etiketler/Cancel/Save/Edit
+item"; `status-badge.tsx` "Yapılıyor/Bekliyor/Tamamlandı";
+`item-row.tsx` "Sabitle/Sabitlemeyi kaldır"; status + priority
+labels in `item-attributes-meta.tsx`; many workspace + settings
+copy). Server components route through `next-intl` correctly but
+client components don't call `useTranslations()`.
+
+Result: switching `users.locale` to "en" only flips a small
+fraction of the UI; everything client-rendered stays TR. User
+surfaced this 2026-05-08 with "app is not english."
+
+Plan:
+
+- Add a `messages/{tr,en}.json` namespace per surface (`items`,
+  `filters`, `editSheet`, `statusLabels`, `priorityLabels`,
+  `pinning`, `workspace`, `settings`).
+- Audit + replace every hard-coded TR string with
+  `useTranslations(<ns>)('<key>')`. Keep STATUS_META + PRIORITY_META
+  meta arrays language-neutral (drop `label`); resolve labels in the
+  consumer via `t()`.
+- Side rule: confirmation dialogs ("Devam?") + toast strings audited
+  in the same pass.
+- StatusBadge labels routed through the same key so en sees
+  "In progress / Waiting / Done" instead of TR.
+
+Surface area: ~40 string sites, 1 namespace migration, no schema
+work. High visibility — the visible monolingual UI undermines the
+"locale via bot command" feature shipped 2026-05-08.
+
 ## Cross-cutting principle: bot ↔ Mini App parity
 
 Every action available via text command must be reachable from the Mini

@@ -69,37 +69,51 @@ export function ItemFilters({ filters, onChange, availableTags }: Props) {
       }}
     >
       <ChipGroup label="Durum">
-        {STATUS_META.map((m) => (
-          <Chip
-            key={m.value}
-            active={filters.status.has(m.value)}
-            onClick={() =>
-              onChange({
-                ...filters,
-                status: toggle(filters.status, m.value),
-              })
-            }
-          >
-            <MetaInline Icon={m.Icon} label={m.label} color={m.color} />
-          </Chip>
-        ))}
+        {STATUS_META.map((m) => {
+          const active = filters.status.has(m.value);
+          return (
+            <Chip
+              key={m.value}
+              active={active}
+              onClick={() =>
+                onChange({
+                  ...filters,
+                  status: toggle(filters.status, m.value),
+                })
+              }
+            >
+              <MetaInline
+                Icon={m.Icon}
+                label={m.label}
+                color={active ? undefined : m.color}
+              />
+            </Chip>
+          );
+        })}
       </ChipGroup>
 
       <ChipGroup label="Öncelik">
-        {PRIORITY_META.map((m) => (
-          <Chip
-            key={m.value}
-            active={filters.priority.has(m.value)}
-            onClick={() =>
-              onChange({
-                ...filters,
-                priority: toggle(filters.priority, m.value),
-              })
-            }
-          >
-            <MetaInline Icon={m.Icon} label={m.label} color={m.color} />
-          </Chip>
-        ))}
+        {PRIORITY_META.map((m) => {
+          const active = filters.priority.has(m.value);
+          return (
+            <Chip
+              key={m.value}
+              active={active}
+              onClick={() =>
+                onChange({
+                  ...filters,
+                  priority: toggle(filters.priority, m.value),
+                })
+              }
+            >
+              <MetaInline
+                Icon={m.Icon}
+                label={m.label}
+                color={active ? undefined : m.color}
+              />
+            </Chip>
+          );
+        })}
       </ChipGroup>
 
       {availableTags.length > 0 && (
