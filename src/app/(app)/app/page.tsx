@@ -73,6 +73,16 @@ export default function AppBoot() {
                 };
                 const listId = json?.data?.listId;
                 if (listId) {
+                  // Auto-switch active workspace before navigating
+                  // (same rationale as the list_ branch below).
+                  try {
+                    await fetch(
+                      `/api/workspaces/activate-by-list?listId=${encodeURIComponent(listId)}`,
+                      { method: "POST", credentials: "same-origin" },
+                    );
+                  } catch {
+                    // best-effort
+                  }
                   window.location.replace(
                     `/lists/${encodeURIComponent(listId)}?item=${encodeURIComponent(itemId)}`,
                   );
@@ -85,6 +95,20 @@ export default function AppBoot() {
             window.location.replace("/lists");
           } else if (startParam.startsWith("list_")) {
             const listId = startParam.slice("list_".length);
+            // Auto-switch active workspace if this list lives in a
+            // workspace the user is a member of but not currently
+            // active in. Prevents the freshly-invited "Open the list"
+            // tap from landing on /lists/<id> with the wrong active
+            // workspace, which renders 404.
+            try {
+              await fetch(
+                `/api/workspaces/activate-by-list?listId=${encodeURIComponent(listId)}`,
+                { method: "POST", credentials: "same-origin" },
+              );
+            } catch {
+              // Best-effort; even if the activate call fails the page
+              // will surface its own 404.
+            }
             window.location.replace(
               `/lists/${encodeURIComponent(listId)}`,
             );
