@@ -52,9 +52,10 @@ export const MODEL_PRICING: Readonly<Record<string, ModelPrice>> =
     // xAI
     "x-ai/grok-3": { promptPer1M: 3.0, completionPer1M: 15.0 },
 
-    // DeepSeek — V3 chat (off-peak pricing not modeled; we use the
-    // higher tier so spend caps don't surprise users).
+    // DeepSeek — V3 chat + R1 reasoner. Off-peak discounts not
+    // modeled; we use peak rates so spend caps don't surprise users.
     "deepseek/deepseek-chat": { promptPer1M: 0.27, completionPer1M: 1.10 },
+    "deepseek/deepseek-r1": { promptPer1M: 0.55, completionPer1M: 2.19 },
 
     // Meta open-weights — OpenRouter pass-through, single rate.
     "meta-llama/llama-3.3-70b-instruct": {

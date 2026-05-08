@@ -22,8 +22,10 @@ export const ALLOWED_LLM_MODELS = [
   "google/gemini-2.5-pro",
   // xAI
   "x-ai/grok-3",
-  // DeepSeek — very cheap, solid function calling on V3.
+  // DeepSeek — V3 chat (function calling) + R1 reasoner (slower,
+  // step-by-step thinking; tool calling supported).
   "deepseek/deepseek-chat",
+  "deepseek/deepseek-r1",
   // Meta — open-weights, OpenRouter pass-through.
   "meta-llama/llama-3.3-70b-instruct",
 ] as const;

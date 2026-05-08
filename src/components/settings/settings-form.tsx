@@ -35,6 +35,7 @@ const MODEL_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "x-ai/grok-3", label: "Grok 3" },
   // DeepSeek
   { value: "deepseek/deepseek-chat", label: "DeepSeek V3 (ucuz)" },
+  { value: "deepseek/deepseek-r1", label: "DeepSeek R1 (akıl yürütme)" },
   // Meta open-weights
   { value: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B" },
 ];
