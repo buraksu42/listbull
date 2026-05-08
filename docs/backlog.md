@@ -46,12 +46,34 @@ Surface area: 1 schema migration, 1 upload helper, 1 webhook branch per
 content type, Mini App attachment renderer, optional LLM tool
 (`attach_to_item`).
 
+### 3. Weekly + calendar deadline views
+
+Phase 4.5 ships `/views/today` (workspace-scoped due-today aggregate).
+Extend to a deadline-driven calendar surface:
+
+- `/views/week` — Monday–Sunday rollup of items with non-null `due_at`,
+  grouped by day. Re-uses the today-view aggregate query with a
+  bounded date range. Empty days collapse to a thin row.
+- `/views/calendar` (optional) — month grid with day cells showing
+  item count + a hover/tap drill-down. Only meaningful in Mini App;
+  bot-side stays at today/week digests.
+- Bot digest: optional daily 09:00 (or user-configured time) DM
+  summarizing today's deadlines, gated by the existing notifications
+  toggle. Reuses the cron container — new tick handler alongside
+  `dispatch-reminders.ts`.
+- Filter parity: same status/priority/tag chips as `/lists/[id]`
+  (Phase 7) so users can narrow the calendar.
+
+Surface area: 1 query helper (`getDeadlineRange`), 2 routes
+(`/views/week`, optionally `/views/calendar`), 1 cron handler for the
+digest, ~0 schema changes (data already exists).
+
 ---
 
 ## Promotion checklist (when picking up)
 
-- Decide whether a single phase covers both or split (recommend split:
-  voice = Phase 13, attachments = Phase 14).
+- Decide whether a single phase covers each or split (recommended:
+  voice = Phase 13, attachments = Phase 14, calendar views = Phase 15).
 - Architect pass: schema diff, type contracts, storage layout.
 - Operator handoff: STT provider keys, storage bucket sizing.
 - Anti-list re-check: keep wedge tight — voice + attachments augment
