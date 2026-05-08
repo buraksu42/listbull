@@ -726,6 +726,35 @@ export const shareListOutputSchema = z.object({
 export type ShareListInput = z.infer<typeof shareListInputSchema>;
 export type ShareListOutput = z.infer<typeof shareListOutputSchema>;
 
+// ─── 7c. create_snapshot — generate a public read-only snapshot URL ───
+//
+// Owner-only; Inbox cannot be snapshotted. Returns an HMAC-signed URL
+// (default 30-day expiry) plus the matching markdown-ready text body
+// the bot can post in the chat as a forwardable card. The URL targets
+// `/snapshot/<listId>?sig=<hmac>&exp=<unix>` on the marketing surface
+// (no auth required to view).
+
+export const createSnapshotInputSchema = z
+  .object({
+    list_id: z.string().uuid().optional(),
+    list_name: z.string().min(1).max(200).optional(),
+  })
+  .refine((v) => v.list_id !== undefined || v.list_name !== undefined, {
+    message: "one of list_id or list_name must be supplied",
+    path: ["list_id"],
+  });
+
+export const createSnapshotOutputSchema = z.object({
+  list: listLiteSchema,
+  /** Public snapshot URL; embeds list_id + signed `sig`/`exp` query. */
+  url: z.string(),
+  /** ISO 8601 expiry (default now + 30 days). */
+  expiresAt: z.string().datetime({ offset: true }),
+});
+
+export type CreateSnapshotInput = z.infer<typeof createSnapshotInputSchema>;
+export type CreateSnapshotOutput = z.infer<typeof createSnapshotOutputSchema>;
+
 // ─── 7d. cancel_invite — revoke a PENDING invite (owner-only) ─────────
 //
 // Closes the gap surfaced when users said "ayselin davetini iptal et":
@@ -878,6 +907,7 @@ export const TOOL_NAMES = [
   "delete_list",
   "restore_list",
   "share_list",
+  "create_snapshot",
   "cancel_invite",
   "list_members",
   "remove_member",
@@ -1068,6 +1098,22 @@ export const tools: readonly ToolDefinition[] = [
       "list before calling.",
     inputSchema: shareListInputSchema,
     outputSchema: shareListOutputSchema,
+  },
+  {
+    name: "create_snapshot",
+    description:
+      "Generate a public read-only snapshot URL for a list — anyone " +
+      "with the link can view its current contents (no login required). " +
+      "Use for phrasings like \"X listesi için snapshot link al\", " +
+      "\"share a snapshot of my reading list\", \"link to send to a " +
+      "friend\". Identify the list by `list_name` when known (preferred), " +
+      "else `list_id`. Owner-only — non-owners get `forbidden`. Inbox " +
+      "cannot be snapshotted (`cannot_snapshot_inbox`). Snapshots expire " +
+      "after 30 days (`expiresAt` in output) and re-issuing returns a " +
+      "fresh URL. Echo the URL back verbatim in your reply; the page " +
+      "renders the same items list the user sees in the Mini App.",
+    inputSchema: createSnapshotInputSchema,
+    outputSchema: createSnapshotOutputSchema,
   },
   {
     name: "cancel_invite",
