@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Plus } from "lucide-react";
+import { ChevronDown, Plus, Settings } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { WorkspaceListItem } from "@/lib/types";
@@ -190,6 +190,28 @@ export function WorkspaceSwitcher({ workspaces }: Props) {
               paddingTop: "var(--lb-sp-1)",
             }}
           >
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = "/workspace/settings";
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--lb-sp-2)",
+                width: "100%",
+                padding: "var(--lb-sp-2) var(--lb-sp-3)",
+                background: "transparent",
+                border: "none",
+                color: "var(--lb-fg)",
+                fontSize: "var(--lb-fs-sm)",
+                textAlign: "left",
+                cursor: "pointer",
+              }}
+            >
+              <Settings aria-hidden width={14} height={14} />
+              Workspace ayarları
+            </button>
             <button
               type="button"
               disabled={!canCreateMore && upgradeHint}
