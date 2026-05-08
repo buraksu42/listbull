@@ -2,6 +2,12 @@
 
 import * as React from "react";
 
+import {
+  MetaInline,
+  PRIORITY_META,
+  STATUS_META,
+} from "@/components/lists/item-attributes-meta";
+
 export type ItemStatus = "open" | "in_progress" | "blocked" | "done";
 export type ItemPriority = "low" | "normal" | "high";
 
@@ -21,18 +27,8 @@ export const DEFAULT_FILTERS: ItemFilters = {
   tags: new Set(),
 };
 
-const STATUS_OPTIONS: Array<{ value: ItemStatus; label: string }> = [
-  { value: "open", label: "Açık" },
-  { value: "in_progress", label: "Devam" },
-  { value: "blocked", label: "Bloke" },
-  { value: "done", label: "Tamam" },
-];
-
-const PRIORITY_OPTIONS: Array<{ value: ItemPriority; label: string }> = [
-  { value: "high", label: "Yüksek" },
-  { value: "normal", label: "Normal" },
-  { value: "low", label: "Düşük" },
-];
+// Status + priority labels/icons live in `item-attributes-meta.tsx`.
+// We map directly off STATUS_META / PRIORITY_META to avoid drift.
 
 type Props = {
   filters: ItemFilters;
@@ -73,35 +69,35 @@ export function ItemFilters({ filters, onChange, availableTags }: Props) {
       }}
     >
       <ChipGroup label="Durum">
-        {STATUS_OPTIONS.map((o) => (
+        {STATUS_META.map((m) => (
           <Chip
-            key={o.value}
-            active={filters.status.has(o.value)}
+            key={m.value}
+            active={filters.status.has(m.value)}
             onClick={() =>
               onChange({
                 ...filters,
-                status: toggle(filters.status, o.value),
+                status: toggle(filters.status, m.value),
               })
             }
           >
-            {o.label}
+            <MetaInline Icon={m.Icon} label={m.label} color={m.color} />
           </Chip>
         ))}
       </ChipGroup>
 
       <ChipGroup label="Öncelik">
-        {PRIORITY_OPTIONS.map((o) => (
+        {PRIORITY_META.map((m) => (
           <Chip
-            key={o.value}
-            active={filters.priority.has(o.value)}
+            key={m.value}
+            active={filters.priority.has(m.value)}
             onClick={() =>
               onChange({
                 ...filters,
-                priority: toggle(filters.priority, o.value),
+                priority: toggle(filters.priority, m.value),
               })
             }
           >
-            {o.label}
+            <MetaInline Icon={m.Icon} label={m.label} color={m.color} />
           </Chip>
         ))}
       </ChipGroup>

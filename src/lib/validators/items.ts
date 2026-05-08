@@ -47,15 +47,22 @@ export const updateItemBodySchema = z
     isDone: z.boolean().optional(),
     position: z.number().int().nonnegative().optional(),
     dueAt: z.string().datetime({ offset: true }).nullable().optional(),
+    status: z.enum(["open", "in_progress", "blocked", "done"]).optional(),
+    priority: z.enum(["low", "normal", "high"]).optional(),
+    tags: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
   })
   .refine(
     (v) =>
       v.text !== undefined ||
       v.isDone !== undefined ||
       v.position !== undefined ||
-      v.dueAt !== undefined,
+      v.dueAt !== undefined ||
+      v.status !== undefined ||
+      v.priority !== undefined ||
+      v.tags !== undefined,
     {
-      message: "at least one of text, isDone, position, dueAt must be supplied",
+      message:
+        "at least one of text, isDone, position, dueAt, status, priority, tags must be supplied",
     },
   );
 

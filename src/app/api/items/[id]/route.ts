@@ -10,6 +10,7 @@ import { getSessionUserId } from "@/lib/auth/session";
 import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
 import { executeCompleteItem } from "@/lib/server/tools/complete-item";
 import { executeDeleteItem } from "@/lib/server/tools/delete-item";
+import { executeSetItemAttributes } from "@/lib/server/tools/set-item-attributes";
 import { executeUpdateItem } from "@/lib/server/tools/update-item";
 import {
   deleteItemParamsSchema,
@@ -65,7 +66,7 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
       { status: 400 },
     );
   }
-  const { text, isDone, position, dueAt } = parsed.data;
+  const { text, isDone, position, dueAt, status, priority, tags } = parsed.data;
 
   const workspaceId = await resolveActiveWorkspaceId(userId);
 
@@ -116,6 +117,24 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
       });
     }
     lastResult = completeResult;
+  }
+
+  if (status !== undefined || priority !== undefined || tags !== undefined) {
+    const attrsResult = await executeSetItemAttributes(
+      {
+        item_id: id,
+        ...(status !== undefined ? { status } : {}),
+        ...(priority !== undefined ? { priority } : {}),
+        ...(tags !== undefined ? { tags } : {}),
+      },
+      { userId, workspaceId },
+    );
+    if (!attrsResult.ok) {
+      return NextResponse.json(attrsResult, {
+        status: errorCodeToStatus(attrsResult.error.code),
+      });
+    }
+    lastResult = attrsResult;
   }
 
   if (lastResult === null) {

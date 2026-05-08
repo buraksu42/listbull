@@ -5,6 +5,29 @@
 > `project-state.md` § "What's NOT shipped" still apply; entries below
 > are wedge-aligned (Telegram-native AI list assistant).
 
+## Cross-cutting principle: bot ↔ Mini App parity
+
+Every action available via text command must be reachable from the Mini
+App, and vice versa. New features added to one surface MUST land on the
+other in the same phase (or with a tracked follow-up issue if the
+parity work is genuinely larger).
+
+Known gaps as of 2026-05-08 (backfill candidates — file as smaller
+PRs rather than a single phase):
+
+- Item edit: status / priority / tags pickers (CLOSED 2026-05-08).
+- Item move (cross-list) from the Mini App row UI — bot has it via
+  `update_item.target_list_*`, Mini App has no UI for it yet.
+- Recurrence_rule editor in the item-edit-sheet — schedule_reminder
+  accepts it; Mini App can't display or change recurrence.
+- Workspace switch in bot — Mini App has the header dropdown; bot has
+  `switch_workspace` but no slash command.
+- `/snapshot` initiation from the Mini App — bot has `share_list`
+  with `as_snapshot=true`; Mini App needs a "Share as snapshot" item.
+- Settings per-field reach via bot — bot has `update_settings` for
+  locale/timezone/model/notifications; needs verification BYOK key
+  rotation works via bot too.
+
 ## Multimodal input + attachments
 
 ### 1. Voice messages (input + reply)

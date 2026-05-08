@@ -172,6 +172,9 @@ export function ItemList({
           if (patch.dueAt !== undefined) {
             next.dueAt = patch.dueAt ? new Date(patch.dueAt) : null;
           }
+          if (patch.status !== undefined) next.status = patch.status;
+          if (patch.priority !== undefined) next.priority = patch.priority;
+          if (patch.tags !== undefined) next.tags = patch.tags;
           return next;
         }),
       );
