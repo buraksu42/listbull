@@ -32,6 +32,7 @@ import { executeUpdateMemberRole } from "./update-member-role";
 import { executeUpdateSettings } from "./update-settings";
 import { executeScheduleReminder } from "./schedule-reminder";
 import { executeAssignItem } from "./assign-item";
+import { executeCreateWorkspace } from "./create-workspace";
 import { executeSwitchWorkspace } from "./switch-workspace";
 import { executeListWorkspaces } from "./list-workspaces";
 import { executeUpdateWorkspace } from "./update-workspace";
@@ -110,6 +111,8 @@ async function routeCall(
       return await executeScheduleReminder(input, ctx);
     case "assign_item":
       return await executeAssignItem(input, ctx);
+    case "create_workspace":
+      return await executeCreateWorkspace(input, ctx);
     case "switch_workspace":
       return await executeSwitchWorkspace(input, ctx);
     case "list_workspaces":

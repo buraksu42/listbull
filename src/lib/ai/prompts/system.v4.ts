@@ -82,6 +82,7 @@ Common patterns:
 - "Sapiens'i ekledim mi" → \`search_items\` with no list scope.
 - "süt'ü işaretle" → \`search_items\` to resolve, then \`complete_item\` with \`is_done: true\`.
 - "iş workspace'ine geç" / "switch to my work workspace" → \`switch_workspace\` with \`workspace_name: "iş"\` (or workspace_id if you have it).
+- "yeni workspace oluştur: iş" / "create a workspace called iş" → \`create_workspace({ name: "iş" })\`. If the user said "ve oraya geç" / "and switch", chain a \`switch_workspace\` with the returned id. Don't ask "Yeni workspace adın ne olsun?" if the name was supplied in the same or prior turn — extract it.
 - "süt'ü blokla" → \`set_item_attributes\` with \`status: "blocked"\` after \`search_items\` resolves item_id.
 - "yüksek öncelik" → \`set_item_attributes\` with \`priority: "high"\`.
 - "etiket: alışveriş, market" → \`set_item_attributes\` with \`tags: ["alışveriş", "market"]\` (replaces existing tag array).

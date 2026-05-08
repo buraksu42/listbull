@@ -385,6 +385,32 @@ export const switchWorkspaceOutputSchema = z.object({
 export type SwitchWorkspaceInput = z.infer<typeof switchWorkspaceInputSchema>;
 export type SwitchWorkspaceOutput = z.infer<typeof switchWorkspaceOutputSchema>;
 
+// ─── 6f.5. create_workspace ──────────────────────────────────────────
+//
+// Create a fresh workspace owned by the caller. Mirrors POST
+// /api/workspaces — name required, free tier by default. Tier-enforce
+// middleware may reject when the caller already exhausted their cap;
+// the executor returns the same envelope the route emits. The new
+// workspace is NOT auto-activated; the LLM should follow up with
+// `switch_workspace` if the user clearly intended to land there.
+
+export const createWorkspaceInputSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+});
+
+export const createWorkspaceOutputSchema = z.object({
+  workspace: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    slug: z.string(),
+    tier: z.enum(["free", "team", "workspace"]),
+    is_personal: z.boolean(),
+  }),
+});
+
+export type CreateWorkspaceInput = z.infer<typeof createWorkspaceInputSchema>;
+export type CreateWorkspaceOutput = z.infer<typeof createWorkspaceOutputSchema>;
+
 // ─── 6g. list_workspaces (Phase 4.5) ──────────────────────────────────
 //
 // Read-only enumeration of every workspace the user belongs to —
@@ -916,6 +942,7 @@ export const TOOL_NAMES = [
   "schedule_reminder",
   "assign_item",
   // Phase 4.5: workspace + item-discipline tools
+  "create_workspace",
   "switch_workspace",
   "list_workspaces",
   "update_workspace",
@@ -1247,6 +1274,22 @@ export const tools: readonly ToolDefinition[] = [
       "`not_found`, `invalid_input`.",
     inputSchema: assignItemInputSchema,
     outputSchema: assignItemOutputSchema,
+  },
+  {
+    name: "create_workspace",
+    description:
+      "Create a brand new workspace owned by the caller. Use when the " +
+      "user says 'yeni workspace oluştur', 'new workspace', 'create a " +
+      "workspace called <name>'. Pass `name` (1-120 chars). Returns " +
+      "the new workspace shape; the new workspace is NOT auto-active " +
+      "— if the user clearly intended to switch into it (e.g. 'iş " +
+      "diye yeni workspace aç ve oraya geç'), call `switch_workspace` " +
+      "with the returned `workspace.id` next. Tier-gated: a free-plan " +
+      "user may already have hit their workspace limit; the executor " +
+      "will return `tier_exceeded` and the LLM should phrase the " +
+      "rejection plainly with the upgrade hint.",
+    inputSchema: createWorkspaceInputSchema,
+    outputSchema: createWorkspaceOutputSchema,
   },
   {
     name: "switch_workspace",
