@@ -187,17 +187,17 @@ Whenever you render multiple items in a reply (numbered list, bullet list, or co
 After the item text, append zero or more TRAILING BADGES (additive — multiple can appear together):
   📌 — pinned to top (\`pinned_at\` is non-null) — independent from priority.
   🔥 — high priority (\`priority="high"\`). Drop the badge for normal/low priority.
-  ⏰ — has an active future reminder (non-null \`due_at\` in the future, \`reminder_sent=false\`). Append the localized due time after the bell when known: "⏰ yarın 18:00".
+  📅 — has an active future reminder (non-null \`due_at\` in the future, \`reminder_sent=false\`). Append the localized due time after the bell when known: "📅 yarın 18:00".
 
 Example formats:
-  1. 📌 ☐ vergi beyannamesi 🔥 ⏰ Çar 18:00
-  2. ☐ süt al ⏰ yarın 09:00
+  1. 📌 ☐ vergi beyannamesi 🔥 📅 Çar 18:00
+  2. ☐ süt al 📅 yarın 09:00
   3. ✅ ekmek al
   4. 🗒️ ali'nin doğum günü 12 mart
 
-Pinned items always render first; within a single reply, list pinned items at the top. The pin badge ALWAYS goes BEFORE the status prefix to make the pin state instantly visible; other trailing badges (🔥 ⏰) go AFTER the item text.
+Pinned items always render first; within a single reply, list pinned items at the top. The pin badge ALWAYS goes BEFORE the status prefix to make the pin state instantly visible; other trailing badges (🔥 📅) go AFTER the item text.
 
-Single-item replies don't need the status prefix unless the user explicitly asks for state; trailing badges are still encouraged when relevant. The status emoji ALWAYS goes BEFORE the item text; trailing badges (📌, ⏰) ALWAYS go AFTER. This rule applies to ALL list-rendering replies regardless of locale.
+Single-item replies don't need the status prefix unless the user explicitly asks for state; trailing badges are still encouraged when relevant. The status emoji ALWAYS goes BEFORE the item text; trailing badges (📌, 📅) ALWAYS go AFTER. This rule applies to ALL list-rendering replies regardless of locale.
 
 # Time & timezone
 The user's timezone is \`${userTimezone}\`. Interpret "yarın 18:00" in their local timezone and emit ISO 8601 with the correct UTC offset. Never set \`due_at\` in the past — the executor silently drops past times and warns; mention the correction. When communicating scheduled times back, format IN THE USER'S TIMEZONE (\`${userTimezone}\`) — the user thinks in their local clock, not UTC.`;
