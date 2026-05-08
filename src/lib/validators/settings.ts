@@ -8,13 +8,43 @@ import { z } from "zod";
  * default model in `users.llm_model` and the `architecture.md` AI section.
  */
 export const ALLOWED_LLM_MODELS = [
+  // Anthropic — best-in-class tool calling for the 24-tool router.
   "anthropic/claude-haiku-4.5",
-  "openai/gpt-4o-mini",
   "anthropic/claude-sonnet-4",
+  "anthropic/claude-sonnet-4.5",
   "anthropic/claude-opus-4.7",
+  // OpenAI
+  "openai/gpt-4o-mini",
+  "openai/gpt-4o",
+  "openai/o1-mini",
+  // Google Gemini 2.5
+  "google/gemini-2.5-flash",
+  "google/gemini-2.5-pro",
+  // xAI
+  "x-ai/grok-3",
+  // DeepSeek — very cheap, solid function calling on V3.
+  "deepseek/deepseek-chat",
+  // Meta — open-weights, OpenRouter pass-through.
+  "meta-llama/llama-3.3-70b-instruct",
 ] as const;
 
 export type AllowedLlmModel = (typeof ALLOWED_LLM_MODELS)[number];
+
+/**
+ * Phase 14c: per-user date / time display preferences.
+ * App-layer enums; no DB CHECK constraint.
+ */
+export const ALLOWED_DATE_FORMATS = [
+  "DD.MM.YYYY",
+  "MM/DD/YYYY",
+  "YYYY-MM-DD",
+] as const;
+
+export type AllowedDateFormat = (typeof ALLOWED_DATE_FORMATS)[number];
+
+export const ALLOWED_TIME_FORMATS = ["24h", "12h"] as const;
+
+export type AllowedTimeFormat = (typeof ALLOWED_TIME_FORMATS)[number];
 
 /**
  * Lax IANA timezone shape — `Region/City` or single-segment names like
@@ -60,6 +90,9 @@ export const patchSettingsBodySchema = z.object({
   timezone: timezoneSchema.optional(),
   llmModel: z.enum(ALLOWED_LLM_MODELS).optional(),
   notificationsEnabled: z.boolean().optional(),
+  /** Phase 14c: display preferences. */
+  dateFormat: z.enum(ALLOWED_DATE_FORMATS).optional(),
+  timeFormat: z.enum(ALLOWED_TIME_FORMATS).optional(),
   /** When provided AND non-empty: encrypt + store. When `''`: clear. */
   openrouterApiKey: openrouterKeySchema.optional(),
 });
@@ -82,6 +115,8 @@ export type GetSettingsResponse = {
   timezone: string;
   llmModel: string;
   notificationsEnabled: boolean;
+  dateFormat: AllowedDateFormat;
+  timeFormat: AllowedTimeFormat;
   hasApiKey: boolean;
   byokKeyPreview: string | null;
 };

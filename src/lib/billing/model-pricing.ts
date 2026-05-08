@@ -46,6 +46,21 @@ export const MODEL_PRICING: Readonly<Record<string, ModelPrice>> =
 
     // OpenAI — GPT-4o family (kept for users on legacy llmModel values)
     "openai/gpt-4o-mini": { promptPer1M: 0.15, completionPer1M: 0.6 },
+    "openai/gpt-4o": { promptPer1M: 2.5, completionPer1M: 10.0 },
+    "openai/o1-mini": { promptPer1M: 1.1, completionPer1M: 4.4 },
+
+    // xAI
+    "x-ai/grok-3": { promptPer1M: 3.0, completionPer1M: 15.0 },
+
+    // DeepSeek — V3 chat (off-peak pricing not modeled; we use the
+    // higher tier so spend caps don't surprise users).
+    "deepseek/deepseek-chat": { promptPer1M: 0.27, completionPer1M: 1.10 },
+
+    // Meta open-weights — OpenRouter pass-through, single rate.
+    "meta-llama/llama-3.3-70b-instruct": {
+      promptPer1M: 0.59,
+      completionPer1M: 0.79,
+    },
   });
 
 /**
