@@ -100,6 +100,39 @@ Surface area: 1 schema migration, attachment-extract handler in the
 bot webhook, optional LLM tool (`attach_to_item`), edit-sheet
 description textarea + attachment list.
 
+### 2c. User-configurable date / time format
+
+`<input type="datetime-local">` honors the browser's system locale, not
+the user's listbull preference. TR users see "08.05.2026 12:30"
+correctly; US users land on "05/08/2026, 12:30 PM" etc. — the field
+silently flips. Bot replies face the same drift via `Intl.DateTimeFormat`'s
+default style.
+
+Plan:
+
+- New column `users.date_format` (`"dmy_dot" | "mdy_slash" | "ymd_dash"
+  | "iso"`) + `users.time_format` (`"24h" | "12h"`). Default to
+  `dmy_dot` + `24h` for TR locale, `mdy_slash` + `12h` for en, ISO
+  fallback otherwise.
+- `update_settings` LLM tool gains both fields so users can switch via
+  bot command ("tarih formatım Amerikan olsun" → `update_settings({
+  date_format: "mdy_slash", time_format: "12h" })`).
+- Mini App settings page surfaces both as radio groups.
+- All date rendering (audit feed, item rows, edit-sheet input,
+  reminder annotations, activity timeline) routes through one helper
+  `formatUserDate(iso, user) / formatUserTime(...)` that reads the
+  prefs.
+- Replace `<input type="datetime-local">` with a controlled date+time
+  picker (probably `react-day-picker` for the calendar + a 24h-aware
+  time input) so the browser locale stops hijacking the display.
+- Bot side: `Intl.DateTimeFormat(locale, { ... })` calls accept the
+  prefs and emit consistent strings.
+
+Surface area: 1 schema migration, 1 helper module, 1 settings tool +
+schema update, 1 picker component swap, ~5 call-site touch-ups. Not
+bot-blocking but high visibility: the format flips silently between
+devices today.
+
 ### 3. Weekly + calendar deadline views
 
 Phase 4.5 ships `/views/today` (workspace-scoped due-today aggregate).
