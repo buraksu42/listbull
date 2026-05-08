@@ -66,9 +66,9 @@ export function WorkspaceSwitcher({ workspaces }: Props) {
   const personalCount = workspaces.filter((w) => w.isPersonal).length;
   const totalOwned = workspaces.filter((w) => w.role === "owner").length;
   const canCreateMore = totalOwned > personalCount; // Phase 5 enforces tier
-  // Phase 4.5: surface the gate visually. Tier from the active workspace
-  // approximates "current user's tier" since billing is per-workspace.
-  const upgradeHint = active.tier === "free" && totalOwned >= 1;
+  // 2026-05-08: tier gate dropped — no "Upgrade" hint while free is the
+  // only tier in play. Re-enable when billing flips on.
+  const upgradeHint = false;
 
   return (
     <div ref={ref} style={{ position: "relative" }}>

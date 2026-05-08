@@ -292,7 +292,10 @@ export async function getWorkspaceOrgKeyEncrypted(
     .where(eq(workspaces.id, workspaceId))
     .limit(1);
   if (!row) return null;
-  if (row.tier !== "workspace") return null;
+  // Tier gate disabled 2026-05-08 — all-features-on-free directive.
+  // Org-key fetch used to require Workspace tier; now any tier may
+  // store + use one. Re-enable `if (row.tier !== "workspace") return
+  // null;` when billing enforcement turns on.
   return row.keyEnc;
 }
 

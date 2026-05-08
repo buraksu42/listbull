@@ -184,17 +184,17 @@ export default async function WorkspaceSettingsPage() {
         <CustomBotSection
           workspaceId={active.id}
           canManage={active.role === "owner"}
-          isWorkspaceTier={active.tier === "workspace"}
+          // 2026-05-08: tier gate dropped (all-features-on-free).
+          isWorkspaceTier={true}
         />
 
         <OrgKeySection
           workspaceId={active.id}
           canManage={active.role === "owner" || active.role === "admin"}
-          isWorkspaceTier={active.tier === "workspace"}
+          isWorkspaceTier={true}
         />
 
-        {active.tier === "workspace" &&
-          (active.role === "owner" || active.role === "admin") && (
+        {(active.role === "owner" || active.role === "admin") && (
             <Link
               href="/workspace/admin"
               style={{

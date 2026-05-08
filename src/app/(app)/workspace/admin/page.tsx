@@ -33,10 +33,10 @@ export default async function WorkspaceAdminPage() {
   const active = workspaces.find((w) => w.id === activeId);
   if (!active) notFound();
 
-  // Tier + role gates. Workspace-tier admin/owner only.
-  if (active.tier !== "workspace") {
-    redirect("/workspace/settings");
-  }
+  // Role gate only — tier gate disabled 2026-05-08 per
+  // "all features unlocked on free during testing" directive.
+  // Re-introduce the `if (active.tier !== "workspace")` redirect when
+  // billing enforcement turns on.
   if (active.role !== "owner" && active.role !== "admin") {
     redirect("/workspace/settings");
   }
