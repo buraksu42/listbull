@@ -11,6 +11,7 @@ import {
   PRIORITY_META,
   STATUS_META,
 } from "@/components/lists/item-attributes-meta";
+import type { MemberRow } from "@/components/lists/member-list";
 import { RemindersSection } from "@/components/lists/reminders-section";
 import type {
   ItemPriority,
@@ -80,6 +81,8 @@ const itemEditFormSchema = z.object({
     "custom",
   ]),
   taskRecurrenceCustom: z.string().optional(),
+  /** "" = unassigned; otherwise a user UUID. */
+  assigneeId: z.string().optional(),
 });
 
 type ItemEditFormValues = z.infer<typeof itemEditFormSchema>;
@@ -93,6 +96,7 @@ export type ItemEditPatch = {
   tags?: string[];
   pinned?: boolean;
   taskRecurrenceRule?: string | null;
+  assigneeId?: string | null;
 };
 
 const RECURRENCE_PRESETS: Record<
@@ -146,11 +150,14 @@ export function ItemEditSheet({
   open,
   onOpenChange,
   onSave,
+  members = [],
 }: {
   item: Item | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (patch: ItemEditPatch) => Promise<void>;
+  /** List members (Phase 3 query) — feeds the assignee picker. */
+  members?: MemberRow[];
 }) {
   const {
     register,
@@ -171,6 +178,7 @@ export function ItemEditSheet({
       // Spread above gives `mode` + `custom` keys; rename to form fields.
       taskRecurrenceMode: ruleToMode(item?.taskRecurrenceRule ?? null).mode,
       taskRecurrenceCustom: ruleToMode(item?.taskRecurrenceRule ?? null).custom,
+      assigneeId: item?.assigneeId ?? "",
     },
   });
 
@@ -187,6 +195,7 @@ export function ItemEditSheet({
       tagsRaw: (item.tags ?? []).join(", "),
       taskRecurrenceMode: rec.mode,
       taskRecurrenceCustom: rec.custom,
+      assigneeId: item.assigneeId ?? "",
     });
   }, [item, reset]);
 
@@ -340,6 +349,43 @@ export function ItemEditSheet({
                 Virgülle ayır. Workspace içinde en fazla 20 farklı etiket.
               </p>
             </div>
+
+            {members.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="item-edit-assignee">Atanan kişi</Label>
+                <Controller
+                  control={control}
+                  name="assigneeId"
+                  render={({ field }) => (
+                    <select
+                      id="item-edit-assignee"
+                      value={field.value ?? ""}
+                      onChange={(e) => field.onChange(e.target.value)}
+                      className="rounded-[var(--lb-r-sm)] border border-[var(--lb-border)] bg-[var(--lb-bg)] p-2 text-sm"
+                    >
+                      <option value="">— Atanmamış —</option>
+                      {members.map((m) => {
+                        const u = m.user;
+                        const label =
+                          u.telegramFirstName ??
+                          u.telegramUsername ??
+                          m.userId.slice(0, 8);
+                        return (
+                          <option key={m.userId} value={m.userId}>
+                            {label}
+                            {u.telegramUsername ? ` (@${u.telegramUsername})` : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  )}
+                />
+                <p className="text-xs text-[var(--lb-muted-fg)]">
+                  Liste üyeleri arasından seç. Atanan kişi bot DM&apos;leriyle
+                  hatırlatılır.
+                </p>
+              </div>
+            )}
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="item-edit-recurrence">Tekrar (otomatik yenile)</Label>
@@ -534,6 +580,14 @@ function diffPatch(item: Item, values: ItemEditFormValues): ItemEditPatch {
   const currentRule = item.taskRecurrenceRule ?? null;
   if (nextRule !== currentRule) {
     patch.taskRecurrenceRule = nextRule;
+  }
+  const nextAssignee =
+    values.assigneeId && values.assigneeId.length > 0
+      ? values.assigneeId
+      : null;
+  const currentAssignee = item.assigneeId ?? null;
+  if (nextAssignee !== currentAssignee) {
+    patch.assigneeId = nextAssignee;
   }
   return patch;
 }

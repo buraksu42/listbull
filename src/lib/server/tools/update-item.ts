@@ -23,7 +23,7 @@ import "server-only";
 import { and, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { activityLog, items, lists } from "@/lib/db/schema";
+import { activityLog, items, listMembers, lists } from "@/lib/db/schema";
 import {
   updateItemInputSchema,
   type UpdateItemOutput,
@@ -60,6 +60,7 @@ export async function executeUpdateItem(
     target_list_name,
     pinned,
     task_recurrence_rule,
+    assignee_id,
   } = parsed.data;
 
   // Validate task_recurrence_rule if provided so we don't silently
@@ -138,8 +139,37 @@ export async function executeUpdateItem(
       | "list_id"
       | "pinned"
       | "task_recurrence_rule"
+      | "assignee_id"
     > = [];
     const warnings: string[] = [];
+
+    if (assignee_id !== undefined) {
+      const cur = current.assigneeId ?? null;
+      const next = assignee_id ?? null;
+      if (cur !== next) {
+        if (next !== null) {
+          // Inv-12: assignee MUST be a current member of the list.
+          const [membership] = await tx
+            .select({ id: listMembers.id })
+            .from(listMembers)
+            .where(
+              and(
+                eq(listMembers.listId, current.listId),
+                eq(listMembers.userId, next),
+              ),
+            )
+            .limit(1);
+          if (!membership) {
+            return err(
+              "assignee_not_member",
+              "User is not a member of this list.",
+            );
+          }
+        }
+        patch.assigneeId = next;
+        changes.push("assignee_id");
+      }
+    }
 
     if (pinned !== undefined) {
       const isPinned = current.pinnedAt !== null;

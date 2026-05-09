@@ -77,6 +77,7 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
     tags,
     pinned,
     taskRecurrenceRule,
+    assigneeId,
   } = parsed.data;
 
   const workspaceId = await resolveActiveWorkspaceId(userId);
@@ -100,7 +101,8 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
     position !== undefined ||
     deadlineAt !== undefined ||
     pinned !== undefined ||
-    taskRecurrenceRule !== undefined
+    taskRecurrenceRule !== undefined ||
+    assigneeId !== undefined
   ) {
     const updateResult = await executeUpdateItem(
       {
@@ -115,6 +117,7 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
         ...(taskRecurrenceRule !== undefined
           ? { task_recurrence_rule: taskRecurrenceRule }
           : {}),
+        ...(assigneeId !== undefined ? { assignee_id: assigneeId } : {}),
       },
       { userId, workspaceId },
     );

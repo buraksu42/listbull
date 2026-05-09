@@ -233,6 +233,15 @@ export const updateItemInputSchema = z
      * only re-fires reminder pings without resurrecting the task.
      */
     task_recurrence_rule: z.string().trim().min(1).max(500).nullable().optional(),
+    /**
+     * Direct assignee assignment (Mini App fast path). Pass the
+     * target user's UUID; pass null to clear. The user MUST already
+     * be a list_member of the item's list (Inv-12). Bot path uses
+     * `assign_item({assignee_username})` which resolves usernames to
+     * IDs; this skips that step for UI surfaces that already have
+     * the user_id from the members query.
+     */
+    assignee_id: z.string().uuid().nullable().optional(),
   })
   .refine(
     (v) =>
@@ -243,10 +252,11 @@ export const updateItemInputSchema = z
       v.target_list_id !== undefined ||
       v.target_list_name !== undefined ||
       v.pinned !== undefined ||
-      v.task_recurrence_rule !== undefined,
+      v.task_recurrence_rule !== undefined ||
+      v.assignee_id !== undefined,
     {
       message:
-        "at least one of text, description, deadline_at, position, target_list_id, target_list_name, pinned, or task_recurrence_rule must be supplied",
+        "at least one of text, description, deadline_at, position, target_list_id, target_list_name, pinned, task_recurrence_rule, or assignee_id must be supplied",
     },
   );
 
@@ -261,6 +271,7 @@ export const updateItemOutputSchema = z.object({
       "list_id",
       "pinned",
       "task_recurrence_rule",
+      "assignee_id",
     ]),
   ),
   /** Soft warnings (e.g. deadline_at_in_past). */

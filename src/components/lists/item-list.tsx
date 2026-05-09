@@ -193,6 +193,9 @@ export function ItemList({
           if (patch.taskRecurrenceRule !== undefined) {
             next.taskRecurrenceRule = patch.taskRecurrenceRule;
           }
+          if (patch.assigneeId !== undefined) {
+            next.assigneeId = patch.assigneeId;
+          }
           return next;
         }),
       );
@@ -328,6 +331,7 @@ export function ItemList({
 
       <ItemEditSheet
         item={editingItem}
+        members={membersQuery.data ?? initialMembers}
         open={editingItem !== null}
         onOpenChange={(open) => {
           if (!open) setEditingItem(null);
