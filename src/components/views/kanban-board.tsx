@@ -23,7 +23,8 @@
 import {
   DndContext,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   closestCorners,
   useDroppable,
   useSensor,
@@ -41,6 +42,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
+
+import { GripVertical } from "lucide-react";
 
 import { STATUS_META } from "@/components/lists/item-attributes-meta";
 import { Button } from "@/components/ui/button";
@@ -83,13 +86,22 @@ export function KanbanBoard({
   const [showAllDone, setShowAllDone] = React.useState(false);
 
   const sensors = useSensors(
-    // Long-press activation: 250ms hold + 5px tolerance. The previous
-    // 8px-distance constraint conflicted with Telegram WebApp scroll
-    // gestures — flicking through cards counted as drag and rarely
-    // landed in another column. Long-press is the standard mobile
-    // affordance for "pick up" + works for desktop pointer too.
-    useSensor(PointerSensor, {
-      activationConstraint: { delay: 250, tolerance: 5 },
+    // Mouse + Touch split (PointerSensor was unreliable inside Telegram
+    // WebApp — long-press alone wasn't kicking off drag because the
+    // WebApp scroll handler intercepts pointer events first).
+    //
+    // The drag-handle pattern (only the grip icon carries listeners,
+    // not the whole card) lets us drop activation friction:
+    //   - MouseSensor: 4px distance, fires immediately on a real click
+    //   - TouchSensor: 100ms delay, 5px tolerance, prevents the
+    //     accidental "I tapped a card" → drag scenario
+    // The card body stays scrollable; only the handle is `touch-action:
+    // none`, so vertical column scroll works as expected.
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: 4 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 100, tolerance: 5 },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
@@ -371,6 +383,7 @@ function KanbanCard({
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
@@ -390,19 +403,32 @@ function KanbanCard({
         transform: CSS.Transform.toString(transform),
         transition,
         opacity: isDragging ? 0.5 : 1,
-        // Disable browser-native gesture handling so dnd-kit's
-        // pointer events fire reliably under Telegram's WebApp shell
-        // (which otherwise eats the scroll gestures).
-        touchAction: canDrag ? "none" : "auto",
       }}
       className={cn(
         "rounded-[var(--lb-r-sm)] border border-[var(--lb-border)] bg-[var(--lb-bg)] p-2",
-        "cursor-grab active:cursor-grabbing",
       )}
-      {...attributes}
-      {...listeners}
     >
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-1.5">
+        {canDrag && (
+          <button
+            type="button"
+            ref={setActivatorNodeRef}
+            {...attributes}
+            {...listeners}
+            aria-label="Kartı sürükle"
+            className="flex h-7 w-5 flex-shrink-0 items-center justify-center rounded-sm text-[var(--lb-muted-fg)] hover:bg-[var(--lb-card)] active:cursor-grabbing"
+            style={{
+              // Only the handle disables native gesture handling so
+              // the rest of the column still scrolls under the user's
+              // finger. Without this, dnd-kit's TouchSensor never sees
+              // the touch — Telegram WebApp's scroll handler eats it.
+              touchAction: "none",
+              cursor: "grab",
+            }}
+          >
+            <GripVertical width={14} height={14} aria-hidden />
+          </button>
+        )}
         <span
           aria-hidden
           style={{
@@ -416,7 +442,7 @@ function KanbanCard({
           }}
         />
         <p
-          className="line-clamp-3 text-sm text-[var(--lb-fg)]"
+          className="line-clamp-3 flex-1 text-sm text-[var(--lb-fg)]"
           style={{
             textDecoration: item.isDone ? "line-through" : "none",
           }}
