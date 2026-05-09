@@ -67,8 +67,13 @@ export function KanbanBoard({ listId, items, canWrite }: Props) {
   const [showAllDone, setShowAllDone] = React.useState(false);
 
   const sensors = useSensors(
+    // Long-press activation: 250ms hold + 5px tolerance. The previous
+    // 8px-distance constraint conflicted with Telegram WebApp scroll
+    // gestures — flicking through cards counted as drag and rarely
+    // landed in another column. Long-press is the standard mobile
+    // affordance for "pick up" + works for desktop pointer too.
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
+      activationConstraint: { delay: 250, tolerance: 5 },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
@@ -227,6 +232,10 @@ export function KanbanBoard({ listId, items, canWrite }: Props) {
         className="flex gap-2 overflow-x-auto px-4 pb-4"
         style={{
           scrollSnapType: "x mandatory",
+          // Fill the remaining viewport so columns can scroll their
+          // own contents. Without this the outer page scrolls and
+          // columns get clipped under footer affordances.
+          minHeight: "calc(100dvh - 220px)",
         }}
       >
         {STATUSES.map((status) => {
@@ -349,6 +358,10 @@ function KanbanCard({ item, canDrag }: { item: Item; canDrag: boolean }) {
         transform: CSS.Transform.toString(transform),
         transition,
         opacity: isDragging ? 0.5 : 1,
+        // Disable browser-native gesture handling so dnd-kit's
+        // pointer events fire reliably under Telegram's WebApp shell
+        // (which otherwise eats the scroll gestures).
+        touchAction: canDrag ? "none" : "auto",
       }}
       className={cn(
         "rounded-[var(--lb-r-sm)] border border-[var(--lb-border)] bg-[var(--lb-bg)] p-2",
