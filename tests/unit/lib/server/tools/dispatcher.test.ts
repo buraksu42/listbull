@@ -63,7 +63,9 @@ const TOOL_NAMES: ToolName[] = [
   "delete_item",
   "list_lists",
   "share_list",
-  "schedule_reminder",
+  "set_deadline",
+  "add_reminder",
+  "remove_reminder",
   "assign_item",
 ];
 

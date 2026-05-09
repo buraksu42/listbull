@@ -44,9 +44,12 @@ export default function AppBoot() {
 
         if (!cancelled) {
           // Cookie is set. Routes by start_param prefix:
-          //   invite_<token>   → per-list invite accept (Phase 3)
-          //   wsinvite_<token> → workspace invite accept (Phase 5.5)
-          //   <empty> / other  → /lists (default)
+          //   invite_<token>    → per-list invite accept (Phase 3)
+          //   wsinvite_<token>  → workspace invite accept (Phase 5.5)
+          //   item_<uuid>       → resolve list via /api/items/<uuid>/locate
+          //                       and jump into /lists/<listId> with the
+          //                       item highlighted (inline-mode handoff)
+          //   <empty> / other   → /lists (default)
           const startParam = tg.initDataUnsafe?.start_param ?? "";
           if (startParam.startsWith("invite_")) {
             const token = startParam.slice("invite_".length);
@@ -55,6 +58,59 @@ export default function AppBoot() {
             const token = startParam.slice("wsinvite_".length);
             window.location.replace(
               `/workspace-invites/${encodeURIComponent(token)}`,
+            );
+          } else if (startParam.startsWith("item_")) {
+            const itemId = startParam.slice("item_".length);
+            try {
+              const res = await fetch(
+                `/api/items/${encodeURIComponent(itemId)}/locate`,
+                { credentials: "same-origin" },
+              );
+              if (res.ok) {
+                const json = (await res.json()) as {
+                  ok?: boolean;
+                  data?: { listId?: string };
+                };
+                const listId = json?.data?.listId;
+                if (listId) {
+                  // Auto-switch active workspace before navigating
+                  // (same rationale as the list_ branch below).
+                  try {
+                    await fetch(
+                      `/api/workspaces/activate-by-list?listId=${encodeURIComponent(listId)}`,
+                      { method: "POST", credentials: "same-origin" },
+                    );
+                  } catch {
+                    // best-effort
+                  }
+                  window.location.replace(
+                    `/lists/${encodeURIComponent(listId)}?item=${encodeURIComponent(itemId)}`,
+                  );
+                  return;
+                }
+              }
+            } catch {
+              // fall through to /lists
+            }
+            window.location.replace("/lists");
+          } else if (startParam.startsWith("list_")) {
+            const listId = startParam.slice("list_".length);
+            // Auto-switch active workspace if this list lives in a
+            // workspace the user is a member of but not currently
+            // active in. Prevents the freshly-invited "Open the list"
+            // tap from landing on /lists/<id> with the wrong active
+            // workspace, which renders 404.
+            try {
+              await fetch(
+                `/api/workspaces/activate-by-list?listId=${encodeURIComponent(listId)}`,
+                { method: "POST", credentials: "same-origin" },
+              );
+            } catch {
+              // Best-effort; even if the activate call fails the page
+              // will surface its own 404.
+            }
+            window.location.replace(
+              `/lists/${encodeURIComponent(listId)}`,
             );
           } else {
             window.location.replace("/lists");

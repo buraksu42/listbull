@@ -74,6 +74,11 @@ export function ActivitySentence({
         en: <>{actor} edited {pillItem(after ?? before)}</>,
         tr: <>{actor} {pillItem(after ?? before)} düzenledi</>,
       });
+    case "item_moved":
+      return template(locale, {
+        en: <>{actor} moved {pillItem(after ?? before)} to this list</>,
+        tr: <>{actor} {pillItem(after ?? before)} öğesini bu listeye taşıdı</>,
+      });
     case "item_deleted":
       return template(locale, {
         en: <>{actor} deleted {pillItem(before ?? after)}</>,
@@ -90,30 +95,83 @@ export function ActivitySentence({
         tr: <>{actor} {pillItem(after ?? before)} atamasını kaldırdı</>,
       });
     case "item_due_set":
+    case "item_deadline_set":
       return template(locale, {
         en: (
           <>
-            {actor} set a reminder on {pillItem(after ?? before)}
+            {actor} set a deadline on {pillItem(after ?? before)}
           </>
         ),
         tr: (
           <>
-            {actor} {pillItem(after ?? before)} için hatırlatıcı kurdu
+            {actor} {pillItem(after ?? before)} için son tarih belirledi
           </>
         ),
       });
     case "item_due_cleared":
+    case "item_deadline_cleared":
       return template(locale, {
         en: (
           <>
-            {actor} cleared the reminder on {pillItem(after ?? before)}
+            {actor} cleared the deadline on {pillItem(after ?? before)}
           </>
         ),
         tr: (
           <>
-            {actor} {pillItem(after ?? before)} hatırlatıcısını temizledi
+            {actor} {pillItem(after ?? before)} son tarihini temizledi
           </>
         ),
+      });
+    case "item_reminder_added":
+      return template(locale, {
+        en: (
+          <>
+            {actor} added a reminder on {pillItem(after ?? before)}
+          </>
+        ),
+        tr: (
+          <>
+            {actor} {pillItem(after ?? before)} için hatırlatıcı ekledi
+          </>
+        ),
+      });
+    case "item_reminder_removed":
+      return template(locale, {
+        en: (
+          <>
+            {actor} removed a reminder on {pillItem(after ?? before)}
+          </>
+        ),
+        tr: (
+          <>
+            {actor} {pillItem(after ?? before)} hatırlatıcısını kaldırdı
+          </>
+        ),
+      });
+    case "item_reminder_fired":
+      return template(locale, {
+        en: <>Reminder fired on {pillItem(after ?? before)}</>,
+        tr: <>{pillItem(after ?? before)} hatırlatıcısı gönderildi</>,
+      });
+    case "item_attachment_added":
+      return template(locale, {
+        en: <>{actor} attached a file to {pillItem(after ?? before)}</>,
+        tr: <>{actor} {pillItem(after ?? before)} maddesine bir ek ekledi</>,
+      });
+    case "item_attachment_removed":
+      return template(locale, {
+        en: <>{actor} removed an attachment from {pillItem(after ?? before)}</>,
+        tr: <>{actor} {pillItem(after ?? before)} maddesinden bir eki kaldırdı</>,
+      });
+    case "checklist_run_started":
+      return template(locale, {
+        en: <>{actor} started a new checklist run</>,
+        tr: <>{actor} yeni bir checklist run&apos;ı başlattı</>,
+      });
+    case "checklist_run_completed":
+      return template(locale, {
+        en: <>{actor} completed the checklist run</>,
+        tr: <>{actor} checklist run&apos;ını tamamladı</>,
       });
 
     // ─── lists ──────────────────────────────────────────────────────
@@ -208,11 +266,21 @@ function _coverage(a: ActivityAction): React.ReactNode {
     case "item_completed":
     case "item_uncompleted":
     case "item_edited":
+    case "item_moved":
     case "item_deleted":
     case "item_assigned":
     case "item_unassigned":
     case "item_due_set":
     case "item_due_cleared":
+    case "item_deadline_set":
+    case "item_deadline_cleared":
+    case "item_reminder_added":
+    case "item_reminder_removed":
+    case "item_reminder_fired":
+    case "item_attachment_added":
+    case "item_attachment_removed":
+    case "checklist_run_started":
+    case "checklist_run_completed":
     case "list_created":
     case "list_renamed":
     case "list_archived":

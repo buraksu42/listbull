@@ -47,7 +47,9 @@ import { executeDeleteItem } from "@/lib/server/tools/delete-item";
 import { executeInviteToWorkspace } from "@/lib/server/tools/invite-to-workspace";
 import { executeListLists } from "@/lib/server/tools/list-lists";
 import { executeRemoveWorkspaceMember } from "@/lib/server/tools/remove-workspace-member";
-import { executeScheduleReminder } from "@/lib/server/tools/schedule-reminder";
+import { executeAddReminder } from "@/lib/server/tools/add-reminder";
+import { executeRemoveReminder } from "@/lib/server/tools/remove-reminder";
+import { executeSetDeadline } from "@/lib/server/tools/set-deadline";
 import { executeSearchItems } from "@/lib/server/tools/search-items";
 import { executeSetItemAttributes } from "@/lib/server/tools/set-item-attributes";
 import { executeShareList } from "@/lib/server/tools/share-list";
@@ -135,10 +137,48 @@ describe("share_list: input validation", () => {
   });
 });
 
-describe("schedule_reminder: input validation", () => {
+describe("set_deadline: input validation", () => {
   it("rejects malformed datetime", async () => {
-    const r = await executeScheduleReminder(
-      { item_id: "00000000-0000-0000-0000-000000000010", due_at: "tomorrow" },
+    const r = await executeSetDeadline(
+      {
+        item_id: "00000000-0000-0000-0000-000000000010",
+        deadline_at: "tomorrow",
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("invalid_input");
+  });
+});
+
+describe("add_reminder: input validation", () => {
+  it("rejects when neither remind_at nor offset_minutes provided", async () => {
+    const r = await executeAddReminder(
+      { item_id: "00000000-0000-0000-0000-000000000010" },
+      CTX,
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("invalid_input");
+  });
+
+  it("rejects when both remind_at and offset_minutes provided", async () => {
+    const r = await executeAddReminder(
+      {
+        item_id: "00000000-0000-0000-0000-000000000010",
+        remind_at: "2099-01-01T12:00:00.000Z",
+        offset_minutes: 60,
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("invalid_input");
+  });
+});
+
+describe("remove_reminder: input validation", () => {
+  it("rejects non-uuid reminder_id", async () => {
+    const r = await executeRemoveReminder(
+      { reminder_id: "not-a-uuid" },
       CTX,
     );
     expect(r.ok).toBe(false);

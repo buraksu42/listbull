@@ -22,10 +22,19 @@
  *     `drizzle-orm`.
  */
 import type {
+  AttachmentKind,
+  AttachmentSnapshot,
   Item,
+  ItemAttachment,
+  ItemReminder,
+  ItemReminderKind,
+  ItemReminderSnapshot,
+  ItemSnapshot,
   List as ListRow,
   ListMember as ListMemberRow,
   ListRole,
+  ListRun,
+  ListRunSnapshot,
   MemberSnapshot,
 } from "@/lib/types";
 
@@ -33,21 +42,77 @@ import type {
  * Convert an `Item` row into the JSON-safe `ItemSnapshot` shape that
  * `activity_log.payload_*` columns store. Per Inv-5, every Date becomes
  * an ISO 8601 string for round-trip stability.
+ *
+ * Phase 14d: `dueAt` / `reminderSent` / `recurrenceRule` are gone;
+ * reminders live in their own table and snapshot via
+ * `toItemReminderSnapshot`.
  */
-export function toItemSnapshot(row: Item) {
+export function toItemSnapshot(row: Item): ItemSnapshot {
   return {
     id: row.id,
     listId: row.listId,
     text: row.text,
+    description: row.description ?? null,
     isCheckable: row.isCheckable,
     isDone: row.isDone,
+    status: row.status,
+    priority: row.priority,
+    tags: row.tags ?? [],
     assigneeId: row.assigneeId,
-    dueAt: row.dueAt ? row.dueAt.toISOString() : null,
-    reminderSent: row.reminderSent,
+    deadlineAt: row.deadlineAt ? row.deadlineAt.toISOString() : null,
+    pinnedAt: row.pinnedAt ? row.pinnedAt.toISOString() : null,
+    taskRecurrenceRule: row.taskRecurrenceRule ?? null,
     position: row.position,
     createdBy: row.createdBy,
     completedAt: row.completedAt ? row.completedAt.toISOString() : null,
     archivedAt: row.archivedAt ? row.archivedAt.toISOString() : null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+/**
+ * Convert an `ItemAttachment` row into a JSON-safe `AttachmentSnapshot`.
+ *
+ * Hides the raw `telegramFileId` and `storageKey` from the client-
+ * facing shape — both are server-side resolvers (Telegram CDN proxy
+ * + Hetzner pre-signed URL); leaking them invites scraping and
+ * cross-bot file_id sharing.
+ */
+export function toAttachmentSnapshot(row: ItemAttachment): AttachmentSnapshot {
+  return {
+    id: row.id,
+    itemId: row.itemId,
+    workspaceId: row.workspaceId,
+    kind: row.kind as AttachmentKind,
+    mimeType: row.mimeType,
+    fileSize: row.fileSize,
+    durationSeconds: row.durationSeconds,
+    width: row.width,
+    height: row.height,
+    originalFilename: row.originalFilename,
+    hasBackup: row.storageBackedUpAt !== null,
+    uploadedByUserId: row.uploadedByUserId,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+/**
+ * Convert an `ItemReminder` row into a JSON-safe `ItemReminderSnapshot`.
+ * Used by the activity_log payloads for `item_reminder_added` /
+ * `item_reminder_removed` / `item_reminder_fired`, and as the
+ * client-facing shape included alongside item rows in API responses.
+ */
+export function toItemReminderSnapshot(row: ItemReminder): ItemReminderSnapshot {
+  return {
+    id: row.id,
+    itemId: row.itemId,
+    remindAt: row.remindAt.toISOString(),
+    kind: row.kind as ItemReminderKind,
+    offsetMinutes: row.offsetMinutes,
+    recurrenceRule: row.recurrenceRule,
+    sent: row.sent,
+    lastSentAt: row.lastSentAt ? row.lastSentAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -65,9 +130,27 @@ export function toListSnapshot(row: ListRow) {
     emoji: row.emoji,
     ownerId: row.ownerId,
     isInbox: row.isInbox,
+    isChecklist: row.isChecklist,
     archivedAt: row.archivedAt ? row.archivedAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+/**
+ * Convert a `list_runs` row into a JSON-safe `ListRunSnapshot`.
+ */
+export function toListRunSnapshot(row: ListRun): ListRunSnapshot {
+  return {
+    id: row.id,
+    listId: row.listId,
+    startedAt: row.startedAt.toISOString(),
+    completedAt: row.completedAt ? row.completedAt.toISOString() : null,
+    startedByUserId: row.startedByUserId,
+    completedByUserId: row.completedByUserId,
+    itemsTotal: row.itemsTotal,
+    itemsCompleted: row.itemsCompleted,
+    createdAt: row.createdAt.toISOString(),
   };
 }
 

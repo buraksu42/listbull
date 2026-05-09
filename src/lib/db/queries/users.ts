@@ -26,6 +26,11 @@ export async function upsertUserFromTelegram(input: {
   languageCode: string | null;
 }): Promise<User> {
   const locale = input.languageCode === "tr" ? "tr" : "en";
+  // TR-locale users get Europe/Istanbul; everyone else stays on the
+  // schema default (UTC) until they pick a TZ in /settings. Without
+  // this, the LLM defaults due_at to UTC and "yarın 21:00" is 3 hours
+  // off for TR users.
+  const timezone = locale === "tr" ? "Europe/Istanbul" : undefined;
 
   const insertValues: NewUser = {
     telegramId: input.telegramId,
@@ -34,6 +39,7 @@ export async function upsertUserFromTelegram(input: {
     telegramLastName: input.telegramLastName,
     telegramPhotoUrl: input.telegramPhotoUrl,
     locale,
+    ...(timezone ? { timezone } : {}),
   };
 
   const [row] = await db

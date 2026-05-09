@@ -51,7 +51,7 @@ export default async function TodayPage() {
         eq(items.isDone, false),
         or(
           // Due today or overdue (dueAt <= end-of-local-day)
-          sql`${items.dueAt} is not null and ${items.dueAt} <= ${endOfDayExpr}`,
+          sql`${items.deadlineAt} is not null and ${items.deadlineAt} <= ${endOfDayExpr}`,
           // In-progress regardless of date
           eq(items.status, "in_progress"),
           // High-priority items surface here too
@@ -63,7 +63,7 @@ export default async function TodayPage() {
       // Overdue first, then today, then position. Sort sentinel
       // pushes null dueAt rows (status='in_progress' / priority='high'
       // without a date) to the end.
-      asc(sql`coalesce(${items.dueAt}, '2099-01-01'::timestamptz)`),
+      asc(sql`coalesce(${items.deadlineAt}, '2099-01-01'::timestamptz)`),
       asc(items.position),
     );
   // Reference imports kept live for future filters.
@@ -122,11 +122,25 @@ export default async function TodayPage() {
         </h1>
         <span
           style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "var(--lb-sp-3)",
             color: "var(--lb-muted-fg)",
             fontSize: "var(--lb-fs-sm)",
           }}
         >
-          {rows.length} item{rows.length === 1 ? "" : "s"}
+          <span>
+            {rows.length} item{rows.length === 1 ? "" : "s"}
+          </span>
+          <Link
+            href="/views/week"
+            style={{
+              color: "var(--lb-accent)",
+              textDecoration: "none",
+            }}
+          >
+            {user.locale === "tr" ? "Bu hafta →" : "This week →"}
+          </Link>
         </span>
       </header>
 
@@ -185,8 +199,8 @@ export default async function TodayPage() {
                   }}
                 >
                   {list.name}
-                  {item.dueAt && (
-                    <> · {formatDueAt(item.dueAt, tz)}</>
+                  {item.deadlineAt && (
+                    <> · {formatDueAt(item.deadlineAt, tz)}</>
                   )}
                 </div>
               </div>

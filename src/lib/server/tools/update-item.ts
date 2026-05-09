@@ -1,27 +1,43 @@
 /**
- * Executor: `update_item`. Edits text, due_at, and/or position.
+ * Executor: `update_item`. Edits text, deadline_at, position, and/or
+ * target_list_id (cross-list move within the same workspace).
  *
  * Action mapping per Inv-5:
- *   - text or position changed (or any combination including due_at) →
- *     `item_edited`.
- *   - due_at is the SOLE changed field → `item_due_set` /
- *     `item_due_cleared` (helps the Phase-3 reminder feed).
+ *   - target_list_id changed alone → `item_moved`.
+ *   - deadline_at is the SOLE changed field → `item_deadline_set` /
+ *     `item_deadline_cleared` (Phase 14d).
+ *   - any other combination (incl. move + edit) → `item_edited`.
  *
- * Past `due_at` values are silently dropped + warning surfaced (matches
- * `create_item`).
+ * Past `deadline_at` values are silently dropped + warning surfaced
+ * (matches `create_item`). Phase 14d: when deadline changes,
+ * `recomputeOffsetReminders` updates every `before_deadline` reminder
+ * for the item in the same transaction.
+ *
+ * Move semantics: write the activity row to the DESTINATION list. The
+ * source list's audit feed will not show the row; the destination's
+ * will. Restore from the activity_log re-creates the item on the
+ * destination list (payload_after.listId).
  */
 import "server-only";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { activityLog, items } from "@/lib/db/schema";
+import { activityLog, items, listMembers, lists } from "@/lib/db/schema";
 import {
   updateItemInputSchema,
   type UpdateItemOutput,
 } from "@/lib/ai/tools";
 import type { ActivityAction } from "@/lib/types";
-import { ERR, err, isPast, ok, toItemSnapshot } from "./_shared";
+import {
+  ERR,
+  err,
+  isPast,
+  ok,
+  recomputeOffsetReminders,
+  resolveList,
+  toItemSnapshot,
+} from "./_shared";
 import { userCanWriteList } from "@/lib/db/queries/items";
 
 import type { ExecResult } from "./_shared";
@@ -34,7 +50,63 @@ export async function executeUpdateItem(
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
-  const { item_id, text, due_at, position } = parsed.data;
+  const {
+    item_id,
+    text,
+    description,
+    deadline_at,
+    position,
+    target_list_id,
+    target_list_name,
+    pinned,
+    task_recurrence_rule,
+    assignee_id,
+  } = parsed.data;
+
+  // Validate task_recurrence_rule if provided so we don't silently
+  // store garbage.
+  if (typeof task_recurrence_rule === "string") {
+    try {
+      const { RRule } = await import("rrule");
+      RRule.fromString(`RRULE:${task_recurrence_rule}`);
+    } catch (e) {
+      return err(
+        ERR.invalid_input,
+        `Invalid task_recurrence_rule: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
+  }
+
+  // Resolve target list (by id or name). The `resolveList` helper handles
+  // exact / fuzzy / inbox matching with workspace scoping. We use it
+  // outside the transaction since it's read-only; the destination is
+  // re-validated inside the transaction below.
+  let resolvedTargetListId: string | undefined = undefined;
+  if (target_list_id || target_list_name) {
+    const resolution = await resolveList(
+      ctx,
+      { listId: target_list_id, listName: target_list_name },
+      // Inbox fallback ON: "Inbox'a taşı" should always work even if
+      // the user typed a slightly off name.
+      { inboxFallback: true },
+    );
+    switch (resolution.kind) {
+      case "forbidden":
+        return err(ERR.forbidden, "You don't have access to that list.");
+      case "not_found":
+        return err(ERR.not_found, "Target list not found.");
+      case "ambiguous": {
+        const names = resolution.candidates.map((c) => c.name).join(", ");
+        return err(
+          ERR.ambiguous_list,
+          `List name matched multiple lists: ${names}. Specify which one.`,
+        );
+      }
+    }
+    resolvedTargetListId = resolution.listId;
+  }
 
   return await db.transaction(async (tx) => {
     const [current] = await tx
@@ -45,7 +117,7 @@ export async function executeUpdateItem(
     if (!current) return err(ERR.not_found, "Item not found.");
     if (current.archivedAt) return err(ERR.not_found, "Item not found.");
 
-    // Membership check on the item's list.
+    // Membership check on the item's source list.
     const allowed = await userCanWriteList(
       ctx.userId,
       current.listId,
@@ -59,8 +131,102 @@ export async function executeUpdateItem(
     const patch: Partial<typeof items.$inferInsert> = {
       updatedAt: new Date(),
     };
-    const changes: Array<"text" | "due_at" | "position"> = [];
+    const changes: Array<
+      | "text"
+      | "description"
+      | "deadline_at"
+      | "position"
+      | "list_id"
+      | "pinned"
+      | "task_recurrence_rule"
+      | "assignee_id"
+    > = [];
     const warnings: string[] = [];
+
+    if (assignee_id !== undefined) {
+      const cur = current.assigneeId ?? null;
+      const next = assignee_id ?? null;
+      if (cur !== next) {
+        if (next !== null) {
+          // Inv-12: assignee MUST be a current member of the list.
+          const [membership] = await tx
+            .select({ id: listMembers.id })
+            .from(listMembers)
+            .where(
+              and(
+                eq(listMembers.listId, current.listId),
+                eq(listMembers.userId, next),
+              ),
+            )
+            .limit(1);
+          if (!membership) {
+            return err(
+              "assignee_not_member",
+              "User is not a member of this list.",
+            );
+          }
+        }
+        patch.assigneeId = next;
+        changes.push("assignee_id");
+      }
+    }
+
+    if (pinned !== undefined) {
+      const isPinned = current.pinnedAt !== null;
+      if (pinned && !isPinned) {
+        patch.pinnedAt = new Date();
+        changes.push("pinned");
+      } else if (!pinned && isPinned) {
+        patch.pinnedAt = null;
+        changes.push("pinned");
+      }
+    }
+
+    if (task_recurrence_rule !== undefined) {
+      const cur = current.taskRecurrenceRule ?? null;
+      const next = task_recurrence_rule ?? null;
+      if (cur !== next) {
+        patch.taskRecurrenceRule = next;
+        changes.push("task_recurrence_rule");
+      }
+    }
+
+    let listIdChanged = false;
+    if (
+      resolvedTargetListId !== undefined &&
+      resolvedTargetListId !== current.listId
+    ) {
+      // Destination list must exist + sit in the same workspace + caller
+      // must have write access on it. resolveList already enforced
+      // workspace scope; re-check inside the txn for archive + write.
+      const [dest] = await tx
+        .select()
+        .from(lists)
+        .where(
+          and(
+            eq(lists.id, resolvedTargetListId),
+            eq(lists.workspaceId, ctx.workspaceId),
+          ),
+        )
+        .limit(1);
+      if (!dest) {
+        return err(ERR.not_found, "Target list not found in this workspace.");
+      }
+      if (dest.archivedAt) {
+        return err(ERR.not_found, "Target list is archived.");
+      }
+      const destAllowed = await userCanWriteList(
+        ctx.userId,
+        resolvedTargetListId,
+        ctx.workspaceId,
+      );
+      if (!destAllowed) {
+        return err(ERR.forbidden, "You don't have access to the target list.");
+      }
+      patch.listId = resolvedTargetListId;
+      changes.push("list_id");
+      listIdChanged = true;
+    }
 
     if (text !== undefined) {
       const trimmed = text.trim();
@@ -73,26 +239,42 @@ export async function executeUpdateItem(
       }
     }
 
-    let dueAtChanged = false;
-    if (due_at !== undefined) {
-      if (due_at === null) {
-        if (current.dueAt !== null) {
-          patch.dueAt = null;
-          patch.reminderSent = false;
-          changes.push("due_at");
-          dueAtChanged = true;
+    if (description !== undefined) {
+      // Empty/whitespace string normalized to null so the "has
+      // description" indicator stays consistent with reality.
+      const next =
+        description === null
+          ? null
+          : description.trim().length > 0
+            ? description.trim()
+            : null;
+      if (next !== (current.description ?? null)) {
+        patch.description = next;
+        changes.push("description");
+      }
+    }
+
+    let deadlineChanged = false;
+    let nextDeadline: Date | null = current.deadlineAt;
+    if (deadline_at !== undefined) {
+      if (deadline_at === null) {
+        if (current.deadlineAt !== null) {
+          patch.deadlineAt = null;
+          changes.push("deadline_at");
+          deadlineChanged = true;
+          nextDeadline = null;
         }
       } else {
-        if (isPast(due_at)) {
-          warnings.push("due_at_in_past");
+        if (isPast(deadline_at)) {
+          warnings.push("deadline_at_in_past");
         } else {
-          const newDate = new Date(due_at);
-          const oldIso = current.dueAt?.toISOString() ?? null;
+          const newDate = new Date(deadline_at);
+          const oldIso = current.deadlineAt?.toISOString() ?? null;
           if (oldIso !== newDate.toISOString()) {
-            patch.dueAt = newDate;
-            patch.reminderSent = false;
-            changes.push("due_at");
-            dueAtChanged = true;
+            patch.deadlineAt = newDate;
+            changes.push("deadline_at");
+            deadlineChanged = true;
+            nextDeadline = newDate;
           }
         }
       }
@@ -119,12 +301,25 @@ export async function executeUpdateItem(
       .returning();
     if (!updated) throw new Error("update-item: update returned no row");
 
+    // Phase 14d: when deadline changed, recompute every
+    // before_deadline reminder for this item (clear / re-anchor).
+    if (deadlineChanged) {
+      await recomputeOffsetReminders(tx, item_id, nextDeadline);
+    }
+
     // Decide which activity action to write.
-    const dueAtIsSole =
-      dueAtChanged && changes.length === 1 && changes[0] === "due_at";
+    const deadlineIsSole =
+      deadlineChanged && changes.length === 1 && changes[0] === "deadline_at";
+    const moveIsSole =
+      listIdChanged && changes.length === 1 && changes[0] === "list_id";
     let action: ActivityAction;
-    if (dueAtIsSole) {
-      action = updated.dueAt === null ? "item_due_cleared" : "item_due_set";
+    if (deadlineIsSole) {
+      action =
+        updated.deadlineAt === null
+          ? "item_deadline_cleared"
+          : "item_deadline_set";
+    } else if (moveIsSole) {
+      action = "item_moved";
     } else {
       action = "item_edited";
     }

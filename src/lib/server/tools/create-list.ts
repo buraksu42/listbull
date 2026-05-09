@@ -19,6 +19,7 @@ import {
   type CreateListOutput,
 } from "@/lib/ai/tools";
 import { ERR, err, ok } from "./_shared";
+import { toListSnapshot } from "@/lib/db/snapshots";
 
 import type { ExecResult } from "./_shared";
 
@@ -30,13 +31,15 @@ export async function executeCreateList(
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
-  const { name, emoji } = parsed.data;
+  const { name, emoji, is_checklist } = parsed.data;
 
   // Default emoji if neither user nor LLM supplied one. Avoids "naked"
   // list names in the bot's reply that look out-of-place next to other
   // lists with emojis. Pass `emoji: null` explicitly to opt out (LLM
-  // shouldn't, but the schema allows it).
-  const finalEmoji = emoji === undefined ? "📋" : emoji;
+  // shouldn't, but the schema allows it). For checklists, default to
+  // ☑️ so the list visibly reads as a control surface.
+  const finalEmoji =
+    emoji === undefined ? (is_checklist ? "☑️" : "📋") : emoji;
 
   return await db.transaction(async (tx) => {
     const [created] = await tx
@@ -47,6 +50,7 @@ export async function executeCreateList(
         ownerId: ctx.userId,
         workspaceId: ctx.workspaceId,
         isInbox: false,
+        isChecklist: is_checklist ?? false,
       })
       .returning();
     if (!created) throw new Error("create-list: insert returned no row");
@@ -64,17 +68,7 @@ export async function executeCreateList(
       action: "list_created",
       actorId: ctx.userId,
       payloadBefore: null,
-      payloadAfter: {
-        id: created.id,
-        name: created.name,
-        emoji: created.emoji,
-        isInbox: created.isInbox,
-        archivedAt: created.archivedAt
-          ? created.archivedAt.toISOString()
-          : null,
-        createdAt: created.createdAt.toISOString(),
-        updatedAt: created.updatedAt.toISOString(),
-      },
+      payloadAfter: toListSnapshot(created),
     });
 
     return ok({
@@ -82,6 +76,7 @@ export async function executeCreateList(
         id: created.id,
         name: created.name,
         emoji: created.emoji,
+        is_checklist: created.isChecklist,
       },
     });
   });

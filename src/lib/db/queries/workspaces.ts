@@ -21,12 +21,10 @@ import {
   workspaceMembers,
   workspaces,
 } from "@/lib/db/schema";
-import { TIER_LIMITS } from "@/lib/types";
 import type {
   Workspace,
   WorkspaceListItem,
   WorkspaceRole,
-  WorkspaceTier,
 } from "@/lib/types";
 
 /**
@@ -66,16 +64,13 @@ export async function ensurePersonalWorkspace(
     });
     if (existing) return existing;
 
-    const tier: WorkspaceTier = "free";
     const [created] = await tx
       .insert(workspaces)
       .values({
         name: "Personal",
         slug: `${userId}-personal`,
-        tier,
         isPersonal: true,
         ownerId: userId,
-        memberLimit: TIER_LIMITS[tier].memberLimit,
       })
       .returning();
     if (!created) {
@@ -162,7 +157,6 @@ export async function listWorkspacesForUser(
     id: string;
     name: string;
     slug: string;
-    tier: string;
     is_personal: boolean;
     role: string;
     member_count: string;
@@ -173,7 +167,6 @@ export async function listWorkspacesForUser(
       w.id,
       w.name,
       w.slug,
-      w.tier,
       w.is_personal,
       wm.role,
       (SELECT COUNT(*) FROM workspace_members WHERE workspace_id = w.id)::text AS member_count,
@@ -191,7 +184,6 @@ export async function listWorkspacesForUser(
     id: r.id,
     name: r.name,
     slug: r.slug,
-    tier: r.tier as WorkspaceTier,
     isPersonal: r.is_personal,
     role: r.role as WorkspaceRole,
     memberCount: Number(r.member_count),
@@ -285,15 +277,31 @@ export async function getWorkspaceOrgKeyEncrypted(
 ): Promise<string | null> {
   const [row] = await db
     .select({
-      tier: workspaces.tier,
       keyEnc: workspaces.openrouterApiKeyEncrypted,
     })
     .from(workspaces)
     .where(eq(workspaces.id, workspaceId))
     .limit(1);
-  if (!row) return null;
-  if (row.tier !== "workspace") return null;
-  return row.keyEnc;
+  return row?.keyEnc ?? null;
+}
+
+/**
+ * Operator-mode gate for the env-key fallback. Returns the workspace
+ * owner's Telegram user id (numeric) — the bot key resolution chain
+ * checks this against `env.OPERATOR_TELEGRAM_ID` to decide whether
+ * the operator's env key should fund this workspace's calls. Any
+ * other workspace must BYOK or set a workspace org-key.
+ */
+export async function getWorkspaceOwnerTelegramId(
+  workspaceId: string,
+): Promise<number | null> {
+  const [row] = await db
+    .select({ telegramId: users.telegramId })
+    .from(workspaces)
+    .innerJoin(users, eq(users.id, workspaces.ownerId))
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+  return row?.telegramId ?? null;
 }
 
 // Order export, no-op consumer for asc — keeps the import live so

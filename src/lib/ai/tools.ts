@@ -30,16 +30,28 @@ import { z } from "zod";
  *
  * All `Date` fields serialize to ISO 8601 strings — see Inv-5 in the
  * contract for the round-trip stability rule.
+ *
+ * Phase 14d: `dueAt` / `reminderSent` / `recurrenceRule` removed —
+ * deadlines live on `deadlineAt`; reminders are their own table
+ * surfaced via `itemReminderSnapshotSchema`.
  */
 export const itemSnapshotSchema = z.object({
   id: z.string().uuid(),
   listId: z.string().uuid(),
   text: z.string(),
+  description: z.string().nullable(),
   isCheckable: z.boolean(),
   isDone: z.boolean(),
+  status: z.string(),
+  priority: z.string(),
+  tags: z.array(z.string()),
   assigneeId: z.string().uuid().nullable(),
-  dueAt: z.string().datetime({ offset: true }).nullable(),
-  reminderSent: z.boolean(),
+  /** ISO 8601 — the moment the item is due. Null = no deadline. */
+  deadlineAt: z.string().datetime({ offset: true }).nullable(),
+  /** ISO timestamp set when the item was pinned to top; null = not pinned. */
+  pinnedAt: z.string().datetime({ offset: true }).nullable(),
+  /** RFC 5545 RRULE for task-level recurrence (auto-resurrect on complete). */
+  taskRecurrenceRule: z.string().nullable(),
   position: z.number().int(),
   createdBy: z.string().uuid(),
   completedAt: z.string().datetime({ offset: true }).nullable(),
@@ -49,6 +61,27 @@ export const itemSnapshotSchema = z.object({
 });
 
 export type ItemSnapshotShape = z.infer<typeof itemSnapshotSchema>;
+
+/**
+ * JSON-safe reminder snapshot — mirror of `ItemReminderSnapshot` in
+ * `src/lib/types/index.ts`. Returned alongside item rows on read APIs
+ * and used in activity_log payloads for `item_reminder_added` /
+ * `item_reminder_removed` / `item_reminder_fired`.
+ */
+export const itemReminderSnapshotSchema = z.object({
+  id: z.string().uuid(),
+  itemId: z.string().uuid(),
+  remindAt: z.string().datetime({ offset: true }),
+  kind: z.enum(["absolute", "before_deadline"]),
+  offsetMinutes: z.number().int().nonnegative().nullable(),
+  recurrenceRule: z.string().nullable(),
+  sent: z.boolean(),
+  lastSentAt: z.string().datetime({ offset: true }).nullable(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
+export type ItemReminderSnapshotShape = z.infer<typeof itemReminderSnapshotSchema>;
 
 /**
  * Public list info attached to mutation outputs so the LLM can echo
@@ -72,23 +105,38 @@ export const createItemInputSchema = z
       .trim()
       .min(1, "text is required")
       .max(2000, "text must be ≤2000 chars"),
+    /**
+     * Phase 14a: optional long-form context (≤5000 chars). For notes,
+     * links, multi-line bodies — NOT a summary of `text`. Plain text
+     * only; markdown is not rendered. Empty string is normalized to
+     * null.
+     */
+    description: z.string().max(5000).nullable().optional(),
     list_id: z.string().uuid().optional(),
     list_name: z.string().min(1).max(200).optional(),
-    due_at: z.string().datetime({ offset: true }).optional(),
+    /**
+     * Phase 14d: renamed from `due_at`. The moment the item is due.
+     * When provided, the executor also creates a single absolute
+     * reminder anchored at the same moment so existing UX (set a
+     * deadline → get a ping) is preserved.
+     */
+    deadline_at: z.string().datetime({ offset: true }).optional(),
     is_checkable: z.boolean().default(true),
   })
   .refine(
-    (v) => !(v.is_checkable === false && v.due_at !== undefined),
+    (v) => !(v.is_checkable === false && v.deadline_at !== undefined),
     {
-      message: "notes (is_checkable=false) cannot have due_at",
-      path: ["due_at"],
+      message: "notes (is_checkable=false) cannot have deadline_at",
+      path: ["deadline_at"],
     },
   );
 
 export const createItemOutputSchema = z.object({
   item: itemSnapshotSchema,
   list: listLiteSchema,
-  /** Soft warnings from the executor (e.g. due_at_in_past). */
+  /** Reminders created alongside the item (default = 1 if deadline_at set). */
+  reminders: z.array(itemReminderSnapshotSchema),
+  /** Soft warnings from the executor (e.g. deadline_at_in_past). */
   warnings: z.array(z.string()).optional(),
 });
 
@@ -107,6 +155,14 @@ export const searchItemsInputSchema = z.object({
   list_name: z.string().min(1).max(200).optional(),
   include_done: z.boolean().default(false),
   include_archived: z.boolean().default(false),
+  /**
+   * Restrict to items with at least one active (future, unsent)
+   * reminder in the `item_reminders` sibling table. `false` (default)
+   * = no filter. Use this to answer "hangi hatırlatıcılar var?" /
+   * "what reminders do I have?" — pair with empty `query` and no list
+   * scope to get a workspace-wide active-reminders list.
+   */
+  has_reminder: z.boolean().default(false),
   limit: z.number().int().min(1).max(50).default(20),
 });
 
@@ -130,30 +186,95 @@ export type SearchItemsOutput = z.infer<typeof searchItemsOutputSchema>;
 // ─── 3. update_item ─────────────────────────────────────────────────
 
 /**
- * `due_at: null` clears the reminder; omitting `due_at` leaves it
- * untouched. zod's nullable() permits explicit null, optional() permits
- * absence — combining them gives both.
+ * Phase 14d: `due_at` → `deadline_at` rename. `deadline_at: null`
+ * clears the deadline AND drops every `before_deadline` reminder for
+ * the item (orphan reminders are meaningless without an anchor).
+ * Absolute reminders survive a deadline clear. Omitting the field
+ * leaves the deadline untouched.
+ *
+ * Reminders themselves are mutated through `set_deadline` /
+ * `add_reminder` / `remove_reminder` — `update_item` no longer
+ * manipulates reminders.
  */
 export const updateItemInputSchema = z
   .object({
     item_id: z.string().uuid(),
     text: z.string().trim().min(1).max(2000).optional(),
-    due_at: z.string().datetime({ offset: true }).nullable().optional(),
+    /**
+     * Phase 14a: pass a string to set, explicit null to clear, omit
+     * to leave untouched. Empty string is normalized to null.
+     */
+    description: z.string().max(5000).nullable().optional(),
+    deadline_at: z.string().datetime({ offset: true }).nullable().optional(),
     position: z.number().int().nonnegative().optional(),
+    /**
+     * Move the item to a different list (same workspace). Pass either
+     * the destination list's UUID OR its human-readable name — name is
+     * resolved through the same exact/fuzzy matcher as `create_item`'s
+     * `list_name`. UUID wins when both are supplied. Use `list_name` by
+     * default; only reach for UUID when you've already resolved one
+     * from `list_lists`/`search_items`. NEVER fabricate a UUID.
+     */
+    target_list_id: z.string().uuid().optional(),
+    target_list_name: z.string().min(1).max(200).optional(),
+    /**
+     * Pin to top of the list (true) or remove the pin (false). Pinned
+     * items sort above all others by `pinned_at DESC` (independent of
+     * priority). Omit to leave the pin state unchanged.
+     */
+    pinned: z.boolean().optional(),
+    /**
+     * Task-level RFC 5545 RRULE. Pass a non-empty string (e.g.
+     * `FREQ=WEEKLY;BYDAY=TH` for "every Thursday") to make this item
+     * auto-resurrect on completion: the deadline advances to the
+     * rule's next occurrence, `is_done` resets, `status` flips back
+     * to `'open'`. Pass `null` to clear (one-shot task again). Omit
+     * to leave unchanged. Distinct from reminder recurrence, which
+     * only re-fires reminder pings without resurrecting the task.
+     */
+    task_recurrence_rule: z.string().trim().min(1).max(500).nullable().optional(),
+    /**
+     * Direct assignee assignment (Mini App fast path). Pass the
+     * target user's UUID; pass null to clear. The user MUST already
+     * be a list_member of the item's list (Inv-12). Bot path uses
+     * `assign_item({assignee_username})` which resolves usernames to
+     * IDs; this skips that step for UI surfaces that already have
+     * the user_id from the members query.
+     */
+    assignee_id: z.string().uuid().nullable().optional(),
   })
   .refine(
     (v) =>
-      v.text !== undefined || v.due_at !== undefined || v.position !== undefined,
+      v.text !== undefined ||
+      v.description !== undefined ||
+      v.deadline_at !== undefined ||
+      v.position !== undefined ||
+      v.target_list_id !== undefined ||
+      v.target_list_name !== undefined ||
+      v.pinned !== undefined ||
+      v.task_recurrence_rule !== undefined ||
+      v.assignee_id !== undefined,
     {
       message:
-        "at least one of text, due_at, or position must be supplied",
+        "at least one of text, description, deadline_at, position, target_list_id, target_list_name, pinned, task_recurrence_rule, or assignee_id must be supplied",
     },
   );
 
 export const updateItemOutputSchema = z.object({
   item: itemSnapshotSchema,
-  changes: z.array(z.enum(["text", "due_at", "position"])),
-  /** Soft warnings (e.g. due_at_in_past). */
+  changes: z.array(
+    z.enum([
+      "text",
+      "description",
+      "deadline_at",
+      "position",
+      "list_id",
+      "pinned",
+      "task_recurrence_rule",
+      "assignee_id",
+    ]),
+  ),
+  /** Soft warnings (e.g. deadline_at_in_past). */
   warnings: z.array(z.string()).optional(),
 });
 
@@ -170,6 +291,13 @@ export const completeItemInputSchema = z.object({
 export const completeItemOutputSchema = z.object({
   item: itemSnapshotSchema,
   was_done: z.boolean(),
+  /**
+   * Soft warnings. Phase X (2026-05-09): `task_recurred` fires when
+   * an item with `task_recurrence_rule` was "completed" but actually
+   * auto-resurrected — deadline advanced, is_done reset. The LLM
+   * should phrase the reply as "Tamam, sonraki: <new deadline>".
+   */
+  warnings: z.array(z.string()).optional(),
 });
 
 export type CompleteItemInput = z.infer<typeof completeItemInputSchema>;
@@ -233,6 +361,12 @@ export const createListInputSchema = z.object({
     .max(8)
     .nullable()
     .optional(),
+  /**
+   * Phase 16: when true, creates the list as a repeatable checklist.
+   * The Mini App renders simplified rows; "start a new run" resets
+   * every item back to status='open' and logs a `list_runs` row.
+   */
+  is_checklist: z.boolean().optional(),
 });
 
 export const createListOutputSchema = z.object({
@@ -240,6 +374,7 @@ export const createListOutputSchema = z.object({
     id: z.string().uuid(),
     name: z.string(),
     emoji: z.string().nullable(),
+    is_checklist: z.boolean(),
   }),
 });
 
@@ -258,21 +393,30 @@ export const updateListInputSchema = z
     list_name: z.string().min(1).max(120).optional(),
     name: z.string().trim().min(1).max(120).optional(),
     emoji: z.string().trim().min(1).max(8).nullable().optional(),
+    /** Phase 16: toggle checklist mode on/off. */
+    is_checklist: z.boolean().optional(),
   })
   .refine((v) => v.list_id !== undefined || v.list_name !== undefined, {
     message: "Either list_id or list_name is required",
   })
-  .refine((v) => v.name !== undefined || v.emoji !== undefined, {
-    message: "At least one of `name` or `emoji` must be supplied",
-  });
+  .refine(
+    (v) =>
+      v.name !== undefined ||
+      v.emoji !== undefined ||
+      v.is_checklist !== undefined,
+    {
+      message: "At least one of `name`, `emoji`, or `is_checklist` must be supplied",
+    },
+  );
 
 export const updateListOutputSchema = z.object({
   list: z.object({
     id: z.string().uuid(),
     name: z.string(),
     emoji: z.string().nullable(),
+    is_checklist: z.boolean(),
   }),
-  changes: z.array(z.enum(["name", "emoji"])),
+  changes: z.array(z.enum(["name", "emoji", "is_checklist"])),
 });
 
 export type UpdateListInput = z.infer<typeof updateListInputSchema>;
@@ -343,13 +487,35 @@ export const switchWorkspaceOutputSchema = z.object({
     id: z.string().uuid(),
     name: z.string(),
     slug: z.string(),
-    tier: z.enum(["free", "team", "workspace"]),
     role: z.enum(["owner", "admin", "editor", "viewer", "guest"]),
   }),
 });
 
 export type SwitchWorkspaceInput = z.infer<typeof switchWorkspaceInputSchema>;
 export type SwitchWorkspaceOutput = z.infer<typeof switchWorkspaceOutputSchema>;
+
+// ─── 6f.5. create_workspace ──────────────────────────────────────────
+//
+// Create a fresh workspace owned by the caller. Mirrors POST
+// /api/workspaces. The new workspace is NOT auto-activated; the LLM
+// should follow up with `switch_workspace` if the user clearly
+// intended to land there.
+
+export const createWorkspaceInputSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+});
+
+export const createWorkspaceOutputSchema = z.object({
+  workspace: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    slug: z.string(),
+    is_personal: z.boolean(),
+  }),
+});
+
+export type CreateWorkspaceInput = z.infer<typeof createWorkspaceInputSchema>;
+export type CreateWorkspaceOutput = z.infer<typeof createWorkspaceOutputSchema>;
 
 // ─── 6g. list_workspaces (Phase 4.5) ──────────────────────────────────
 //
@@ -365,7 +531,6 @@ export const listWorkspacesOutputSchema = z.object({
       id: z.string().uuid(),
       name: z.string(),
       slug: z.string(),
-      tier: z.enum(["free", "team", "workspace"]),
       is_personal: z.boolean(),
       role: z.enum(["owner", "admin", "editor", "viewer", "guest"]),
       member_count: z.number().int().nonnegative(),
@@ -380,9 +545,7 @@ export type ListWorkspacesOutput = z.infer<typeof listWorkspacesOutputSchema>;
 
 // ─── 6h. update_workspace (Phase 4.5) ─────────────────────────────────
 //
-// Owner-only rename. The slug auto-regenerates from the new name; the
-// `tier` field stays read-only (changing tier requires a billing
-// event, owned by Billing-agent).
+// Owner-only rename. The slug auto-regenerates from the new name.
 
 export const updateWorkspaceInputSchema = z
   .object({
@@ -407,10 +570,7 @@ export type UpdateWorkspaceOutput = z.infer<typeof updateWorkspaceOutputSchema>;
 // ─── 6i. invite_to_workspace (Phase 4.5) ──────────────────────────────
 //
 // Owner / admin invite a user to the active workspace. Phase 4.5
-// schema-only for shared workspaces (Team/Workspace tier) — Free
-// tier has only the Personal Workspace, so this tool returns
-// `tier_exceeded` log entries (and Phase 5 enforces). Mirrors
-// `share_list`'s deeplink + DM pattern.
+// Mirrors `share_list`'s deeplink + DM pattern but at workspace level.
 
 export const inviteToWorkspaceInputSchema = z.object({
   username: z
@@ -429,12 +589,6 @@ export const inviteToWorkspaceOutputSchema = z.object({
   }),
   invitedUsername: z.string(),
   role: z.enum(["admin", "editor", "viewer", "guest"]),
-  /**
-   * Phase 4.5 ships the schema; the actual invite-token + DM flow
-   * lands when shared workspaces become creatable in Phase 5. Until
-   * then this returns `pending_phase_5` for Free-tier callers; tier
-   * middleware logs the attempt.
-   */
   status: z.enum(["invite_sent", "already_member", "pending_phase_5"]),
   warnings: z.array(z.string()).optional(),
 });
@@ -567,17 +721,27 @@ export const updateSettingsInputSchema = z
       .enum([
         "anthropic/claude-haiku-4.5",
         "anthropic/claude-sonnet-4",
+        "anthropic/claude-sonnet-4.5",
         "anthropic/claude-opus-4.7",
+        "openai/gpt-4o-mini",
+        "openai/gpt-4o",
+        "openai/o1-mini",
         "google/gemini-2.5-flash",
         "google/gemini-2.5-pro",
-        "openai/gpt-4o-mini",
+        "x-ai/grok-3",
+        "deepseek/deepseek-chat",
+        "deepseek/deepseek-r1",
+        "meta-llama/llama-3.3-70b-instruct",
       ])
       .optional(),
     notifications_enabled: z.boolean().optional(),
+    /** Phase 14c: display preferences. */
+    date_format: z.enum(["DD.MM.YYYY", "MM/DD/YYYY", "YYYY-MM-DD"]).optional(),
+    time_format: z.enum(["24h", "12h"]).optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
     message:
-      "At least one of locale, timezone, llm_model, or notifications_enabled must be supplied",
+      "At least one of locale, timezone, llm_model, notifications_enabled, date_format, or time_format must be supplied",
   });
 
 export const updateSettingsOutputSchema = z.object({
@@ -585,8 +749,17 @@ export const updateSettingsOutputSchema = z.object({
   timezone: z.string(),
   llm_model: z.string(),
   notifications_enabled: z.boolean(),
+  date_format: z.enum(["DD.MM.YYYY", "MM/DD/YYYY", "YYYY-MM-DD"]),
+  time_format: z.enum(["24h", "12h"]),
   changes: z.array(
-    z.enum(["locale", "timezone", "llm_model", "notifications_enabled"]),
+    z.enum([
+      "locale",
+      "timezone",
+      "llm_model",
+      "notifications_enabled",
+      "date_format",
+      "time_format",
+    ]),
   ),
 });
 
@@ -692,6 +865,35 @@ export const shareListOutputSchema = z.object({
 export type ShareListInput = z.infer<typeof shareListInputSchema>;
 export type ShareListOutput = z.infer<typeof shareListOutputSchema>;
 
+// ─── 7c. create_snapshot — generate a public read-only snapshot URL ───
+//
+// Owner-only; Inbox cannot be snapshotted. Returns an HMAC-signed URL
+// (default 30-day expiry) plus the matching markdown-ready text body
+// the bot can post in the chat as a forwardable card. The URL targets
+// `/snapshot/<listId>?sig=<hmac>&exp=<unix>` on the marketing surface
+// (no auth required to view).
+
+export const createSnapshotInputSchema = z
+  .object({
+    list_id: z.string().uuid().optional(),
+    list_name: z.string().min(1).max(200).optional(),
+  })
+  .refine((v) => v.list_id !== undefined || v.list_name !== undefined, {
+    message: "one of list_id or list_name must be supplied",
+    path: ["list_id"],
+  });
+
+export const createSnapshotOutputSchema = z.object({
+  list: listLiteSchema,
+  /** Public snapshot URL; embeds list_id + signed `sig`/`exp` query. */
+  url: z.string(),
+  /** ISO 8601 expiry (default now + 30 days). */
+  expiresAt: z.string().datetime({ offset: true }),
+});
+
+export type CreateSnapshotInput = z.infer<typeof createSnapshotInputSchema>;
+export type CreateSnapshotOutput = z.infer<typeof createSnapshotOutputSchema>;
+
 // ─── 7d. cancel_invite — revoke a PENDING invite (owner-only) ─────────
 //
 // Closes the gap surfaced when users said "ayselin davetini iptal et":
@@ -732,37 +934,270 @@ export const cancelInviteOutputSchema = z.object({
 export type CancelInviteInput = z.infer<typeof cancelInviteInputSchema>;
 export type CancelInviteOutput = z.infer<typeof cancelInviteOutputSchema>;
 
-// ─── 8. schedule_reminder (Phase 3) ─────────────────────────────────
+// ─── 8. set_deadline (Phase 14d) ────────────────────────────────────
 //
-// Thin semantic wrapper over `update_item` for the due_at column.
-// Per Architect's contract (§ schedule_reminder), the input is just
-// `item_id` + `due_at` — no list/text resolution path. If the user's
-// reference is fuzzy ("Sapiens'i pazartesi 09:00'da hatırlatsın"),
-// the LLM is expected to call `search_items` first to obtain the
-// `item_id`, then call this tool. `due_at: null` (explicit) clears
-// the reminder; omission → `invalid_input`.
+// Set or clear an item's deadline. Replaces the deadline-half of the
+// retired `schedule_reminder` tool. Distinct from reminders —
+// reminders are managed by `add_reminder` / `remove_reminder`.
+//
+// `deadline_at: null` (explicit) clears the deadline AND drops every
+// `before_deadline` reminder for the item (orphan reminders are
+// meaningless without an anchor). Absolute reminders survive a clear.
+// Omitting the field → `invalid_input` (set vs clear must be explicit).
+//
+// When the deadline moves, every `before_deadline` reminder for that
+// item has its `remind_at` recomputed in lock-step inside the same
+// transaction. Recomputed reminders re-arm (sent reset to false) so a
+// pushed-out deadline still pings — the user's intent on the new
+// deadline is the new ping context.
 
-export const scheduleReminderInputSchema = z.object({
+export const setDeadlineInputSchema = z.object({
   item_id: z.string().uuid(),
-  /**
-   * ISO 8601 with offset to set; explicit null to clear. Required
-   * (omission → `invalid_input`) — the difference between "set" and
-   * "clear" must be explicit so we don't conflate them.
-   */
-  due_at: z.string().datetime({ offset: true }).nullable(),
+  /** ISO 8601 with offset to set; explicit null to clear. */
+  deadline_at: z.string().datetime({ offset: true }).nullable(),
 });
 
-export const scheduleReminderOutputSchema = z.object({
-  /** Post-update snapshot; reminder_sent reset to false on set. */
+export const setDeadlineOutputSchema = z.object({
   item: itemSnapshotSchema,
-  /** True when the call cleared a previously-set due_at. */
+  /** Post-update reminders for the item — reflects the recompute. */
+  reminders: z.array(itemReminderSnapshotSchema),
+  /** True when the call cleared a previously-set deadline. */
   cleared: z.boolean(),
-  /** Soft warnings (e.g. due_at_in_past). */
+  /** Soft warnings (e.g. deadline_at_in_past). */
   warnings: z.array(z.string()).optional(),
 });
 
-export type ScheduleReminderInput = z.infer<typeof scheduleReminderInputSchema>;
-export type ScheduleReminderOutput = z.infer<typeof scheduleReminderOutputSchema>;
+export type SetDeadlineInput = z.infer<typeof setDeadlineInputSchema>;
+export type SetDeadlineOutput = z.infer<typeof setDeadlineOutputSchema>;
+
+// ─── 8b. add_reminder (Phase 14d) ───────────────────────────────────
+//
+// Append a reminder to an item. An item can have arbitrarily many
+// reminders. Two kinds:
+//   - 'absolute': pass `remind_at` (ISO 8601 with offset). May be
+//     paired with `recurrence_rule` (RFC 5545 RRULE body, no prefix).
+//   - 'before_deadline': pass `offset_minutes` (int ≥0). Requires the
+//     item to already have a deadline; the actual `remind_at` is
+//     computed as `items.deadline_at - offset_minutes` and recomputed
+//     when the deadline moves. Recurrence is NOT allowed for this
+//     kind (use absolute + RRULE if you need recurring offsets).
+//
+// XOR enforced via refine: provide exactly one of `remind_at` /
+// `offset_minutes`. RRULE on offset → invalid_input.
+
+export const addReminderInputSchema = z
+  .object({
+    item_id: z.string().uuid(),
+    /** Absolute reminder time. ISO 8601 with offset. */
+    remind_at: z.string().datetime({ offset: true }).optional(),
+    /**
+     * Minutes BEFORE the item's deadline to fire. Requires
+     * `items.deadline_at` to be non-null at the time of the call.
+     * 0 ≤ offset ≤ 525600 (one year).
+     */
+    offset_minutes: z.number().int().min(0).max(525600).optional(),
+    /**
+     * Optional RFC 5545 RRULE body (no `RRULE:` prefix, no DTSTART).
+     * Only allowed when `remind_at` is provided. Times in the rule are
+     * interpreted in UTC — convert local times accordingly. Pass null
+     * or omit for one-shot.
+     *
+     * Examples:
+     *   - "every Wednesday at 21:00 Europe/Istanbul" (no DST):
+     *       FREQ=WEEKLY;BYDAY=WE;BYHOUR=18;BYMINUTE=0
+     *   - "every weekday at 09:00 UTC":
+     *       FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;BYMINUTE=0
+     */
+    recurrence_rule: z.string().trim().min(1).max(500).nullable().optional(),
+  })
+  .refine(
+    (v) => (v.remind_at !== undefined) !== (v.offset_minutes !== undefined),
+    {
+      message: "Provide exactly one of remind_at or offset_minutes.",
+      path: ["remind_at"],
+    },
+  )
+  .refine(
+    (v) => !(v.offset_minutes !== undefined && v.recurrence_rule != null),
+    {
+      message: "recurrence_rule is only allowed with absolute reminders.",
+      path: ["recurrence_rule"],
+    },
+  );
+
+export const addReminderOutputSchema = z.object({
+  reminder: itemReminderSnapshotSchema,
+  /** Echo back the resolved kind so the LLM phrases correctly. */
+  kind: z.enum(["absolute", "before_deadline"]),
+  /** Soft warnings (e.g. remind_at_in_past). */
+  warnings: z.array(z.string()).optional(),
+});
+
+export type AddReminderInput = z.infer<typeof addReminderInputSchema>;
+export type AddReminderOutput = z.infer<typeof addReminderOutputSchema>;
+
+// ─── 8d. attach_file_to_item (Phase 14b) ────────────────────────────
+//
+// Bind a Telegram file to an existing item. The bot pre-extracts file
+// metadata from the inbound message and surfaces it to the LLM as a
+// system overlay tag (`[ATTACHMENT_CONTEXT: file_id=... kind=...]`)
+// so the LLM can call this tool with `file_id` it didn't fabricate.
+//
+// Flow when the user sends a file with a caption:
+//   1. Bot intake parses the message → extract file_id + metadata.
+//   2. LLM gets the caption as user input + the [ATTACHMENT_CONTEXT].
+//   3. LLM typically calls `create_item(text=caption)` then
+//      `attach_file_to_item(item_id=<new>, file_id=<from-context>, ...)`.
+//   4. Executor: Inv-1 transactional INSERT + activity_log row.
+//
+// `attachment.id` is returned so a follow-up `remove_reminder`-like
+// surface (or future `remove_attachment`) can reference it.
+
+export const attachFileToItemInputSchema = z.object({
+  item_id: z.string().uuid(),
+  /** Telegram message field that produced the file. */
+  kind: z.enum([
+    "photo",
+    "video",
+    "document",
+    "audio",
+    "voice",
+    "video_note",
+  ]),
+  /** Bot-scoped Telegram file_id; comes from [ATTACHMENT_CONTEXT]. */
+  file_id: z.string().min(1).max(256),
+  /** Bot-stable cross-bot id; used for per-item dedup. */
+  file_unique_id: z.string().min(1).max(64).optional(),
+  mime_type: z.string().max(128).optional(),
+  /** Bytes; capped at the Telegram per-bot 2GB ceiling. */
+  file_size: z.number().int().positive().max(2_000_000_000).optional(),
+  duration: z.number().int().nonnegative().max(86_400).optional(),
+  width: z.number().int().positive().max(8192).optional(),
+  height: z.number().int().positive().max(8192).optional(),
+  thumbnail_file_id: z.string().max(256).optional(),
+  filename: z.string().max(256).optional(),
+});
+
+export const attachFileToItemOutputSchema = z.object({
+  attachment: z.object({
+    id: z.string().uuid(),
+    item_id: z.string().uuid(),
+    kind: z.enum([
+      "photo",
+      "video",
+      "document",
+      "audio",
+      "voice",
+      "video_note",
+    ]),
+    mime_type: z.string().nullable(),
+    file_size: z.number().nullable(),
+    original_filename: z.string().nullable(),
+  }),
+  item: itemSnapshotSchema,
+});
+
+export type AttachFileToItemInput = z.infer<typeof attachFileToItemInputSchema>;
+export type AttachFileToItemOutput = z.infer<typeof attachFileToItemOutputSchema>;
+
+// ─── 8e. start_checklist_run (Phase 16) ─────────────────────────────
+//
+// Open a new run on a checklist list. If a run is already active, it
+// is auto-completed first (snapshot stats captured). Then every item
+// in the list gets `status='open'` + `is_done=false` + `completed_at=null`
+// so the user starts the new run with a clean slate. A
+// `list_runs` row is inserted with `started_by_user_id = caller`.
+//
+// Errors:
+//   - `not_a_checklist`: the resolved list has `is_checklist=false`.
+//   - standard: `not_found`, `forbidden`, `ambiguous_list`.
+
+export const startChecklistRunInputSchema = z
+  .object({
+    list_id: z.string().uuid().optional(),
+    list_name: z.string().min(1).max(200).optional(),
+  })
+  .refine((v) => v.list_id !== undefined || v.list_name !== undefined, {
+    message: "Either list_id or list_name is required",
+  });
+
+export const startChecklistRunOutputSchema = z.object({
+  list: listLiteSchema,
+  /** Newly opened run. */
+  run: z.object({
+    id: z.string().uuid(),
+    list_id: z.string().uuid(),
+    started_at: z.string().datetime({ offset: true }),
+    items_total: z.number().int().nonnegative(),
+  }),
+  /** Run that was auto-completed before opening, if any. */
+  closed_previous_run_id: z.string().uuid().nullable(),
+  items_reset: z.number().int().nonnegative(),
+});
+
+export type StartChecklistRunInput = z.infer<
+  typeof startChecklistRunInputSchema
+>;
+export type StartChecklistRunOutput = z.infer<
+  typeof startChecklistRunOutputSchema
+>;
+
+// ─── 8f. complete_checklist_run (Phase 16) ──────────────────────────
+//
+// Close the active run on a checklist list. Captures the
+// items_completed stat at completion time. Idempotent: returns the
+// existing closed run if no active run exists. Items are NOT reset on
+// complete — only on `start_checklist_run`.
+
+export const completeChecklistRunInputSchema = z
+  .object({
+    list_id: z.string().uuid().optional(),
+    list_name: z.string().min(1).max(200).optional(),
+  })
+  .refine((v) => v.list_id !== undefined || v.list_name !== undefined, {
+    message: "Either list_id or list_name is required",
+  });
+
+export const completeChecklistRunOutputSchema = z.object({
+  list: listLiteSchema,
+  run: z
+    .object({
+      id: z.string().uuid(),
+      list_id: z.string().uuid(),
+      started_at: z.string().datetime({ offset: true }),
+      completed_at: z.string().datetime({ offset: true }),
+      items_total: z.number().int().nonnegative(),
+      items_completed: z.number().int().nonnegative(),
+    })
+    .nullable(),
+  /** True when the active run was closed, false when there was none. */
+  closed: z.boolean(),
+});
+
+export type CompleteChecklistRunInput = z.infer<
+  typeof completeChecklistRunInputSchema
+>;
+export type CompleteChecklistRunOutput = z.infer<
+  typeof completeChecklistRunOutputSchema
+>;
+
+// ─── 8c. remove_reminder (Phase 14d) ────────────────────────────────
+//
+// Delete a single reminder by id. Item write-permission required
+// (executor verifies via the parent item's list). Does NOT touch the
+// item's deadline.
+
+export const removeReminderInputSchema = z.object({
+  reminder_id: z.string().uuid(),
+});
+
+export const removeReminderOutputSchema = z.object({
+  reminder_id: z.string().uuid(),
+  item_id: z.string().uuid(),
+});
+
+export type RemoveReminderInput = z.infer<typeof removeReminderInputSchema>;
+export type RemoveReminderOutput = z.infer<typeof removeReminderOutputSchema>;
 
 // ─── 9. assign_item (Phase 3) ───────────────────────────────────────
 //
@@ -828,14 +1263,24 @@ export const TOOL_NAMES = [
   "delete_list",
   "restore_list",
   "share_list",
+  "create_snapshot",
   "cancel_invite",
   "list_members",
   "remove_member",
   "update_member_role",
   "update_settings",
-  "schedule_reminder",
+  // Phase 14d: split deadline / reminder tools
+  "set_deadline",
+  "add_reminder",
+  "remove_reminder",
+  // Phase 14b: file attachments
+  "attach_file_to_item",
+  // Phase 16: checklists
+  "start_checklist_run",
+  "complete_checklist_run",
   "assign_item",
   // Phase 4.5: workspace + item-discipline tools
+  "create_workspace",
   "switch_workspace",
   "list_workspaces",
   "update_workspace",
@@ -860,10 +1305,18 @@ export const tools: readonly ToolDefinition[] = [
       "human-readable name; if both are absent OR the name doesn't " +
       "match exactly one list, the item lands in the user's Inbox. " +
       "`is_checkable` defaults to true (todo); set false for notes — " +
-      "notes can't have a `due_at` and can't be completed. `due_at` " +
-      "must be ISO 8601 in the future; past times are silently dropped " +
-      "with a warning. Use this for any 'add', 'note', 'remind me' " +
-      "intent.",
+      "notes can't have a `deadline_at` and can't be completed. " +
+      "`description` is optional long-form context (≤5000 chars) for " +
+      "notes / links / multi-line bodies — DO NOT use it as a summary " +
+      "of `text`. Keep `text` short (the title) and put extra detail " +
+      "in `description`. Plain text only; markdown is not rendered. " +
+      "`deadline_at` must be ISO 8601 in the future; past times are " +
+      "silently dropped with a warning. When `deadline_at` is set, " +
+      "the executor also creates one default absolute reminder at the " +
+      "same moment so the user gets pinged when the item is due. To " +
+      "add additional reminders or before-deadline reminders, follow " +
+      "up with `add_reminder` calls. Use this for any 'add', 'note', " +
+      "'remind me' intent.",
     inputSchema: createItemInputSchema,
     outputSchema: createItemOutputSchema,
   },
@@ -878,20 +1331,50 @@ export const tools: readonly ToolDefinition[] = [
       "`list_id`) to scope to a single list. Without any list scope, " +
       "searches across every list the user is a member of. By default " +
       "completed and archived items are excluded; pass `include_done` " +
-      "or `include_archived: true` to broaden. Returns items with " +
-      "their list context plus the list of scanned lists.",
+      "or `include_archived: true` to broaden. Pass `has_reminder: true` " +
+      "to restrict to items with at least one ACTIVE FUTURE reminder " +
+      "(unsent row in `item_reminders` whose remind_at is still in the " +
+      "future) — use this for 'hangi hatırlatıcılar var?' / 'what " +
+      "reminders do I have?'. Returns items with their list context " +
+      "plus the list of scanned lists.",
     inputSchema: searchItemsInputSchema,
     outputSchema: searchItemsOutputSchema,
   },
   {
     name: "update_item",
     description:
-      "Edit an existing item's text, due date, or position. At least " +
-      "one of `text`, `due_at`, or `position` must be supplied. Pass " +
-      "`due_at: null` (explicit) to CLEAR a reminder; omitting `due_at` " +
-      "leaves it unchanged. Past `due_at` values are silently dropped " +
-      "with a warning. `changes` in the output names the fields that " +
-      "actually changed — use it to phrase a precise confirmation.",
+      "Edit an existing item's text, description, deadline, position, MOVE it to " +
+      "a different list (same workspace), or PIN it to top. At least " +
+      "one of `text`, `deadline_at`, `position`, `target_list_id`, " +
+      "`target_list_name`, or `pinned` must be supplied. To MOVE: " +
+      "pass `target_list_name` (e.g. \"Inbox\", \"Muhasebe\") — the " +
+      "executor resolves the name like `create_item` does (exact → " +
+      "fuzzy → Inbox fallback). Use `target_list_id` only when you " +
+      "already have the UUID from a prior `list_lists`/`search_items` " +
+      "call. NEVER fabricate a UUID. To PIN: pass `pinned: true` " +
+      "(stamps `pinned_at = now()`); the item floats to top of its " +
+      "list, sorted by `pinned_at DESC` independent of priority. Pass " +
+      "`pinned: false` to UNPIN. Phrasings: \"sabitle\", \"pin to top\", " +
+      "\"sabitlemeyi kaldır\", \"unpin\". History + completion state " +
+      "preserved (always prefer over delete+recreate). Pass " +
+      "`description: '<text>'` to set or `description: null` to clear " +
+      "the long-form body. " +
+      "`deadline_at: null` to CLEAR the deadline (also drops " +
+      "before-deadline reminders); omitting leaves it unchanged. " +
+      "Past `deadline_at` silently dropped with warning. To manage " +
+      "REMINDERS (set/clear ping moments), use `set_deadline` / " +
+      "`add_reminder` / `remove_reminder` — `update_item` no longer " +
+      "touches reminders. " +
+      "Pass `task_recurrence_rule` (RFC 5545 RRULE body, no `RRULE:` " +
+      "prefix) to make the item AUTO-RESURRECT when completed: on " +
+      "complete, deadline advances to the next occurrence and " +
+      "is_done resets. Phrasings: \"her hafta perşembe yenile\" → " +
+      "`FREQ=WEEKLY;BYDAY=TH`; \"her ay 1'i\" → " +
+      "`FREQ=MONTHLY;BYMONTHDAY=1`; \"her gün\" → `FREQ=DAILY`. Pass " +
+      "`task_recurrence_rule: null` to clear (one-shot again). " +
+      "Distinct from reminder recurrence (`add_reminder`'s " +
+      "recurrence_rule) which only re-pings without resurrecting. " +
+      "`changes` names the fields that actually changed.",
     inputSchema: updateItemInputSchema,
     outputSchema: updateItemOutputSchema,
   },
@@ -1006,6 +1489,22 @@ export const tools: readonly ToolDefinition[] = [
     outputSchema: shareListOutputSchema,
   },
   {
+    name: "create_snapshot",
+    description:
+      "Generate a public read-only snapshot URL for a list — anyone " +
+      "with the link can view its current contents (no login required). " +
+      "Use for phrasings like \"X listesi için snapshot link al\", " +
+      "\"share a snapshot of my reading list\", \"link to send to a " +
+      "friend\". Identify the list by `list_name` when known (preferred), " +
+      "else `list_id`. Owner-only — non-owners get `forbidden`. Inbox " +
+      "cannot be snapshotted (`cannot_snapshot_inbox`). Snapshots expire " +
+      "after 30 days (`expiresAt` in output) and re-issuing returns a " +
+      "fresh URL. Echo the URL back verbatim in your reply; the page " +
+      "renders the same items list the user sees in the Mini App.",
+    inputSchema: createSnapshotInputSchema,
+    outputSchema: createSnapshotOutputSchema,
+  },
+  {
     name: "cancel_invite",
     description:
       "Revoke a PENDING invite that share_list created earlier (OWNER-" +
@@ -1071,39 +1570,138 @@ export const tools: readonly ToolDefinition[] = [
       "`locale` ('tr' | 'en'), `timezone` (IANA name like 'Europe/" +
       "Istanbul' / 'America/New_York'), `llm_model` (preset list), " +
       "`notifications_enabled` (boolean — when false, reminder DMs are " +
-      "suppressed). At least one must be supplied. Use this when the " +
-      "user says 'saat dilimi İstanbul olsun' / 'use Istanbul time' / " +
-      "'set my timezone' / 'change to English' / 'turn off reminders'. " +
-      "BYOK API key cannot be set this way (security: chat history " +
-      "would persist the secret) — direct the user to the Mini App " +
-      "settings page for that. Output `changes` lists fields that " +
-      "actually changed; use it to phrase a precise confirmation.",
+      "suppressed), `date_format` ('DD.MM.YYYY' | 'MM/DD/YYYY' | " +
+      "'YYYY-MM-DD'), `time_format` ('24h' | '12h'). At least one " +
+      "must be supplied. Use this when the user says 'saat dilimi " +
+      "İstanbul olsun' / 'use Istanbul time' / 'set my timezone' / " +
+      "'change to English' / 'turn off reminders' / 'tarih formatını " +
+      "MM/DD/YYYY yap' / 'switch to 12-hour clock'. BYOK API key " +
+      "cannot be set this way (security: chat history would persist " +
+      "the secret) — direct the user to the Mini App settings page " +
+      "for that. Output `changes` lists fields that actually changed; " +
+      "use it to phrase a precise confirmation.",
     inputSchema: updateSettingsInputSchema,
     outputSchema: updateSettingsOutputSchema,
   },
   {
-    name: "schedule_reminder",
+    name: "set_deadline",
     description:
-      "Set, change, or clear the due_at on an EXISTING item — does " +
-      "NOT create new items. Pass `item_id` (resolve via `search_items` " +
-      "first if you only have item text) plus either `due_at` (ISO " +
-      "8601 with timezone offset, in the future) to schedule, or " +
-      "`due_at: null` (explicit) to clear. The reminder fires as a " +
-      "Telegram DM at the given time (UTC-aligned within ±60 s); if " +
-      "the item has an assignee, the DM goes to the assignee, " +
-      "otherwise to the item's creator. Past `due_at` values are " +
-      "silently dropped with warning `due_at_in_past` — surface the " +
-      "correction gently and re-prompt the user for a future time, " +
-      "do not refuse. Notes (`is_checkable=false`) cannot be " +
-      "scheduled (`cannot_schedule_note`). Re-arming an already-fired " +
-      "reminder works — the executor resets `reminder_sent` to false. " +
-      "If you want to create a fresh item WITH a reminder, call " +
-      "`create_item` with `due_at` instead — `schedule_reminder` is " +
-      "for already-existing items only. Common error envelopes: " +
-      "`not_found`, `forbidden`, `invalid_input` " +
-      "(`cannot_schedule_note`).",
-    inputSchema: scheduleReminderInputSchema,
-    outputSchema: scheduleReminderOutputSchema,
+      "Set or clear an item's deadline — the moment the item is due. " +
+      "Distinct from reminders: deadlines mark the due moment, " +
+      "reminders are when to PING. Pass `item_id` (resolve via " +
+      "`search_items` first if you only have item text) and " +
+      "`deadline_at` (ISO 8601 with offset to set, or explicit null " +
+      "to clear). Past values are silently dropped with warning " +
+      "`deadline_at_in_past` — re-prompt for a future time. Notes " +
+      "(`is_checkable=false`) cannot have a deadline " +
+      "(`cannot_schedule_note`). When the deadline moves, every " +
+      "`before_deadline` reminder for the item is recomputed " +
+      "automatically — DO NOT delete+recreate them. Clearing the " +
+      "deadline (`deadline_at: null`) drops every `before_deadline` " +
+      "reminder for the item; absolute reminders survive. Use this " +
+      "for 'son tarihi cuma 18:00 yap' / 'deadline'ı pazartesi sabaha " +
+      "al' / 'son tarihi kaldır'. To create a NEW item with a " +
+      "deadline, call `create_item` with `deadline_at` instead.",
+    inputSchema: setDeadlineInputSchema,
+    outputSchema: setDeadlineOutputSchema,
+  },
+  {
+    name: "add_reminder",
+    description:
+      "Append a reminder to an item — separate from the deadline. An " +
+      "item may have arbitrarily many reminders. Pass `item_id` and " +
+      "EXACTLY ONE of:\n" +
+      "  - `remind_at` (ISO 8601 with offset) → an ABSOLUTE reminder " +
+      "    at a fixed moment. May include `recurrence_rule` (RFC 5545 " +
+      "    RRULE body, no `RRULE:` prefix) to recur. Times in RRULE " +
+      "    are interpreted in UTC — convert local times before " +
+      "    emitting (e.g. `21:00 Europe/Istanbul = 18:00 UTC`).\n" +
+      "  - `offset_minutes` (int ≥0) → a BEFORE-DEADLINE reminder. " +
+      "    Requires `items.deadline_at` to be non-null at call time. " +
+      "    The reminder fires `offset_minutes` before the deadline " +
+      "    and re-anchors automatically when the deadline moves. " +
+      "    Recurrence is NOT allowed for this kind.\n" +
+      "Use `add_reminder` for utterances like 'perşembe 09:00 da " +
+      "ping at', '1 gün önce hatırlat', 'her hafta içi 09:00'da " +
+      "uyandır'. Past `remind_at` is dropped with warning " +
+      "`remind_at_in_past`. Examples of RRULE: weekly Wednesday 18:00 " +
+      "UTC = `FREQ=WEEKLY;BYDAY=WE;BYHOUR=18;BYMINUTE=0`; weekday " +
+      "daily 09:00 UTC = `FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;" +
+      "BYMINUTE=0`. Common error envelopes: `not_found`, `forbidden`, " +
+      "`deadline_required` (offset reminder on item with no deadline), " +
+      "`invalid_input` (XOR violation, RRULE on offset).",
+    inputSchema: addReminderInputSchema,
+    outputSchema: addReminderOutputSchema,
+  },
+  {
+    name: "remove_reminder",
+    description:
+      "Delete a single reminder by id. Pass `reminder_id` (UUID). Use " +
+      "`search_items` to find the parent item, then read its " +
+      "`reminders` array to find the id; for 'hatırlatmayı kaldır' " +
+      "without disambiguation, ask the user which one if there are " +
+      "multiple. Does NOT touch the item's deadline. Common error " +
+      "envelopes: `not_found`, `forbidden`.",
+    inputSchema: removeReminderInputSchema,
+    outputSchema: removeReminderOutputSchema,
+  },
+  {
+    name: "attach_file_to_item",
+    description:
+      "Bind a file the user just sent in chat to an EXISTING item. " +
+      "The bot intake layer pre-extracts file metadata into a system " +
+      "overlay `[ATTACHMENT_CONTEXT: file_id=<...> kind=<...> " +
+      "mime=<...> ...]` on the same user turn — pull `file_id` and " +
+      "the other metadata from THERE. NEVER fabricate file_ids. " +
+      "Required inputs: `item_id`, `kind` (one of 'photo', 'video', " +
+      "'document', 'audio', 'voice', 'video_note'), `file_id`. " +
+      "Optional inputs: `file_unique_id` (used for dedup; if omitted, " +
+      "a re-send creates a duplicate row), `mime_type`, `file_size`, " +
+      "`duration`, `width`, `height`, `thumbnail_file_id`, `filename`. " +
+      "Typical flow when the user sends a file with caption 'Süt al': " +
+      "first call `create_item(text='Süt al')`, then call " +
+      "`attach_file_to_item` with the new `item_id` and the file_id " +
+      "from the [ATTACHMENT_CONTEXT]. When the user sends a file " +
+      "without a clear caption ('hangi maddeye?'), ask which item — " +
+      "do not fabricate text. To attach to an existing item the user " +
+      "named ('bu fotoyu süt'e ekle'), call `search_items` first to " +
+      "resolve the id, then this tool.",
+    inputSchema: attachFileToItemInputSchema,
+    outputSchema: attachFileToItemOutputSchema,
+  },
+  {
+    name: "start_checklist_run",
+    description:
+      "Open a new run on a checklist list. Use when the user says " +
+      "'sabah rutinine başla', 'pre-flight check başlat', 'reset the " +
+      "morning checklist', 'çalıştır şu kontrol listesini'. Pass " +
+      "`list_id` (preferred) or `list_name` to identify the list — " +
+      "the resolved list MUST have `is_checklist=true` (otherwise " +
+      "returns `not_a_checklist` and the LLM should ask the user to " +
+      "convert it via `update_list({is_checklist: true})` first). " +
+      "Side effects: any active run is auto-completed (stats " +
+      "snapshot captured), then every item is reset to `status='open'` " +
+      "+ `is_done=false`, then a new `list_runs` row opens. The " +
+      "user's existing item descriptions / deadlines / reminders / " +
+      "tags are preserved — only state resets. Reply with something " +
+      "like 'X listesinde {N} maddenin tamamı sıfırlandı, yeni run " +
+      "başlatıldı'.",
+    inputSchema: startChecklistRunInputSchema,
+    outputSchema: startChecklistRunOutputSchema,
+  },
+  {
+    name: "complete_checklist_run",
+    description:
+      "Close the active run on a checklist list WITHOUT resetting " +
+      "items. Use when the user says 'rutini bitirdim', 'mark the " +
+      "checklist run done', 'kapat şu kontrol listesini'. Captures " +
+      "`items_completed` stat for the run history. Idempotent: when " +
+      "no active run exists the call returns `closed: false` with " +
+      "`run: null` — phrase that as 'aktif run yoktu' rather than " +
+      "an error. To start a fresh pass, call `start_checklist_run` " +
+      "instead — it auto-completes the active run AND resets items.",
+    inputSchema: completeChecklistRunInputSchema,
+    outputSchema: completeChecklistRunOutputSchema,
   },
   {
     name: "assign_item",
@@ -1127,6 +1725,19 @@ export const tools: readonly ToolDefinition[] = [
       "`not_found`, `invalid_input`.",
     inputSchema: assignItemInputSchema,
     outputSchema: assignItemOutputSchema,
+  },
+  {
+    name: "create_workspace",
+    description:
+      "Create a brand new workspace owned by the caller. Use when the " +
+      "user says 'yeni workspace oluştur', 'new workspace', 'create a " +
+      "workspace called <name>'. Pass `name` (1-120 chars). Returns " +
+      "the new workspace shape; the new workspace is NOT auto-active " +
+      "— if the user clearly intended to switch into it (e.g. 'iş " +
+      "diye yeni workspace aç ve oraya geç'), call `switch_workspace` " +
+      "with the returned `workspace.id` next.",
+    inputSchema: createWorkspaceInputSchema,
+    outputSchema: createWorkspaceOutputSchema,
   },
   {
     name: "switch_workspace",
@@ -1159,29 +1770,20 @@ export const tools: readonly ToolDefinition[] = [
     name: "update_workspace",
     description:
       "Rename the active workspace. OWNER-ONLY. Pass `name` (1-120). " +
-      "The slug auto-regenerates. Tier change is NOT supported via " +
-      "this tool — that flows through billing. Use when the user " +
-      "says 'workspace adını <X> yap' / 'rename my workspace to <X>'. " +
-      "Personal Workspace can be renamed freely; the `is_personal` " +
-      "flag stays.",
+      "The slug auto-regenerates. Use when the user says 'workspace " +
+      "adını <X> yap' / 'rename my workspace to <X>'. Personal " +
+      "Workspace can be renamed freely; the `is_personal` flag stays.",
     inputSchema: updateWorkspaceInputSchema,
     outputSchema: updateWorkspaceOutputSchema,
   },
   {
     name: "invite_to_workspace",
     description:
-      "Invite a Telegram user to the active workspace as `admin` " +
-      "(Workspace tier only), `editor` (default), `viewer`, or " +
-      "`guest`. OWNER + ADMIN can call. Operates on the user's " +
-      "ACTIVE workspace — no list_id / list_name argument; switch " +
-      "workspaces first if needed. Pass `username` (with or without " +
-      "leading @ — case is normalized).\n\n" +
-      "Phase 4.5: Free tier users can call this against their " +
-      "Personal Workspace but the executor returns " +
-      "`pending_phase_5` since multi-member workspaces require " +
-      "Team or Workspace tier; tier middleware logs the attempt. " +
-      "Phase 5 enforces tier limits and ships the actual invite-" +
-      "token + DM flow.\n\n" +
+      "Invite a Telegram user to the active workspace as `admin`, " +
+      "`editor` (default), `viewer`, or `guest`. OWNER + ADMIN can " +
+      "call. Operates on the user's ACTIVE workspace — no list_id / " +
+      "list_name argument; switch workspaces first if needed. Pass " +
+      "`username` (with or without leading @ — case is normalized).\n\n" +
       "Distinct from `share_list` which adds a member to a SINGLE " +
       "list. Workspace-level invites grant access to ALL lists in " +
       "the workspace via the workspace_members membership.",

@@ -28,10 +28,10 @@ import { getRecentMessages, insertMessages } from "@/lib/db/queries/messages";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import {
   getWorkspaceOrgKeyEncrypted,
+  getWorkspaceOwnerTelegramId,
   listWorkspacesForUser,
   resolveActiveWorkspaceId,
 } from "@/lib/db/queries/workspaces";
-import { checkMemberCap, recordLlmUsage } from "@/lib/db/queries/llm-usage";
 import { enforceRateLimit } from "@/lib/server/middleware/rate-limit";
 import { sliceForContext } from "@/lib/ai/conversation";
 import { forwardedMessagePrompt } from "@/lib/ai/prompts/forwarded";
@@ -43,6 +43,7 @@ import {
 import { decrypt } from "@/lib/server/encryption";
 import { createToolDispatcher } from "@/lib/server/tools/dispatcher";
 import { pickLocale } from "@/lib/server/bot/i18n";
+import { transcribeAudioFromTelegram } from "@/lib/server/bot/stt";
 
 import type {
   ConversationMessage,
@@ -68,12 +69,12 @@ const COPY = {
     transientError: "Bir şeyler ters gitti, tekrar dener misin?",
     forwardedNoText:
       "İletilen mesajda metin bulamadım — sadece metinli mesajlardan madde çıkarabilirim.",
-    capDaily:
-      "Bu workspace'te günlük harcama limitin doldu. Kendi OpenRouter key'ini ekle ya da yarın tekrar dene.",
-    capMonthly:
-      "Bu workspace'te aylık harcama limitin doldu. Kendi OpenRouter key'ini ekle ya da workspace yöneticine sor.",
     rateLimited:
       "Çok fazla mesaj — biraz yavaşla. Saatlik limitin doldu, biraz sonra tekrar dene.",
+    transcribeFailed: "Sesini yazıya çeviremedim, tekrar dener misin?",
+    audioTooLong:
+      "Ses kaydı çok uzun (15 MB üstü). Daha kısa bir kayıt gönder.",
+    audioEmpty: "Ses kaydında konuşma duyamadım, tekrar dener misin?",
   },
   en: {
     noKey:
@@ -83,14 +84,198 @@ const COPY = {
     transientError: "Something went wrong — try again?",
     forwardedNoText:
       "I didn't find any text in the forwarded message — I can only extract items from messages with text.",
-    capDaily:
-      "Your daily spend cap on this workspace is exhausted. Add your own OpenRouter key or try again tomorrow.",
-    capMonthly:
-      "Your monthly spend cap on this workspace is exhausted. Add your own OpenRouter key or ask the workspace admin.",
     rateLimited:
       "Too many messages — slow down. Your hourly limit is exhausted; try again shortly.",
+    transcribeFailed: "I couldn't transcribe that audio — try again?",
+    audioTooLong: "That audio is too large (over 15 MB). Send a shorter clip.",
+    audioEmpty: "I didn't hear any speech in that audio — try again?",
   },
 } as const;
+
+/**
+ * Phase 14b: extract attachment metadata from a Telegram message.
+ *
+ * Returns `null` for messages without any attachment, otherwise the
+ * shape the LLM consumes via the `[ATTACHMENT_CONTEXT: ...]` overlay
+ * AND the `attach_file_to_item` tool consumes verbatim.
+ *
+ * Photos: largest size variant wins (Telegram returns an array of
+ * progressively larger thumbnails; the last entry is the original).
+ * Videos / documents / audio: the single object on `message.<kind>`.
+ * Voice / video_note: same shape; treated as audio for transcription
+ * downstream (Phase 13).
+ */
+export type AttachmentExtract = {
+  kind:
+    | "photo"
+    | "video"
+    | "document"
+    | "audio"
+    | "voice"
+    | "video_note";
+  fileId: string;
+  fileUniqueId: string;
+  mimeType?: string;
+  fileSize?: number;
+  duration?: number;
+  width?: number;
+  height?: number;
+  thumbnailFileId?: string;
+  filename?: string;
+};
+
+export function extractAttachmentFromMessage(
+  message: unknown,
+): AttachmentExtract | null {
+  if (!message || typeof message !== "object") return null;
+  const m = message as Record<string, unknown>;
+
+  // Photos: pick the largest variant (last in the array per Telegram).
+  if (Array.isArray(m.photo) && m.photo.length > 0) {
+    const largest = m.photo[m.photo.length - 1] as Record<string, unknown>;
+    if (typeof largest.file_id === "string") {
+      return {
+        kind: "photo",
+        fileId: largest.file_id,
+        fileUniqueId:
+          typeof largest.file_unique_id === "string"
+            ? largest.file_unique_id
+            : "",
+        fileSize:
+          typeof largest.file_size === "number" ? largest.file_size : undefined,
+        width: typeof largest.width === "number" ? largest.width : undefined,
+        height: typeof largest.height === "number" ? largest.height : undefined,
+      };
+    }
+  }
+
+  const oneOf = (key: string): Record<string, unknown> | null => {
+    const v = m[key];
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+  };
+
+  const video = oneOf("video");
+  if (video && typeof video.file_id === "string") {
+    const thumb = oneOf("video.thumb") ?? (video.thumb as Record<string, unknown> | undefined);
+    return {
+      kind: "video",
+      fileId: video.file_id,
+      fileUniqueId:
+        typeof video.file_unique_id === "string" ? video.file_unique_id : "",
+      mimeType: typeof video.mime_type === "string" ? video.mime_type : undefined,
+      fileSize: typeof video.file_size === "number" ? video.file_size : undefined,
+      duration:
+        typeof video.duration === "number" ? video.duration : undefined,
+      width: typeof video.width === "number" ? video.width : undefined,
+      height: typeof video.height === "number" ? video.height : undefined,
+      thumbnailFileId:
+        thumb && typeof thumb.file_id === "string" ? thumb.file_id : undefined,
+      filename:
+        typeof video.file_name === "string" ? video.file_name : undefined,
+    };
+  }
+
+  const doc = oneOf("document");
+  if (doc && typeof doc.file_id === "string") {
+    const thumb = doc.thumb as Record<string, unknown> | undefined;
+    return {
+      kind: "document",
+      fileId: doc.file_id,
+      fileUniqueId:
+        typeof doc.file_unique_id === "string" ? doc.file_unique_id : "",
+      mimeType: typeof doc.mime_type === "string" ? doc.mime_type : undefined,
+      fileSize: typeof doc.file_size === "number" ? doc.file_size : undefined,
+      thumbnailFileId:
+        thumb && typeof thumb.file_id === "string" ? thumb.file_id : undefined,
+      filename: typeof doc.file_name === "string" ? doc.file_name : undefined,
+    };
+  }
+
+  const audio = oneOf("audio");
+  if (audio && typeof audio.file_id === "string") {
+    return {
+      kind: "audio",
+      fileId: audio.file_id,
+      fileUniqueId:
+        typeof audio.file_unique_id === "string" ? audio.file_unique_id : "",
+      mimeType: typeof audio.mime_type === "string" ? audio.mime_type : undefined,
+      fileSize: typeof audio.file_size === "number" ? audio.file_size : undefined,
+      duration:
+        typeof audio.duration === "number" ? audio.duration : undefined,
+      filename: typeof audio.file_name === "string" ? audio.file_name : undefined,
+    };
+  }
+
+  const voice = oneOf("voice");
+  if (voice && typeof voice.file_id === "string") {
+    return {
+      kind: "voice",
+      fileId: voice.file_id,
+      fileUniqueId:
+        typeof voice.file_unique_id === "string" ? voice.file_unique_id : "",
+      mimeType: typeof voice.mime_type === "string" ? voice.mime_type : undefined,
+      fileSize: typeof voice.file_size === "number" ? voice.file_size : undefined,
+      duration:
+        typeof voice.duration === "number" ? voice.duration : undefined,
+    };
+  }
+
+  const note = oneOf("video_note");
+  if (note && typeof note.file_id === "string") {
+    return {
+      kind: "video_note",
+      fileId: note.file_id,
+      fileUniqueId:
+        typeof note.file_unique_id === "string" ? note.file_unique_id : "",
+      fileSize: typeof note.file_size === "number" ? note.file_size : undefined,
+      duration:
+        typeof note.duration === "number" ? note.duration : undefined,
+    };
+  }
+
+  return null;
+}
+
+/** Localized fallback when an attachment came in without text/caption. */
+function labelKindTr(kind: AttachmentExtract["kind"]): string {
+  switch (kind) {
+    case "photo":
+      return "Fotoğraf";
+    case "video":
+      return "Video";
+    case "document":
+      return "Belge";
+    case "audio":
+      return "Ses dosyası";
+    case "voice":
+      return "Sesli mesaj";
+    case "video_note":
+      return "Video notu";
+  }
+}
+
+/**
+ * Format an `AttachmentExtract` into the system overlay tag the LLM
+ * sees on the same user turn. The LLM is instructed (tool description)
+ * to pull `file_id` and metadata from this tag verbatim before
+ * invoking `attach_file_to_item` — never fabricated.
+ */
+export function formatAttachmentContext(att: AttachmentExtract): string {
+  const parts: string[] = [
+    `kind=${att.kind}`,
+    `file_id=${att.fileId}`,
+  ];
+  if (att.fileUniqueId) parts.push(`file_unique_id=${att.fileUniqueId}`);
+  if (att.mimeType) parts.push(`mime_type=${att.mimeType}`);
+  if (att.fileSize !== undefined) parts.push(`file_size=${att.fileSize}`);
+  if (att.duration !== undefined) parts.push(`duration=${att.duration}`);
+  if (att.width !== undefined) parts.push(`width=${att.width}`);
+  if (att.height !== undefined) parts.push(`height=${att.height}`);
+  if (att.thumbnailFileId)
+    parts.push(`thumbnail_file_id=${att.thumbnailFileId}`);
+  if (att.filename) parts.push(`filename=${att.filename}`);
+  return `[ATTACHMENT_CONTEXT: ${parts.join(" ")}]`;
+}
 
 /**
  * Phase 4 / A3: pull a human-readable sender label out of the grammY
@@ -138,6 +323,24 @@ export async function handleMessage(ctx: Context): Promise<void> {
   if (!from || !message) return;
 
   const text = message.text ?? "";
+  const caption =
+    typeof (message as { caption?: unknown }).caption === "string"
+      ? ((message as { caption: string }).caption as string)
+      : "";
+  // Phase 14b: photos / videos / documents / audio / voice / video_note
+  // arrive without `.text`. Caption (if any) is the user's intent.
+  const rawAttachment = extractAttachmentFromMessage(message);
+  // Phase 13: voice / audio / video_note are INPUT mode (the user
+  // speaking instead of typing) — we transcribe and feed the text
+  // through the existing LLM pipeline. They DO NOT create attachment
+  // rows. Photo / video / document keep the Phase 14b attachment path.
+  const isVoiceInput =
+    rawAttachment !== null &&
+    (rawAttachment.kind === "voice" ||
+      rawAttachment.kind === "audio" ||
+      rawAttachment.kind === "video_note");
+  // `let` so the voice branch below can override after STT.
+  let attachment = isVoiceInput ? null : rawAttachment;
   // Forwarded messages take a different path: the LLM sees a single-purpose
   // extraction system prompt + bounded round-trip cap (Inv-16). We branch
   // BEFORE the slash-command guard so a forwarded `/something` body is
@@ -145,10 +348,24 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // sender's authored text only, never a forward).
   const forward = readForwardOrigin(message);
 
+  // Effective user text: prefer `text`, then `caption` for media-only
+  // messages. When neither is present BUT an attachment exists, the
+  // LLM gets a stand-in placeholder so it can ask "hangi maddeye?".
+  // Voice input replaces this after STT lands below.
+  let effectiveText = text || caption;
+
   // Slash commands are handled by `bot.command()` registrations; defensive
-  // guard for empty text. Forwards skip this guard — forwarded text may
-  // legitimately start with `/`.
-  if (!forward && (!text || text.startsWith("/"))) {
+  // guard for empty input. Skip this guard for: (a) forwards, (b) any
+  // message carrying a photo/video/document attachment (we want to
+  // route to the LLM with the attachment context overlay even if the
+  // caption is empty), (c) voice/audio/video_note (Phase 13 — STT path
+  // produces text from the audio).
+  if (
+    !forward &&
+    !attachment &&
+    !isVoiceInput &&
+    (!effectiveText || effectiveText.startsWith("/"))
+  ) {
     return;
   }
 
@@ -180,18 +397,14 @@ export async function handleMessage(ctx: Context): Promise<void> {
     }
   }
 
-  // BYOK gate (with operator-level fallback per architecture.md AI section):
-  //   1. User's BYOK key wins when set
-  //   2. Otherwise, env.OPENROUTER_API_KEY (operator-level) is used
-  //   3. If neither, surface the noKey copy
-  // OpenRouter API key resolution chain (Phase 5.5 G6):
+  // OpenRouter API key resolution chain (post-billing-tear-out):
   //   1. user's personal BYOK (users.openrouter_api_key_encrypted)
-  //   2. workspace org-key (Workspace tier admin set one)
-  //   3. operator fallback (env.OPENROUTER_API_KEY) — self-host only
+  //   2. workspace org-key (workspaces.openrouter_api_key_encrypted)
+  //   3. operator fallback (env.OPENROUTER_API_KEY) — ONLY when the
+  //      active workspace's owner.telegram_id matches
+  //      env.OPERATOR_TELEGRAM_ID. Without that match the env key is
+  //      not used; users must BYOK or rely on a workspace org-key.
   //   4. nothing → reply with noKey copy
-  //
-  // The active workspace is resolved here too so org-key lookup
-  // can happen before we tell the user "no key configured."
   const workspaceId = await resolveActiveWorkspaceId(user.id);
 
   let apiKey: string | null = null;
@@ -224,9 +437,12 @@ export async function handleMessage(ctx: Context): Promise<void> {
     }
   }
 
-  if (apiKey === null && env.OPENROUTER_API_KEY) {
-    apiKey = env.OPENROUTER_API_KEY;
-    keySource = "operator";
+  if (apiKey === null && env.OPENROUTER_API_KEY && env.OPERATOR_TELEGRAM_ID) {
+    const ownerTelegramId = await getWorkspaceOwnerTelegramId(workspaceId);
+    if (ownerTelegramId === env.OPERATOR_TELEGRAM_ID) {
+      apiKey = env.OPENROUTER_API_KEY;
+      keySource = "operator";
+    }
   }
 
   if (apiKey === null || keySource === null) {
@@ -234,19 +450,40 @@ export async function handleMessage(ctx: Context): Promise<void> {
     return;
   }
 
-  // Phase 8 cap gate: only enforced when the workspace org-key is
-  // funding the call. Personal BYOK + operator fallback bypass caps
-  // (the spend isn't workspace-borne).
-  if (keySource === "workspace") {
-    const cap = await checkMemberCap(workspaceId, user.id);
-    if (!cap.ok) {
-      await ctx.reply(
-        cap.reason === "daily_cap_exceeded"
-          ? copy.capDaily
-          : copy.capMonthly,
-      );
+  // Phase 13: voice / audio / video_note → STT, then continue through
+  // the regular text path with the transcript as the user message.
+  // We drop the file_id from `attachment` so the Phase 14b attachment
+  // overlay path doesn't fire — voice is INPUT, not file storage.
+  if (isVoiceInput && rawAttachment) {
+    try {
+      await ctx.replyWithChatAction("typing");
+    } catch {
+      // Best-effort UI affordance; never blocks STT.
+    }
+    const stt = await transcribeAudioFromTelegram({
+      ctx,
+      fileId: rawAttachment.fileId,
+      kind: rawAttachment.kind as "voice" | "audio" | "video_note",
+      mimeType: rawAttachment.mimeType ?? null,
+      apiKey,
+      locale,
+      appTitle: "listbull",
+    });
+    if ("error" in stt) {
+      const errCopy =
+        stt.error === "too_long"
+          ? copy.audioTooLong
+          : stt.error === "empty"
+            ? copy.audioEmpty
+            : copy.transcribeFailed;
+      await ctx.reply(errCopy);
       return;
     }
+    // Transcribed text becomes the user turn. The 🎤 marker is
+    // persisted to messages.content so /reset history makes the
+    // voice origin recognizable without a new column.
+    effectiveText = `🎤 ${stt.text}`;
+    attachment = null;
   }
 
   if (forward) {
@@ -260,7 +497,6 @@ export async function handleMessage(ctx: Context): Promise<void> {
       ctx,
       user,
       apiKey,
-      keySource,
       forwardedFrom: forward.forwardedFrom,
       forwardedText: text,
       copy,
@@ -269,13 +505,29 @@ export async function handleMessage(ctx: Context): Promise<void> {
     return;
   }
 
+  // Phase 14b: when an attachment came in, the user-visible text we
+  // persist is the caption (or a generic placeholder) — clean for
+  // history. The LLM input gets an extra system-overlay tag so the
+  // model has the file_id to call `attach_file_to_item` with.
+  let llmContent = effectiveText;
+  let persistedContent = effectiveText;
+  if (attachment) {
+    const placeholder =
+      locale === "tr"
+        ? `[${labelKindTr(attachment.kind)} gönderildi]`
+        : `[${attachment.kind} sent]`;
+    if (!persistedContent) persistedContent = placeholder;
+    const overlay = formatAttachmentContext(attachment);
+    llmContent = `${effectiveText || placeholder}\n\n${overlay}`;
+  }
+
   // Persist the inbound user message immediately. This way `/reset`
   // and audit log have a stable record even if the LLM call fails.
   const userMessageRow: NewMessage = {
     userId: user.id,
     chatId,
     role: "user",
-    content: text,
+    content: persistedContent,
     toolCalls: null,
     toolCallId: null,
   };
@@ -287,7 +539,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // Append the new user turn to the sliced history before calling LLM.
   const messagesForLlm: ConversationMessage[] = [
     ...history,
-    { role: "user", content: text },
+    { role: "user", content: llmContent },
   ];
 
   // Persist user message + invoke LLM.
@@ -319,7 +571,6 @@ export async function handleMessage(ctx: Context): Promise<void> {
       workspaces: workspaceSummary.map((w) => ({
         id: w.id,
         name: w.name,
-        tier: w.tier,
         role: w.role,
         isPersonal: w.isPersonal,
         isActive: w.isActive,
@@ -331,26 +582,6 @@ export async function handleMessage(ctx: Context): Promise<void> {
     assistantText = result.assistantText;
     persisted = result.persistedMessages;
     toolCalls = result.toolCalls;
-
-    // Phase 7: persist LLM usage telemetry. Best-effort — failures
-    // here mustn't block the user-visible reply path.
-    try {
-      await recordLlmUsage({
-        userId: user.id,
-        workspaceId,
-        model: user.llmModel,
-        promptTokens: result.usage.promptTokens,
-        completionTokens: result.usage.completionTokens,
-        // Phase 9: prefer provider-reported cost when available;
-        // recordLlmUsage falls back to MODEL_PRICING when omitted.
-        costUsdMicro: result.usage.providerReportedCost
-          ? result.usage.costUsdMicro
-          : undefined,
-        keySource,
-      });
-    } catch (err) {
-      console.warn("[bot/handle-message] recordLlmUsage failed", err);
-    }
   } catch (error) {
     console.error("[bot/handle-message] respond() threw", error);
     await ctx.reply(copy.transientError);
@@ -498,7 +729,6 @@ async function handleForwardedMessage(args: {
   ctx: Context;
   user: User;
   apiKey: string;
-  keySource: "user" | "workspace" | "operator";
   forwardedFrom: string;
   forwardedText: string;
   copy: (typeof COPY)[keyof typeof COPY];
@@ -508,7 +738,6 @@ async function handleForwardedMessage(args: {
     ctx,
     user,
     apiKey,
-    keySource,
     forwardedFrom,
     forwardedText,
     copy,
@@ -561,7 +790,6 @@ async function handleForwardedMessage(args: {
       workspaces: workspaceSummary.map((w) => ({
         id: w.id,
         name: w.name,
-        tier: w.tier,
         role: w.role,
         isPersonal: w.isPersonal,
         isActive: w.isActive,
@@ -572,28 +800,6 @@ async function handleForwardedMessage(args: {
     });
     assistantText = result.assistantText;
     persisted = result.persistedMessages;
-
-    // Phase 7: persist LLM usage telemetry (best-effort).
-    try {
-      await recordLlmUsage({
-        userId: user.id,
-        workspaceId,
-        model: user.llmModel,
-        promptTokens: result.usage.promptTokens,
-        completionTokens: result.usage.completionTokens,
-        // Phase 9: prefer provider-reported cost when available;
-        // recordLlmUsage falls back to MODEL_PRICING when omitted.
-        costUsdMicro: result.usage.providerReportedCost
-          ? result.usage.costUsdMicro
-          : undefined,
-        keySource,
-      });
-    } catch (err) {
-      console.warn(
-        "[bot/handle-message] forwarded recordLlmUsage failed",
-        err,
-      );
-    }
   } catch (error) {
     console.error("[bot/handle-message] forwarded respond() threw", error);
     await ctx.reply(copy.transientError);

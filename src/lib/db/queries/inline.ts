@@ -91,3 +91,63 @@ export async function searchInlineItems(
     listEmoji: r.listEmoji,
   }));
 }
+
+export type InlineListRow = {
+  listId: string;
+  listName: string;
+  listEmoji: string | null;
+  /** Open (un-done, un-archived) item count, for the result subtitle. */
+  openCount: number;
+};
+
+/**
+ * Fetch up to `INLINE_RESULT_CAP` lists for the inline-query surface.
+ *
+ * - `query` empty → most-recently-created lists across the user's
+ *   memberships.
+ * - `query` non-empty → ILIKE `%query%` on `lists.name`, ranked by
+ *   `lists.created_at` desc.
+ *
+ * Skips archived lists. Includes a per-list `openCount` so the result
+ * card can render "5 open" / "5 açık". The count is computed in a
+ * subquery rather than a JOIN so the row count stays bounded.
+ */
+export async function searchInlineLists(
+  userId: string,
+  query: string,
+): Promise<InlineListRow[]> {
+  const trimmed = query.trim();
+  const conds = [
+    eq(listMembers.userId, userId),
+    isNull(lists.archivedAt),
+  ];
+  if (trimmed.length > 0) {
+    const escaped = escapeLike(trimmed);
+    conds.push(sql`${lists.name} ILIKE ${"%" + escaped + "%"}`);
+  }
+
+  const rows = await db
+    .select({
+      listId: lists.id,
+      listName: lists.name,
+      listEmoji: lists.emoji,
+      openCount: sql<number>`(
+        SELECT count(*)::int FROM ${items}
+        WHERE ${items.listId} = ${lists.id}
+          AND ${items.isDone} = false
+          AND ${items.archivedAt} IS NULL
+      )`,
+    })
+    .from(lists)
+    .innerJoin(listMembers, eq(listMembers.listId, lists.id))
+    .where(and(...conds))
+    .orderBy(desc(lists.createdAt))
+    .limit(INLINE_RESULT_CAP);
+
+  return rows.map((r) => ({
+    listId: r.listId,
+    listName: r.listName,
+    listEmoji: r.listEmoji,
+    openCount: r.openCount,
+  }));
+}

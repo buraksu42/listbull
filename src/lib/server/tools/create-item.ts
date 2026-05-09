@@ -10,12 +10,20 @@ import "server-only";
 import { desc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { activityLog, items } from "@/lib/db/schema";
+import { activityLog, itemReminders, items } from "@/lib/db/schema";
 import {
   createItemInputSchema,
   type CreateItemOutput,
 } from "@/lib/ai/tools";
-import { ERR, err, isPast, ok, resolveList, toItemSnapshot } from "./_shared";
+import {
+  ERR,
+  err,
+  isPast,
+  ok,
+  resolveList,
+  toItemReminderSnapshot,
+  toItemSnapshot,
+} from "./_shared";
 
 import type { ExecResult } from "./_shared";
 
@@ -27,7 +35,8 @@ export async function executeCreateItem(
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
-  const { text, list_id, list_name, due_at, is_checkable } = parsed.data;
+  const { text, description, list_id, list_name, deadline_at, is_checkable } =
+    parsed.data;
 
   // List resolution lives outside the transaction — read-only and
   // doesn't need to share the write's snapshot. Inv-3 + Inv-2.
@@ -54,18 +63,19 @@ export async function executeCreateItem(
   const targetListId = resolution.listId;
   const warnings: string[] = [];
 
-  // Past due_at → drop the field, surface a warning. Per the contract,
-  // past times never set a reminder.
-  let dueAt: Date | null = null;
-  if (due_at !== undefined) {
-    if (isPast(due_at)) {
-      warnings.push("due_at_in_past");
+  // Past deadline_at → drop the field, surface a warning. Per the
+  // contract, past times never set a deadline.
+  let deadlineAt: Date | null = null;
+  if (deadline_at !== undefined) {
+    if (isPast(deadline_at)) {
+      warnings.push("deadline_at_in_past");
     } else {
-      dueAt = new Date(due_at);
+      deadlineAt = new Date(deadline_at);
     }
   }
-  // Notes can't have due_at (already enforced by zod refine, but defense in depth).
-  if (!is_checkable) dueAt = null;
+  // Notes can't have deadline (already enforced by zod refine, but
+  // defense in depth).
+  if (!is_checkable) deadlineAt = null;
 
   return await db.transaction(async (tx) => {
     // Compute next position: max+1 within the list (active items only).
@@ -77,14 +87,27 @@ export async function executeCreateItem(
       .limit(1);
     const nextPosition = (maxRow?.position ?? -1) + 1;
 
+    // Empty string → null (no implicit description). Trim before
+    // storage so leading/trailing whitespace doesn't trigger the
+    // "has description" indicator.
+    const normalizedDescription =
+      description === undefined
+        ? null
+        : description === null
+          ? null
+          : description.trim().length > 0
+            ? description.trim()
+            : null;
+
     const [created] = await tx
       .insert(items)
       .values({
         listId: targetListId,
         text,
+        description: normalizedDescription,
         isCheckable: is_checkable,
         isDone: false,
-        dueAt,
+        deadlineAt,
         position: nextPosition,
         createdBy: ctx.userId,
       })
@@ -103,6 +126,38 @@ export async function executeCreateItem(
       payloadAfter: snapshot,
     });
 
+    // Phase 14d: when the user provides a deadline at create time,
+    // also create one default absolute reminder anchored at the
+    // deadline. Preserves the legacy UX where setting a due date
+    // implies a ping. The user can add more reminders via
+    // `add_reminder` afterward.
+    const reminders = [];
+    if (deadlineAt !== null) {
+      const [reminder] = await tx
+        .insert(itemReminders)
+        .values({
+          itemId: created.id,
+          remindAt: deadlineAt,
+          kind: "absolute",
+          offsetMinutes: null,
+          recurrenceRule: null,
+          sent: false,
+        })
+        .returning();
+      if (reminder) {
+        reminders.push(toItemReminderSnapshot(reminder));
+        await tx.insert(activityLog).values({
+          listId: targetListId,
+          entityType: "item",
+          entityId: created.id,
+          action: "item_reminder_added",
+          actorId: ctx.userId,
+          payloadBefore: null,
+          payloadAfter: toItemReminderSnapshot(reminder),
+        });
+      }
+    }
+
     return ok({
       item: snapshot,
       list: {
@@ -110,6 +165,7 @@ export async function executeCreateItem(
         name: resolution.listName,
         emoji: resolution.emoji,
       },
+      reminders,
       ...(warnings.length > 0 ? { warnings } : {}),
     });
   });

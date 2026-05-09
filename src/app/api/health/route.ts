@@ -4,7 +4,6 @@ import { Redis } from "@upstash/redis";
 
 import { db } from "@/lib/db/client";
 import { getBot } from "@/lib/server/bot";
-import { getStripe } from "@/lib/billing/stripe";
 import { env } from "@/lib/env";
 
 export const runtime = "nodejs";
@@ -16,8 +15,8 @@ type SubsystemStatus = "ok" | "error" | "skipped";
  * Public health endpoint. UptimeRobot keyword check matches
  * `"status":"ok"` — we keep top-level status='ok' as long as the
  * REQUIRED subsystems are healthy (db + bot). Optional subsystems
- * (Redis, Stripe) surface in the JSON for operator visibility but
- * don't fail the keyword check.
+ * (Redis) surface in the JSON for operator visibility but don't
+ * fail the keyword check.
  *
  * Auth-exempt — basic-auth or session gate breaks uptime monitoring.
  */
@@ -25,7 +24,6 @@ export async function GET() {
   const dbStatus = await pingDb();
   const botStatus = await pingBot();
   const redisStatus = await pingRedis();
-  const stripeStatus = pingStripe();
 
   // Top-level "ok" = required subsystems healthy. Optional ones
   // affect the json detail but not the keyword.
@@ -36,7 +34,6 @@ export async function GET() {
     db: dbStatus,
     bot: botStatus,
     redis: redisStatus,
-    stripe: stripeStatus,
     ts: Date.now(),
   } as const;
 
@@ -83,12 +80,4 @@ async function pingRedis(): Promise<SubsystemStatus> {
     console.error("[health] redis ping failed", error);
     return "error";
   }
-}
-
-function pingStripe(): SubsystemStatus {
-  // Stripe SDK init alone doesn't hit network; we just check the
-  // client constructs cleanly. A real ping would cost an API call
-  // every health check — too noisy for a 5-min UptimeRobot interval.
-  if (!getStripe()) return "skipped";
-  return "ok";
 }

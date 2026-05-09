@@ -25,7 +25,9 @@ import type { InlineQueryResultArticle } from "grammy/types";
 
 import {
   INLINE_RESULT_CAP,
+  type InlineListRow,
   searchInlineItems,
+  searchInlineLists,
 } from "@/lib/db/queries/inline";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
@@ -57,13 +59,35 @@ export async function handleInlineQuery(ctx: Context): Promise<void> {
   }
 
   const locale = pickLocale(user.locale);
-  const rows = await searchInlineItems(user.id, inline.query ?? "");
+  const query = inline.query ?? "";
+  const [itemRows, listRows] = await Promise.all([
+    searchInlineItems(user.id, query),
+    searchInlineLists(user.id, query),
+  ]);
 
-  const articles: InlineQueryResultArticle[] = rows.map((row) => {
+  // Lists first (the user is more likely to want a whole list when the
+  // query matches a list name precisely), items after — both capped
+  // collectively at INLINE_RESULT_CAP*2 hard ceiling so Telegram's 50
+  // result max stays clear.
+  const listArticles: InlineQueryResultArticle[] = listRows.map((row) => {
+    const result = mapListToInlineResult(row, locale);
+    return {
+      type: "article",
+      id: `list:${result.id}`,
+      title: result.title,
+      description: result.description,
+      input_message_content: {
+        message_text: result.deeplink,
+        link_preview_options: { is_disabled: false },
+      },
+    };
+  });
+
+  const itemArticles: InlineQueryResultArticle[] = itemRows.map((row) => {
     const result = mapRowToInlineResult(row, locale);
     return {
       type: "article",
-      id: result.id,
+      id: `item:${result.id}`,
       title: result.title,
       description: result.description,
       input_message_content: {
@@ -74,10 +98,41 @@ export async function handleInlineQuery(ctx: Context): Promise<void> {
     };
   });
 
-  await ctx.answerInlineQuery(articles, {
+  await ctx.answerInlineQuery([...listArticles, ...itemArticles], {
     cache_time: CACHE_SECONDS,
     is_personal: true,
   });
+}
+
+/**
+ * Pure transform — list result mapper. Mirrors mapRowToInlineResult
+ * for symmetric testability.
+ */
+export function mapListToInlineResult(
+  row: InlineListRow,
+  locale: "tr" | "en",
+): InlineQueryResult {
+  const emoji = row.listEmoji ?? "📋";
+  const titleRaw = `${emoji} ${row.listName}`.replace(/\s+/g, " ").trim();
+  const title = titleRaw.length > TITLE_MAX
+    ? `${titleRaw.slice(0, TITLE_MAX - 1)}…`
+    : titleRaw;
+
+  const description =
+    locale === "tr"
+      ? `${row.openCount} açık öğe · liste`
+      : `${row.openCount} open · list`;
+
+  const startapp = `list_${row.listId}`;
+  const deeplink = `https://t.me/${env.TELEGRAM_BOT_USERNAME}?startapp=${startapp}`;
+
+  return {
+    id: row.listId,
+    type: "article",
+    title,
+    description,
+    deeplink,
+  };
 }
 
 /**

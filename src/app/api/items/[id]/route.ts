@@ -10,6 +10,7 @@ import { getSessionUserId } from "@/lib/auth/session";
 import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
 import { executeCompleteItem } from "@/lib/server/tools/complete-item";
 import { executeDeleteItem } from "@/lib/server/tools/delete-item";
+import { executeSetItemAttributes } from "@/lib/server/tools/set-item-attributes";
 import { executeUpdateItem } from "@/lib/server/tools/update-item";
 import {
   deleteItemParamsSchema,
@@ -65,14 +66,26 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
       { status: 400 },
     );
   }
-  const { text, isDone, position, dueAt } = parsed.data;
+  const {
+    text,
+    description,
+    isDone,
+    position,
+    deadlineAt,
+    status,
+    priority,
+    tags,
+    pinned,
+    taskRecurrenceRule,
+    assigneeId,
+  } = parsed.data;
 
   const workspaceId = await resolveActiveWorkspaceId(userId);
 
-  // The Mini App body can carry `isDone` AND text/position/dueAt edits
-  // in the same request. We dispatch:
+  // The Mini App body can carry `isDone` AND text/position/deadlineAt
+  // edits in the same request. We dispatch:
   //   - `isDone` change → `executeCompleteItem` (its own activity row).
-  //   - `text` / `position` / `dueAt` changes → `executeUpdateItem`.
+  //   - `text` / `position` / `deadlineAt` changes → `executeUpdateItem`.
   // Both share the same DB; sequencing keeps each call's transaction
   // atomic (we accept the slightly weaker "two transactions" guarantee
   // for combined edits — the bot path almost never combines them).
@@ -84,16 +97,27 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
 
   if (
     text !== undefined ||
+    description !== undefined ||
     position !== undefined ||
-    dueAt !== undefined
+    deadlineAt !== undefined ||
+    pinned !== undefined ||
+    taskRecurrenceRule !== undefined ||
+    assigneeId !== undefined
   ) {
     const updateResult = await executeUpdateItem(
       {
         item_id: id,
         text,
         position,
-        // dueAt may be `null` (clear), undefined (skip), or string.
-        ...(dueAt !== undefined ? { due_at: dueAt } : {}),
+        // description may be `null` (clear), undefined (skip), or string.
+        ...(description !== undefined ? { description } : {}),
+        // deadlineAt may be `null` (clear), undefined (skip), or string.
+        ...(deadlineAt !== undefined ? { deadline_at: deadlineAt } : {}),
+        ...(pinned !== undefined ? { pinned } : {}),
+        ...(taskRecurrenceRule !== undefined
+          ? { task_recurrence_rule: taskRecurrenceRule }
+          : {}),
+        ...(assigneeId !== undefined ? { assignee_id: assigneeId } : {}),
       },
       { userId, workspaceId },
     );
@@ -116,6 +140,24 @@ export async function PATCH(request: Request, { params }: RouteCtx) {
       });
     }
     lastResult = completeResult;
+  }
+
+  if (status !== undefined || priority !== undefined || tags !== undefined) {
+    const attrsResult = await executeSetItemAttributes(
+      {
+        item_id: id,
+        ...(status !== undefined ? { status } : {}),
+        ...(priority !== undefined ? { priority } : {}),
+        ...(tags !== undefined ? { tags } : {}),
+      },
+      { userId, workspaceId },
+    );
+    if (!attrsResult.ok) {
+      return NextResponse.json(attrsResult, {
+        status: errorCodeToStatus(attrsResult.error.code),
+      });
+    }
+    lastResult = attrsResult;
   }
 
   if (lastResult === null) {

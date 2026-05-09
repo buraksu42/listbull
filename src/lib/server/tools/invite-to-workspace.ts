@@ -34,7 +34,6 @@ import {
   inviteToWorkspaceInputSchema,
   type InviteToWorkspaceOutput,
 } from "@/lib/ai/tools";
-import { enforceTier } from "@/lib/server/middleware/tier-enforce";
 import { getBot, getBotById } from "@/lib/server/bot";
 import { escapeMarkdownV2 } from "@/lib/server/bot/escape-markdown";
 import { pickLocale } from "@/lib/server/bot/i18n";
@@ -87,7 +86,6 @@ export async function executeInviteToWorkspace(
       id: workspaces.id,
       name: workspaces.name,
       slug: workspaces.slug,
-      tier: workspaces.tier,
       isPersonal: workspaces.isPersonal,
     })
     .from(workspaces)
@@ -150,27 +148,6 @@ export async function executeInviteToWorkspace(
         status: "already_member",
       });
     }
-  }
-
-  // Tier check (logs in Phase 4.5; rejects in Phase 5+ with
-  // BILLING_ENFORCE=true).
-  const memberCount =
-    (
-      await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(workspaceMembers)
-        .where(eq(workspaceMembers.workspaceId, ctx.workspaceId))
-    )[0]?.count ?? 0;
-
-  const tierResult = await enforceTier(ctx.workspaceId, {
-    type: "invite_member",
-    currentMemberCount: memberCount,
-  });
-  if (tierResult.enforced) {
-    return err(
-      tierResult.reason,
-      tierResult.message,
-    );
   }
 
   // Idempotency: reuse a pending non-expired invite if present.

@@ -23,6 +23,7 @@ import * as React from "react";
 import { ItemRow } from "@/components/lists/item-row";
 import type { MemberRow } from "@/components/lists/member-list";
 import type { Item } from "@/lib/types";
+import { computeSparsePosition } from "@/lib/utils/sparse-position";
 
 /**
  * Sortable list wrapper. Long-press on touch (PointerSensor activation
@@ -42,17 +43,27 @@ export function DraggableItemList({
   onToggle,
   onEdit,
   onDelete,
+  onTogglePin,
   onReorder,
   pendingIds,
   membersByUserId,
+  compact = false,
 }: {
   items: Item[];
   onToggle: (id: string, next: boolean) => void;
   onEdit: (item: Item) => void;
   onDelete: (item: Item) => void;
+  onTogglePin?: (id: string, next: boolean) => void;
   onReorder: (id: string, newPosition: number, optimistic: Item[]) => void;
   pendingIds: Set<string>;
   membersByUserId?: Map<string, MemberRow>;
+  /**
+   * Phase 16: when true, every row hides priority / status / tags /
+   * deadline / description / attachment / assignee badges — only the
+   * checkbox + text + drag handle + actions remain. Used by checklist
+   * lists to keep the surface focused on "tıkla, geç".
+   */
+  compact?: boolean;
 }) {
   const sensors = useSensors(
     // 8px activation distance keeps tap-to-toggle responsive while still
@@ -110,9 +121,15 @@ export function DraggableItemList({
                 onToggle={(next) => onToggle(item.id, next)}
                 onEdit={() => onEdit(item)}
                 onDelete={() => onDelete(item)}
+                onTogglePin={
+                  onTogglePin
+                    ? (next) => onTogglePin(item.id, next)
+                    : undefined
+                }
                 pending={pendingIds.has(item.id)}
                 assigneeFirstName={assignee?.user.telegramFirstName ?? null}
                 assigneePhotoUrl={assignee?.user.telegramPhotoUrl ?? null}
+                compact={compact}
               />
             );
           })}
@@ -127,17 +144,21 @@ function SortableItem({
   onToggle,
   onEdit,
   onDelete,
+  onTogglePin,
   pending,
   assigneeFirstName,
   assigneePhotoUrl,
+  compact,
 }: {
   item: Item;
   onToggle: (next: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
+  onTogglePin?: (next: boolean) => void;
   pending: boolean;
   assigneeFirstName: string | null;
   assigneePhotoUrl: string | null;
+  compact: boolean;
 }) {
   const {
     attributes,
@@ -177,36 +198,14 @@ function SortableItem({
         onToggle={onToggle}
         onEdit={onEdit}
         onDelete={onDelete}
+        onTogglePin={onTogglePin}
         pending={pending}
         dragHandle={dragHandle}
         assigneeFirstName={assigneeFirstName}
         assigneePhotoUrl={assigneePhotoUrl}
+        compact={compact}
       />
     </div>
   );
 }
 
-/**
- * Compute a sparse position number for `items[index]` such that it sits
- * between its new neighbours by mid-point. Gaps of ~1024 mean a single
- * reorder rarely needs to renumber other rows; eventual collisions
- * (positions identical due to repeated mid-pointing) require a
- * server-side compaction job, deferred to Phase 4.
- */
-function computeSparsePosition(items: Item[], index: number): number {
-  const before = index > 0 ? items[index - 1] : undefined;
-  const after = index < items.length - 1 ? items[index + 1] : undefined;
-  const beforePos = before?.position;
-  const afterPos = after?.position;
-
-  if (beforePos !== undefined && afterPos !== undefined) {
-    return Math.floor((beforePos + afterPos) / 2);
-  }
-  if (beforePos !== undefined) {
-    return beforePos + 1024;
-  }
-  if (afterPos !== undefined) {
-    return Math.max(0, afterPos - 1024);
-  }
-  return 0;
-}

@@ -1,11 +1,8 @@
 /**
- * `GET  /api/workspaces` — list every workspace the caller belongs to,
- *                          with role + tier + counts. Powers the Mini
- *                          App switcher dropdown.
+ * `GET  /api/workspaces` — list every workspace the caller belongs to.
+ *                          Powers the Mini App switcher dropdown.
  *
  * `POST /api/workspaces`  — create a new workspace owned by the caller.
- *                          Tier middleware logs the attempt; Phase 5
- *                          flips to active enforcement.
  */
 import { NextResponse } from "next/server";
 
@@ -16,8 +13,6 @@ import {
   listWorkspacesForUser,
   slugify,
 } from "@/lib/db/queries/workspaces";
-import { TIER_LIMITS, type WorkspaceTier } from "@/lib/types";
-import { enforceTier } from "@/lib/server/middleware/tier-enforce";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,25 +60,6 @@ export async function POST(request: Request) {
     );
   }
   const name = parsed.name.trim().slice(0, 120);
-
-  // Tier check: workspace creation beyond Personal requires Team or
-  // Workspace tier. Phase 4.5 logs only.
-  const tierResult = await enforceTier("", { type: "create_workspace" });
-  if (tierResult.enforced) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: {
-          code: tierResult.reason,
-          message: tierResult.message,
-          upgradeTo: tierResult.upgradeTo,
-        },
-      },
-      { status: 402 },
-    );
-  }
-
-  const tier: WorkspaceTier = "free";
   const slug = slugify(name) || `ws-${userId.slice(0, 8)}`;
 
   const created = await db.transaction(async (tx) => {
@@ -92,10 +68,8 @@ export async function POST(request: Request) {
       .values({
         name,
         slug,
-        tier,
         isPersonal: false,
         ownerId: userId,
-        memberLimit: TIER_LIMITS[tier].memberLimit,
       })
       .returning();
     if (!w) throw new Error("create-workspace: insert returned no row");
@@ -116,7 +90,6 @@ export async function POST(request: Request) {
         id: created.id,
         name: created.name,
         slug: created.slug,
-        tier: created.tier,
         isPersonal: created.isPersonal,
       },
     },

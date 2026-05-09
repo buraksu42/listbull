@@ -15,6 +15,8 @@ import { users } from "@/lib/db/schema";
 import { decrypt, encrypt, redactKey } from "@/lib/server/encryption";
 import {
   patchSettingsBodySchema,
+  type AllowedDateFormat,
+  type AllowedTimeFormat,
   type GetSettingsResponse,
 } from "@/lib/validators/settings";
 
@@ -60,6 +62,8 @@ export async function GET() {
     timezone: user.timezone,
     llmModel: user.llmModel,
     notificationsEnabled: user.notificationsEnabled,
+    dateFormat: user.dateFormat as AllowedDateFormat,
+    timeFormat: user.timeFormat as AllowedTimeFormat,
     hasApiKey: !!user.openrouterApiKeyEncrypted,
     byokKeyPreview,
   };
@@ -104,6 +108,8 @@ export async function PATCH(request: Request) {
     timezone,
     llmModel,
     notificationsEnabled,
+    dateFormat,
+    timeFormat,
     openrouterApiKey,
   } = parsed.data;
 
@@ -116,6 +122,8 @@ export async function PATCH(request: Request) {
   if (notificationsEnabled !== undefined) {
     patch.notificationsEnabled = notificationsEnabled;
   }
+  if (dateFormat !== undefined) patch.dateFormat = dateFormat;
+  if (timeFormat !== undefined) patch.timeFormat = timeFormat;
   if (openrouterApiKey !== undefined) {
     if (openrouterApiKey === "") {
       patch.openrouterApiKeyEncrypted = null;
@@ -155,6 +163,8 @@ export async function PATCH(request: Request) {
     timezone: updated.timezone,
     llmModel: updated.llmModel,
     notificationsEnabled: updated.notificationsEnabled,
+    dateFormat: updated.dateFormat as AllowedDateFormat,
+    timeFormat: updated.timeFormat as AllowedTimeFormat,
     hasApiKey: !!updated.openrouterApiKeyEncrypted,
     byokKeyPreview,
   };

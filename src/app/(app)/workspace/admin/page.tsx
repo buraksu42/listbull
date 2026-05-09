@@ -4,8 +4,6 @@ import { notFound, redirect } from "next/navigation";
 
 import { ActivityTimeline } from "@/components/workspace/activity-timeline";
 import { BulkRestoreSection } from "@/components/workspace/bulk-restore-section";
-import { CapsSection } from "@/components/workspace/caps-section";
-import { SpendSection } from "@/components/workspace/spend-section";
 import {
   listWorkspacesForUser,
   resolveActiveWorkspaceId,
@@ -33,10 +31,7 @@ export default async function WorkspaceAdminPage() {
   const active = workspaces.find((w) => w.id === activeId);
   if (!active) notFound();
 
-  // Tier + role gates. Workspace-tier admin/owner only.
-  if (active.tier !== "workspace") {
-    redirect("/workspace/settings");
-  }
+  // Role gate only — single-tier model post-billing-tear-out.
   if (active.role !== "owner" && active.role !== "admin") {
     redirect("/workspace/settings");
   }
@@ -126,10 +121,6 @@ export default async function WorkspaceAdminPage() {
           </div>
         </section>
 
-        <SpendSection workspaceId={activeId} />
-
-        <CapsSection workspaceId={activeId} />
-
         <ActivityTimeline workspaceId={activeId} />
 
         {active.role === "owner" && (
@@ -159,9 +150,6 @@ export default async function WorkspaceAdminPage() {
               lineHeight: 1.6,
             }}
           >
-            <p style={{ margin: 0 }}>
-              Tier: <strong style={{ color: "var(--lb-fg)" }}>Workspace</strong>
-            </p>
             <p style={{ margin: 0 }}>
               Your role: <strong style={{ color: "var(--lb-fg)", textTransform: "capitalize" }}>{active.role}</strong>
             </p>

@@ -27,7 +27,7 @@ export async function executeUpdateList(
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
-  const { list_id, list_name, name, emoji } = parsed.data;
+  const { list_id, list_name, name, emoji, is_checklist } = parsed.data;
 
   // Resolve list (owner-only path — search list_members for owner role).
   const found = await resolveOwnedList(
@@ -48,7 +48,7 @@ export async function executeUpdateList(
   const current = found.list;
 
   // Compute the patch + which fields actually changed.
-  const changes: Array<"name" | "emoji"> = [];
+  const changes: Array<"name" | "emoji" | "is_checklist"> = [];
   const patch: Partial<typeof lists.$inferInsert> = {
     updatedAt: new Date(),
   };
@@ -60,11 +60,20 @@ export async function executeUpdateList(
     patch.emoji = emoji ?? null;
     changes.push("emoji");
   }
+  if (is_checklist !== undefined && is_checklist !== current.isChecklist) {
+    patch.isChecklist = is_checklist;
+    changes.push("is_checklist");
+  }
 
   if (changes.length === 0) {
     // Idempotent no-op: requested state matches current; skip activity_log.
     return ok({
-      list: { id: current.id, name: current.name, emoji: current.emoji },
+      list: {
+        id: current.id,
+        name: current.name,
+        emoji: current.emoji,
+        is_checklist: current.isChecklist,
+      },
       changes: [],
     });
   }
@@ -88,7 +97,12 @@ export async function executeUpdateList(
     });
 
     return ok({
-      list: { id: updated.id, name: updated.name, emoji: updated.emoji },
+      list: {
+        id: updated.id,
+        name: updated.name,
+        emoji: updated.emoji,
+        is_checklist: updated.isChecklist,
+      },
       changes,
     });
   });

@@ -61,6 +61,66 @@ export async function executeCompleteItem(
     }
 
     const now = new Date();
+
+    // Task-level recurrence branch: when an item with a non-null
+    // `task_recurrence_rule` is completed, it auto-resurrects instead
+    // of permanently marking done. Deadline (if present) advances to
+    // the rule's next occurrence; status flips back to 'open';
+    // is_done resets; completed_at clears. Distinct from
+    // item_reminders.recurrence_rule which only re-fires reminder
+    // pings without resurrecting the task.
+    if (is_done && current.taskRecurrenceRule) {
+      let nextDeadline: Date | null = null;
+      try {
+        const { RRule } = await import("rrule");
+        const rule = RRule.fromString(`RRULE:${current.taskRecurrenceRule}`);
+        const anchor = current.deadlineAt ?? now;
+        nextDeadline = rule.after(anchor, false) ?? null;
+      } catch (e) {
+        console.error("[complete-item] invalid task RRULE — clearing", {
+          itemId: current.id,
+          rule: current.taskRecurrenceRule,
+          error: String(e),
+        });
+      }
+
+      // Rule-exhausted (UNTIL/COUNT) or invalid → fall through to
+      // the normal one-shot complete path so the user sees closure.
+      if (nextDeadline !== null) {
+        const [updated] = await tx
+          .update(items)
+          .set({
+            isDone: false,
+            status: "open",
+            completedAt: null,
+            deadlineAt: nextDeadline,
+            updatedAt: now,
+          })
+          .where(eq(items.id, item_id))
+          .returning();
+        if (!updated) {
+          throw new Error("complete-item: recurrence update returned no row");
+        }
+
+        await tx.insert(activityLog).values({
+          listId: updated.listId,
+          entityType: "item",
+          entityId: updated.id,
+          action: "item_completed",
+          actorId: ctx.userId,
+          payloadBefore: toItemSnapshot(current),
+          payloadAfter: toItemSnapshot(updated),
+        });
+
+        return ok({
+          item: toItemSnapshot(updated),
+          was_done: wasDone,
+          warnings: ["task_recurred"],
+        });
+      }
+      // Falls through to normal complete (rule exhausted/invalid).
+    }
+
     const [updated] = await tx
       .update(items)
       .set({

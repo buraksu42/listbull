@@ -53,7 +53,6 @@ export type RespondInput = {
   workspaces: Array<{
     id: string;
     name: string;
-    tier: string;
     role: string;
     isPersonal: boolean;
     isActive: boolean;

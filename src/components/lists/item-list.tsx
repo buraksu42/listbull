@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Inbox } from "lucide-react";
 import * as React from "react";
 
+import { ChecklistBanner } from "@/components/lists/checklist-banner";
 import { DraggableItemList } from "@/components/lists/draggable-item-list";
 import { ItemDeleteConfirm } from "@/components/lists/item-delete-confirm";
 import {
@@ -59,6 +60,7 @@ export function ItemList({
   listId,
   initialItems,
   initialMembers = [],
+  isChecklist = false,
 }: {
   listId: string;
   initialItems: Item[];
@@ -67,6 +69,11 @@ export function ItemList({
    * badges render on first paint without a client-side flash.
    */
   initialMembers?: MemberRow[];
+  /**
+   * Phase 16: when true, render the checklist banner (run history +
+   * "Yeni run başlat" CTA) above the item list.
+   */
+  isChecklist?: boolean;
 }) {
   const queryClient = useQueryClient();
 
@@ -169,8 +176,25 @@ export function ItemList({
           if (item.id !== id) return item;
           const next: Item = { ...item };
           if (patch.text !== undefined) next.text = patch.text;
-          if (patch.dueAt !== undefined) {
-            next.dueAt = patch.dueAt ? new Date(patch.dueAt) : null;
+          if (patch.description !== undefined) {
+            next.description = patch.description;
+          }
+          if (patch.deadlineAt !== undefined) {
+            next.deadlineAt = patch.deadlineAt
+              ? new Date(patch.deadlineAt)
+              : null;
+          }
+          if (patch.status !== undefined) next.status = patch.status;
+          if (patch.priority !== undefined) next.priority = patch.priority;
+          if (patch.tags !== undefined) next.tags = patch.tags;
+          if (patch.pinned !== undefined) {
+            next.pinnedAt = patch.pinned ? new Date() : null;
+          }
+          if (patch.taskRecurrenceRule !== undefined) {
+            next.taskRecurrenceRule = patch.taskRecurrenceRule;
+          }
+          if (patch.assigneeId !== undefined) {
+            next.assigneeId = patch.assigneeId;
           }
           return next;
         }),
@@ -261,11 +285,14 @@ export function ItemList({
 
   return (
     <>
-      <ItemFilters
-        filters={filters}
-        onChange={setFilters}
-        availableTags={availableTags}
-      />
+      {isChecklist && <ChecklistBanner listId={listId} />}
+      {!isChecklist && (
+        <ItemFilters
+          filters={filters}
+          onChange={setFilters}
+          availableTags={availableTags}
+        />
+      )}
       {filteredItems.length === 0 && (
         <p
           style={{
@@ -284,6 +311,9 @@ export function ItemList({
         onToggle={(id, next) => toggleMutation.mutate({ id, isDone: next })}
         onEdit={(item) => setEditingItem(item)}
         onDelete={(item) => setDeletingItem(item)}
+        onTogglePin={(id, next) =>
+          editMutation.mutate({ id, patch: { pinned: next } })
+        }
         onReorder={(id, newPosition, optimisticItems) => {
           // Apply optimistic reorder to the cache so the UI doesn't snap back
           // before the request lands.
@@ -296,10 +326,12 @@ export function ItemList({
           deleteMutation.variables?.id,
         )}
         membersByUserId={memberLookup}
+        compact={isChecklist}
       />
 
       <ItemEditSheet
         item={editingItem}
+        members={membersQuery.data ?? initialMembers}
         open={editingItem !== null}
         onOpenChange={(open) => {
           if (!open) setEditingItem(null);

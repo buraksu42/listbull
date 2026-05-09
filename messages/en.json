@@ -180,6 +180,7 @@
       "item_completed": "marked an item done",
       "item_uncompleted": "marked an item open",
       "item_edited": "edited an item",
+      "item_moved": "moved an item",
       "item_deleted": "deleted an item",
       "item_assigned": "assigned an item",
       "item_unassigned": "unassigned an item",

@@ -95,6 +95,10 @@ export function SheetContent({
         className={cn(
           "absolute bg-[var(--lb-card)] text-[var(--lb-card-fg)] shadow-[var(--lb-shadow-sheet)]",
           "transition-transform duration-[var(--lb-dur-slow)] ease-[var(--lb-ease-emph)]",
+          // Flex column so SheetBody can flex-1 + overflow-y-auto and
+          // SheetHeader/SheetFooter stay pinned. Without this the body
+          // overflows past max-h and the user can't scroll to Save.
+          "flex flex-col",
           sideClasses[side],
           className,
         )}
@@ -165,7 +169,14 @@ export function SheetBody({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn("p-4 overflow-y-auto", className)}>{children}</div>
+    <div
+      className={cn(
+        "p-4 overflow-y-auto flex-1 min-h-0",
+        className,
+      )}
+    >
+      {children}
+    </div>
   );
 }
 

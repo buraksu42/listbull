@@ -1,0 +1,1 @@
+ALTER TABLE "users" ALTER COLUMN "llm_model" SET DEFAULT 'anthropic/claude-haiku-4.5';

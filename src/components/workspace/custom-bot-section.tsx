@@ -15,21 +15,18 @@ type Props = {
   workspaceId: string;
   /** Owner-only register form is hidden for non-owners. */
   canManage: boolean;
-  /** Workspace-tier gate — non-Workspace tier shows upgrade hint. */
-  isWorkspaceTier: boolean;
 };
 
 /**
  * Workspace settings → "Custom bot" section. Phase 5 deliverable.
  *
  * Lists the workspace's bound bots (default platform bot + any
- * white-label bot the owner has registered). Workspace-tier owners
- * see a paste-token form; sub-tier shows an upgrade hint.
+ * white-label bot the owner has registered). Owners see a paste-token
+ * form to register a custom bot.
  */
 export function CustomBotSection({
   workspaceId,
   canManage,
-  isWorkspaceTier,
 }: Props) {
   const [bots, setBots] = useState<WorkspaceBot[] | null>(null);
   const [token, setToken] = useState("");
@@ -235,7 +232,7 @@ export function CustomBotSection({
           </ul>
         )}
 
-        {canManage && isWorkspaceTier && (
+        {canManage && (
           <form
             onSubmit={onRegister}
             style={{
@@ -319,19 +316,6 @@ export function CustomBotSection({
           </form>
         )}
 
-        {canManage && !isWorkspaceTier && (
-          <div
-            style={{
-              borderTop: "1px solid var(--lb-border)",
-              paddingTop: "var(--lb-sp-3)",
-              fontSize: "var(--lb-fs-sm)",
-              color: "var(--lb-muted-fg)",
-            }}
-          >
-            Custom bot sadece Workspace planında. Workspace plana geçince
-            BotFather token&apos;ı yapıştırarak kendi botunu bağlayabilirsin.
-          </div>
-        )}
       </div>
     </section>
   );

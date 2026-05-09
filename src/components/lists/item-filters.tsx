@@ -2,6 +2,12 @@
 
 import * as React from "react";
 
+import {
+  MetaInline,
+  PRIORITY_META,
+  STATUS_META,
+} from "@/components/lists/item-attributes-meta";
+
 export type ItemStatus = "open" | "in_progress" | "blocked" | "done";
 export type ItemPriority = "low" | "normal" | "high";
 
@@ -21,18 +27,8 @@ export const DEFAULT_FILTERS: ItemFilters = {
   tags: new Set(),
 };
 
-const STATUS_OPTIONS: Array<{ value: ItemStatus; label: string }> = [
-  { value: "open", label: "Açık" },
-  { value: "in_progress", label: "Devam" },
-  { value: "blocked", label: "Bloke" },
-  { value: "done", label: "Tamam" },
-];
-
-const PRIORITY_OPTIONS: Array<{ value: ItemPriority; label: string }> = [
-  { value: "high", label: "Yüksek" },
-  { value: "normal", label: "Normal" },
-  { value: "low", label: "Düşük" },
-];
+// Status + priority labels/icons live in `item-attributes-meta.tsx`.
+// We map directly off STATUS_META / PRIORITY_META to avoid drift.
 
 type Props = {
   filters: ItemFilters;
@@ -73,37 +69,53 @@ export function ItemFilters({ filters, onChange, availableTags }: Props) {
       }}
     >
       <ChipGroup label="Durum">
-        {STATUS_OPTIONS.map((o) => (
-          <Chip
-            key={o.value}
-            active={filters.status.has(o.value)}
-            onClick={() =>
-              onChange({
-                ...filters,
-                status: toggle(filters.status, o.value),
-              })
-            }
-          >
-            {o.label}
-          </Chip>
-        ))}
+        {STATUS_META.map((m) => {
+          const active = filters.status.has(m.value);
+          return (
+            <Chip
+              key={m.value}
+              active={active}
+              activeColor={m.color}
+              onClick={() =>
+                onChange({
+                  ...filters,
+                  status: toggle(filters.status, m.value),
+                })
+              }
+            >
+              <MetaInline
+                Icon={m.Icon}
+                label={m.label}
+                color={active ? undefined : m.color}
+              />
+            </Chip>
+          );
+        })}
       </ChipGroup>
 
       <ChipGroup label="Öncelik">
-        {PRIORITY_OPTIONS.map((o) => (
-          <Chip
-            key={o.value}
-            active={filters.priority.has(o.value)}
-            onClick={() =>
-              onChange({
-                ...filters,
-                priority: toggle(filters.priority, o.value),
-              })
-            }
-          >
-            {o.label}
-          </Chip>
-        ))}
+        {PRIORITY_META.map((m) => {
+          const active = filters.priority.has(m.value);
+          return (
+            <Chip
+              key={m.value}
+              active={active}
+              activeColor={m.color}
+              onClick={() =>
+                onChange({
+                  ...filters,
+                  priority: toggle(filters.priority, m.value),
+                })
+              }
+            >
+              <MetaInline
+                Icon={m.Icon}
+                label={m.label}
+                color={active ? undefined : m.color}
+              />
+            </Chip>
+          );
+        })}
       </ChipGroup>
 
       {availableTags.length > 0 && (
@@ -183,19 +195,29 @@ function Chip({
   active,
   onClick,
   children,
+  activeColor,
 }: {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
+  /**
+   * Per-chip semantic color — taken from STATUS_META / PRIORITY_META.
+   * When the chip is active, this becomes both the bg and the border
+   * so a row of selected chips stays visually distinct instead of
+   * collapsing to a single accent hue.
+   */
+  activeColor?: string;
 }) {
+  const bg = active ? activeColor ?? "var(--lb-accent)" : "var(--lb-card)";
+  const border = active ? activeColor ?? "var(--lb-accent)" : "var(--lb-border)";
   return (
     <button
       type="button"
       onClick={onClick}
       style={{
-        background: active ? "var(--lb-accent)" : "var(--lb-card)",
-        color: active ? "var(--lb-accent-fg)" : "var(--lb-fg)",
-        border: `1px solid ${active ? "var(--lb-accent)" : "var(--lb-border)"}`,
+        background: bg,
+        color: active ? "white" : "var(--lb-fg)",
+        border: `1px solid ${border}`,
         borderRadius: "999px",
         padding: "2px 10px",
         fontSize: "var(--lb-fs-xs)",

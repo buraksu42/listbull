@@ -19,10 +19,25 @@ import { cn } from "@/lib/utils";
  * Architect contract.
  */
 const MODEL_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5 (fast, cheap)" },
-  { value: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4 (default)" },
-  { value: "anthropic/claude-opus-4.7", label: "Claude Opus 4.7 (best)" },
-  { value: "openai/gpt-4o-mini", label: "GPT-4o mini (fast, cheap)" },
+  // Anthropic family — strongest 24-tool routing reliability.
+  { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5 (default, hızlı)" },
+  { value: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4" },
+  { value: "anthropic/claude-sonnet-4.5", label: "Claude Sonnet 4.5" },
+  { value: "anthropic/claude-opus-4.7", label: "Claude Opus 4.7 (en güçlü)" },
+  // OpenAI
+  { value: "openai/gpt-4o-mini", label: "GPT-4o mini" },
+  { value: "openai/gpt-4o", label: "GPT-4o" },
+  { value: "openai/o1-mini", label: "o1-mini (akıl yürütme)" },
+  // Google
+  { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash (en ucuz)" },
+  { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+  // xAI
+  { value: "x-ai/grok-3", label: "Grok 3" },
+  // DeepSeek
+  { value: "deepseek/deepseek-chat", label: "DeepSeek V3 (ucuz)" },
+  { value: "deepseek/deepseek-r1", label: "DeepSeek R1 (akıl yürütme)" },
+  // Meta open-weights
+  { value: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B" },
 ];
 
 const TIMEZONE_OPTIONS: string[] = [
@@ -49,11 +64,16 @@ const LOCALE_OPTIONS: Array<{ value: "tr" | "en"; label: string }> = [
  * Server-supplied initial settings. Plaintext API key is never returned —
  * `byokKeyPreview` is the last 4 characters (or null if unset).
  */
+type DateFormat = "DD.MM.YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD";
+type TimeFormat = "24h" | "12h";
+
 export type SettingsInitial = {
   llmModel: string;
   timezone: string;
   locale: "tr" | "en";
   notificationsEnabled: boolean;
+  dateFormat: DateFormat;
+  timeFormat: TimeFormat;
   hasApiKey: boolean;
   byokKeyPreview: string | null;
 };
@@ -63,6 +83,8 @@ type SettingsFormValues = {
   timezone: string;
   locale: "tr" | "en";
   notificationsEnabled: boolean;
+  dateFormat: DateFormat;
+  timeFormat: TimeFormat;
   /** Empty = no change to stored key. */
   apiKey: string;
 };
@@ -72,8 +94,45 @@ type PatchPayload = Partial<{
   timezone: string;
   locale: "tr" | "en";
   notificationsEnabled: boolean;
+  dateFormat: DateFormat;
+  timeFormat: TimeFormat;
   openrouterApiKey: string;
 }>;
+
+const DATE_FORMAT_OPTIONS: Array<{ value: DateFormat; label: string }> = [
+  { value: "DD.MM.YYYY", label: "GG.AA.YYYY (Avrupa)" },
+  { value: "MM/DD/YYYY", label: "AA/GG/YYYY (ABD)" },
+  { value: "YYYY-MM-DD", label: "YYYY-AA-GG (ISO)" },
+];
+
+const TIME_FORMAT_OPTIONS: Array<{ value: TimeFormat; label: string }> = [
+  { value: "24h", label: "24 saat (14:30)" },
+  { value: "12h", label: "12 saat (2:30 PM)" },
+];
+
+function previewDate(fmt: DateFormat): string {
+  const now = new Date();
+  const yy = String(now.getFullYear());
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  switch (fmt) {
+    case "DD.MM.YYYY":
+      return `${dd}.${mm}.${yy}`;
+    case "MM/DD/YYYY":
+      return `${mm}/${dd}/${yy}`;
+    case "YYYY-MM-DD":
+      return `${yy}-${mm}-${dd}`;
+  }
+}
+
+function previewTime(fmt: TimeFormat): string {
+  const now = new Date();
+  return new Intl.DateTimeFormat("tr-TR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: fmt === "12h",
+  }).format(now);
+}
 
 export function SettingsForm({ initial }: { initial: SettingsInitial }) {
   const {
@@ -89,6 +148,8 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
       timezone: initial.timezone,
       locale: initial.locale,
       notificationsEnabled: initial.notificationsEnabled,
+      dateFormat: initial.dateFormat,
+      timeFormat: initial.timeFormat,
       apiKey: "",
     },
   });
@@ -97,6 +158,8 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
   // form.watch which returns a fresh closure each render).
   const apiKey = useWatch({ control, name: "apiKey" });
   const notificationsEnabled = useWatch({ control, name: "notificationsEnabled" });
+  const watchedDateFormat = useWatch({ control, name: "dateFormat" });
+  const watchedTimeFormat = useWatch({ control, name: "timeFormat" });
 
   const mutation = useMutation<
     SettingsInitial,
@@ -116,6 +179,8 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
         timezone: data.timezone,
         locale: data.locale,
         notificationsEnabled: data.notificationsEnabled,
+        dateFormat: data.dateFormat,
+        timeFormat: data.timeFormat,
         apiKey: "",
       });
       // E1: when the user switches language, reload the route so the
@@ -141,6 +206,12 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
     if (values.locale !== initial.locale) patch.locale = values.locale;
     if (values.notificationsEnabled !== initial.notificationsEnabled) {
       patch.notificationsEnabled = values.notificationsEnabled;
+    }
+    if (values.dateFormat !== initial.dateFormat) {
+      patch.dateFormat = values.dateFormat;
+    }
+    if (values.timeFormat !== initial.timeFormat) {
+      patch.timeFormat = values.timeFormat;
     }
     if (values.apiKey.trim() !== "") {
       patch.openrouterApiKey = values.apiKey.trim();
@@ -258,6 +329,53 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
             }
             ariaLabel="Toggle notifications"
           />
+        </div>
+      </Section>
+
+      <Section
+        title="Tarih & Saat Formatı"
+        subtitle="Mini App'te ve hatırlatma DM'lerinde görüntü için kullanılır."
+      >
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="settings-date-format">Tarih formatı</Label>
+          <select
+            id="settings-date-format"
+            {...register("dateFormat")}
+            className={cn(
+              "h-11 rounded-[var(--lb-r-md)] border border-[var(--lb-border)] bg-[var(--lb-input-bg)] px-3 text-base text-[var(--lb-fg)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)]",
+            )}
+          >
+            {DATE_FORMAT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-[var(--lb-muted-fg)]">
+            Önizleme: {previewDate(watchedDateFormat ?? initial.dateFormat)}
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="settings-time-format">Saat formatı</Label>
+          <select
+            id="settings-time-format"
+            {...register("timeFormat")}
+            className={cn(
+              "h-11 rounded-[var(--lb-r-md)] border border-[var(--lb-border)] bg-[var(--lb-input-bg)] px-3 text-base text-[var(--lb-fg)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)]",
+            )}
+          >
+            {TIME_FORMAT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-[var(--lb-muted-fg)]">
+            Önizleme: {previewTime(watchedTimeFormat ?? initial.timeFormat)}
+          </p>
         </div>
       </Section>
 

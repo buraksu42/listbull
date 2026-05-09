@@ -6,8 +6,6 @@ type Props = {
   workspaceId: string;
   /** Owner / admin only — non-managers see read-only "set / not set" status. */
   canManage: boolean;
-  /** Workspace-tier gate — non-Workspace tier hides the form. */
-  isWorkspaceTier: boolean;
 };
 
 /**
@@ -21,7 +19,6 @@ type Props = {
 export function OrgKeySection({
   workspaceId,
   canManage,
-  isWorkspaceTier,
 }: Props) {
   const [hasOrgKey, setHasOrgKey] = useState<boolean | null>(null);
   const [apiKey, setApiKey] = useState("");
@@ -97,12 +94,6 @@ export function OrgKeySection({
     } finally {
       setBusy(false);
     }
-  }
-
-  if (!isWorkspaceTier) {
-    // Hide the section entirely on Free/Team — too noisy to show
-    // "upgrade to use." Tier upgrade lives elsewhere on the page.
-    return null;
   }
 
   return (

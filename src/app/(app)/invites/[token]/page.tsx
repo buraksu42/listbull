@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { getSessionUserId } from "@/lib/auth/session";
 import { getUserById } from "@/lib/db/queries/users";
 import { getInviteContextByToken } from "@/lib/db/queries/invites";
+import { env } from "@/lib/env";
 import type { InviteTokenInfo, ListRole } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -108,6 +109,7 @@ export default async function InviteAcceptPage({
           !isAccepted &&
           !usernameMatches
         }
+        botUsername={env.TELEGRAM_BOT_USERNAME}
       />
     </main>
   );

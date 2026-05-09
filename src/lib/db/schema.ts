@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -43,9 +44,27 @@ export const users = pgTable(
     telegramPhotoUrl: text("telegram_photo_url"),
     locale: text("locale").notNull().default("en"),
     timezone: text("timezone").notNull().default("UTC"),
+    /**
+     * Phase 14c: per-user display preferences. App-layer enums (no DB
+     * CHECK constraint) — values: dateFormat ∈ {'DD.MM.YYYY',
+     * 'MM/DD/YYYY', 'YYYY-MM-DD'}, timeFormat ∈ {'24h', '12h'}.
+     * Defaults are TR-friendly; the migration backfills EN-locale
+     * rows to MM/DD/YYYY + 12h, and the user-creation flow picks a
+     * smart default based on `locale`.
+     */
+    dateFormat: text("date_format").notNull().default("DD.MM.YYYY"),
+    timeFormat: text("time_format").notNull().default("24h"),
     openrouterApiKeyEncrypted: text("openrouter_api_key_encrypted"),
-    llmModel: text("llm_model").notNull().default("anthropic/claude-sonnet-4"),
+    llmModel: text("llm_model").notNull().default("anthropic/claude-haiku-4.5"),
     notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
+    /**
+     * Phase 15: idempotency marker for the 09:00 daily digest cron.
+     * Stored as `date` (not `timestamptz`) — the only question we ask
+     * is "did we already send the digest for today's user-local
+     * date?". Pickup query stores the date in the user's own timezone
+     * so cron-tick drift across UTC midnight doesn't cause a re-send.
+     */
+    dailyDigestSentOn: date("daily_digest_sent_on"),
     activeWorkspaceId: uuid("active_workspace_id").references(
       (): AnyPgColumn => workspaces.id,
     ),
@@ -54,6 +73,11 @@ export const users = pgTable(
   (t) => [
     uniqueIndex("users_telegram_id_idx").on(t.telegramId),
     index("users_telegram_username_idx").on(sql`lower(${t.telegramUsername})`),
+    // Phase 15 daily digest pickup — only candidates that opted into
+    // notifications are scanned; the column is null for never-sent.
+    index("users_digest_pickup_idx")
+      .on(t.notificationsEnabled, t.dailyDigestSentOn)
+      .where(sql`${t.notificationsEnabled} = true`),
   ],
 );
 
@@ -78,6 +102,16 @@ export const lists = pgTable(
       .notNull()
       .references((): AnyPgColumn => workspaces.id, { onDelete: "cascade" }),
     isInbox: boolean("is_inbox").notNull().default(false),
+    /**
+     * Phase 16 (checklists): when true, the list represents a
+     * repeatable process. The Mini App renders simplified rows
+     * (checkbox + text only — description/deadline/tag hidden) and
+     * exposes "start new run" / "complete run" actions. Run history
+     * lives in `list_runs`. Item rows are NOT duplicated per run;
+     * "start new run" resets every item's status to 'open' and logs
+     * a `list_runs` row capturing pre-reset completion stats.
+     */
+    isChecklist: boolean("is_checklist").notNull().default(false),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },
@@ -87,6 +121,59 @@ export const lists = pgTable(
     uniqueIndex("lists_workspace_inbox_unique")
       .on(t.workspaceId)
       .where(sql`${t.isInbox} = true`),
+  ],
+);
+
+// ─── list_runs (Phase 16, checklists) ───────────────────────────────
+//
+// One row per "run" of a checklist list. A run starts when the user
+// (or LLM via `start_checklist_run`) opens a new pass over the
+// checklist, and completes either explicitly (`complete_checklist_run`)
+// or implicitly (the next `start_checklist_run` auto-completes the
+// previous open run before opening a new one).
+//
+// Stats snapshot captures completion at the moment of run-end so the
+// run-history feed renders meaningful numbers without re-deriving
+// from activity_log. Item rows themselves are NOT copied per run —
+// they're shared physical rows, reset on each new run.
+export const listRuns = pgTable(
+  "list_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    listId: uuid("list_id")
+      .notNull()
+      .references(() => lists.id, { onDelete: "cascade" }),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    startedByUserId: uuid("started_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    completedByUserId: uuid("completed_by_user_id").references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+    /** Active item count at run start (snapshot — never updated). */
+    itemsTotal: integer("items_total").notNull().default(0),
+    /** is_done count when the run was closed; null while still open. */
+    itemsCompleted: integer("items_completed"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // History feed: most recent run first per list.
+    index("list_runs_list_recent_idx").on(
+      t.listId,
+      sql`${t.startedAt} desc`,
+    ),
+    // At most one open run per list at a time. Enforced as a unique
+    // partial index instead of an app-layer constraint so concurrent
+    // double-clicks on "start run" can't race.
+    uniqueIndex("list_runs_active_per_list_uq")
+      .on(t.listId)
+      .where(sql`${t.completedAt} is null`),
   ],
 );
 
@@ -123,6 +210,12 @@ export const listMembers = pgTable(
 //   - tags:      text[] (workspace-scoped vocabulary, max 20 unique
 //                tags per workspace enforced in `set_item_attributes`)
 //
+// Phase 14d split deadlines from reminders:
+//   - `due_at` renamed to `deadline_at` — the moment the work is due.
+//   - `reminder_sent` dropped — moved to `item_reminders.sent` (1-to-N).
+//   - `recurrence_rule` dropped — moved to `item_reminders.recurrence_rule`
+//     (recurrence is a property of the reminder, not the deadline).
+//
 // `is_done` STAYS for backward compat. Treated as derived from
 // `status` (`is_done = (status = 'done')`); writes touch both columns
 // so existing executors keep reading `is_done` while the LLM and new
@@ -136,6 +229,12 @@ export const items = pgTable(
       .notNull()
       .references(() => lists.id, { onDelete: "cascade" }),
     text: text("text").notNull(),
+    /**
+     * Phase 14a: optional long-form context (≤5000 chars). Distinct
+     * from `text` (the title) — the LLM is instructed to use this for
+     * notes, links, and multi-line bodies, not for summaries.
+     */
+    description: text("description"),
     isCheckable: boolean("is_checkable").notNull().default(true),
     isDone: boolean("is_done").notNull().default(false),
     status: text("status").notNull().default("open"),
@@ -147,8 +246,29 @@ export const items = pgTable(
     assigneeId: uuid("assignee_id").references(() => users.id, {
       onDelete: "set null",
     }),
-    dueAt: timestamp("due_at", { withTimezone: true }),
-    reminderSent: boolean("reminder_sent").notNull().default(false),
+    /**
+     * The moment the item is due. Distinct from reminders — reminders
+     * are scheduled in the sibling `item_reminders` table. May be null
+     * when an item has reminders that aren't anchored to a deadline.
+     */
+    deadlineAt: timestamp("deadline_at", { withTimezone: true }),
+    /**
+     * Pin-to-top timestamp. NULL = not pinned. Non-null pins the item
+     * to the top of its list, sorted by `pinned_at DESC` (most recent
+     * pin first) — independent from priority. Toggle via the row pin
+     * button or `update_item.pinned`.
+     */
+    pinnedAt: timestamp("pinned_at", { withTimezone: true }),
+    /**
+     * Task-level RFC 5545 RRULE. When set, completing the item does
+     * NOT permanently mark it done — instead, complete-item advances
+     * the deadline (if present) by the rule's next occurrence and
+     * resets `is_done=false`, `status='open'`, `completed_at=null`.
+     * Distinct from `item_reminders.recurrence_rule` which only re-
+     * fires reminder pings without resurrecting the task. Common
+     * use: "her hafta perşembe" weekly chores.
+     */
+    taskRecurrenceRule: text("task_recurrence_rule"),
     position: integer("position").notNull().default(0),
     createdBy: uuid("created_by")
       .notNull()
@@ -159,12 +279,161 @@ export const items = pgTable(
   },
   (t) => [
     index("items_list_id_idx").on(t.listId, t.archivedAt, t.isDone, t.position),
-    index("items_due_at_idx")
-      .on(t.dueAt)
-      .where(sql`${t.dueAt} is not null and ${t.reminderSent} = false`),
+    index("items_deadline_at_idx")
+      .on(t.deadlineAt)
+      .where(sql`${t.deadlineAt} is not null and ${t.archivedAt} is null`),
     index("items_assignee_idx").on(t.assigneeId, t.isDone),
     index("items_status_idx").on(t.listId, t.status),
     index("items_tags_gin").using("gin", t.tags),
+  ],
+);
+
+// ─── item_reminders (Phase 14d) ─────────────────────────────────────
+//
+// One-to-many child of `items`. Replaces the conflated `items.due_at` /
+// `items.reminder_sent` / `items.recurrence_rule` triplet with explicit
+// reminder rows. An item can have zero, one, or many reminders.
+//
+// Two reminder kinds:
+//   - 'absolute': fires at `remind_at` (an explicit moment). Optional
+//     RRULE re-arms the reminder after each fire.
+//   - 'before_deadline': anchored to `items.deadline_at` minus
+//     `offset_minutes`. When the deadline moves, every offset-anchored
+//     reminder for that item is recomputed in lock-step (see
+//     `recomputeOffsetReminders` in `_shared.ts`). Recurrence is not
+//     allowed for this kind — use 'absolute' + RRULE for recurring
+//     offset patterns.
+//
+// CHECK constraints enforce the kind/offset/recurrence pairing at the
+// DB layer so half-applied state from buggy executors can't slip in.
+export const itemReminders = pgTable(
+  "item_reminders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => items.id, { onDelete: "cascade" }),
+    /**
+     * The concrete moment to fire. For 'absolute' kind this is user-set.
+     * For 'before_deadline' kind this is computed
+     * (= items.deadline_at - offset_minutes) and recomputed whenever
+     * the deadline moves.
+     */
+    remindAt: timestamp("remind_at", { withTimezone: true }).notNull(),
+    /** 'absolute' | 'before_deadline'. */
+    kind: text("kind").notNull().default("absolute"),
+    /**
+     * Populated only when kind='before_deadline'. The number of minutes
+     * before `items.deadline_at` to fire. CHECK constraint enforces the
+     * kind/offset pairing.
+     */
+    offsetMinutes: integer("offset_minutes"),
+    /**
+     * Optional RFC 5545 RRULE body (no 'RRULE:' prefix, no DTSTART).
+     * Only allowed when kind='absolute'. Times are interpreted in UTC
+     * (LLM converts to user's timezone when phrasing back). When a
+     * reminder fires and this column is non-null, the dispatcher
+     * computes the next occurrence and resets `remind_at` + `sent` to
+     * re-arm.
+     *
+     * Example: `FREQ=WEEKLY;BYDAY=WE;BYHOUR=18;BYMINUTE=0` —
+     * "every Wednesday at 18:00 UTC".
+     */
+    recurrenceRule: text("recurrence_rule"),
+    sent: boolean("sent").notNull().default(false),
+    lastSentAt: timestamp("last_sent_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    // Cron pickup: only unsent reminders, ordered by fire time.
+    index("item_reminders_due_idx")
+      .on(t.remindAt)
+      .where(sql`${t.sent} = false`),
+    // For "list reminders for this item" + cascade joins.
+    index("item_reminders_item_idx").on(t.itemId),
+  ],
+);
+
+// CHECK constraints for item_reminders are emitted by the migration as
+// raw SQL — Drizzle doesn't yet have first-class tableCheck support in
+// our version. The migration file enforces:
+//   - kind IN ('absolute', 'before_deadline')
+//   - (kind='before_deadline' AND offset_minutes IS NOT NULL AND offset_minutes >= 0)
+//     OR (kind='absolute' AND offset_minutes IS NULL)
+//   - recurrence_rule IS NULL OR kind='absolute'
+
+// ─── item_attachments (Phase 14b) ───────────────────────────────────
+//
+// One-to-many child of `items`. Hybrid storage strategy:
+//
+//   1. Hot path: `telegram_file_id` — Telegram CDN serves bytes for
+//      free, instantly. Bot intake stores the largest size variant
+//      for photos.
+//   2. Backup: a 5-minute-tick cron downloads via `bot.api` and
+//      uploads to Hetzner Object Storage at
+//      `attachments/{workspace_id}/{item_id}/{attachment_id}.{ext}`,
+//      then sets `storage_key` + `storage_backed_up_at`. Survives
+//      bot token rotation (which invalidates every Telegram file_id).
+//   3. Read fallback: when the Telegram CDN URL fails, the proxy
+//      route falls back to a Hetzner pre-signed GET.
+//
+// 20MB cap: `bot.api.downloadFile` can't pull files >20MB. Larger
+// attachments stay Telegram-only (UI shows a "no permanent backup"
+// badge). `backup_skipped_reason` is reserved for that follow-up.
+//
+// `workspace_id` is denormalized (instead of joining items → lists →
+// workspaces) so the storage path can be computed without an extra
+// query and so cascade-delete-by-workspace is one fk hop.
+export const itemAttachments = pgTable(
+  "item_attachments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => items.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references((): AnyPgColumn => workspaces.id, { onDelete: "cascade" }),
+    /**
+     * Telegram message field that produced this row:
+     * 'photo' | 'video' | 'document' | 'audio' | 'voice' | 'video_note'.
+     * App-layer enum; no DB CHECK constraint.
+     */
+    kind: text("kind").notNull(),
+    /** Bot-scoped file id; rotates with the bot token. */
+    telegramFileId: text("telegram_file_id").notNull(),
+    /** Bot-stable cross-bot id; used to dedupe within an item. */
+    telegramFileUniqueId: text("telegram_file_unique_id"),
+    mimeType: text("mime_type"),
+    fileSize: bigint("file_size", { mode: "number" }),
+    durationSeconds: integer("duration_seconds"),
+    width: integer("width"),
+    height: integer("height"),
+    /** Telegram-provided thumbnail file_id (videos / documents). */
+    thumbnailFileId: text("thumbnail_file_id"),
+    originalFilename: text("original_filename"),
+    /** Hetzner Object Storage key — populated by backup-attachments cron. */
+    storageKey: text("storage_key"),
+    storageBackedUpAt: timestamp("storage_backed_up_at", {
+      withTimezone: true,
+    }),
+    uploadedByUserId: uuid("uploaded_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("item_attachments_item_idx").on(t.itemId),
+    // Backup queue: rows still missing a Hetzner copy, FIFO by age.
+    index("item_attachments_backup_queue_idx")
+      .on(t.createdAt)
+      .where(sql`${t.storageBackedUpAt} is null`),
+    // Dedup: same (item, telegram_file_unique_id) pair → upsert.
+    uniqueIndex("item_attachments_telegram_unique_idx")
+      .on(t.itemId, t.telegramFileUniqueId)
+      .where(sql`${t.telegramFileUniqueId} is not null`),
   ],
 );
 
@@ -275,17 +544,15 @@ export const workspaces = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
-    tier: text("tier").notNull().default("free"),
     isPersonal: boolean("is_personal").notNull().default(false),
     ownerId: uuid("owner_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    memberLimit: integer("member_limit").notNull(),
     /**
-     * Phase 5.5 (G6): Workspace-tier admins can set an org-level
-     * OpenRouter key. When a workspace member doesn't have a
-     * personal BYOK, the LLM resolution falls back to this key.
-     * Encrypted via the same AES-256-GCM helper as user BYOK.
+     * Workspace-level OpenRouter org-key. Members without a personal
+     * BYOK fall back to this key for LLM calls. Encrypted via the
+     * same AES-256-GCM helper as user BYOK. Set via the workspace
+     * settings org-key form.
      */
     openrouterApiKeyEncrypted: text("openrouter_api_key_encrypted"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
@@ -330,75 +597,6 @@ export const workspaceMembers = pgTable(
       t.userId,
     ),
     index("workspace_members_user_idx").on(t.userId),
-  ],
-);
-
-// ─── subscriptions ─────────────────────────────────────────────────
-//
-// Free workspaces have NO row here — absence-of-row = Free.
-// Provider-locked at first paid signup (TR users → Iyzico, others →
-// Stripe). Webhook handlers (src/app/api/webhooks/{stripe,iyzico})
-// upsert keyed by `(provider, provider_subscription_id)`.
-export const subscriptions = pgTable(
-  "subscriptions",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    workspaceId: uuid("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    // 'stripe' | 'iyzico' | 'manual'
-    provider: text("provider").notNull(),
-    providerCustomerId: text("provider_customer_id").notNull(),
-    providerSubscriptionId: text("provider_subscription_id").notNull(),
-    // 'free' | 'team' | 'workspace'
-    tier: text("tier").notNull(),
-    // 'active' | 'past_due' | 'canceled' | 'trialing'
-    status: text("status").notNull(),
-    currentPeriodStart: timestamp("current_period_start", {
-      withTimezone: true,
-    }),
-    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
-    cancelAtPeriodEnd: boolean("cancel_at_period_end")
-      .notNull()
-      .default(false),
-    ...timestamps,
-  },
-  (t) => [
-    uniqueIndex("subscriptions_workspace_id_idx").on(t.workspaceId),
-    uniqueIndex("subscriptions_provider_sub_idx").on(
-      t.provider,
-      t.providerSubscriptionId,
-    ),
-  ],
-);
-
-// ─── billing_customers ─────────────────────────────────────────────
-//
-// One row per (user, provider). Country at first paid signup locks
-// the provider — switching providers later requires manual data
-// migration. `tax_id` collected at checkout for KDV (TR) or EU VAT.
-export const billingCustomers = pgTable(
-  "billing_customers",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    // 'stripe' | 'iyzico'
-    provider: text("provider").notNull(),
-    providerCustomerId: text("provider_customer_id").notNull(),
-    email: text("email").notNull(),
-    // ISO 3166-1 alpha-2 (TR, DE, US, ...)
-    country: text("country").notNull(),
-    taxId: text("tax_id"),
-    ...timestamps,
-  },
-  (t) => [
-    uniqueIndex("billing_customers_user_provider_uq").on(t.userId, t.provider),
-    uniqueIndex("billing_customers_provider_customer_uq").on(
-      t.provider,
-      t.providerCustomerId,
-    ),
   ],
 );
 
@@ -455,130 +653,6 @@ export const workspaceBots = pgTable(
     uniqueIndex("workspace_bots_pair_uq").on(t.workspaceId, t.botId),
     index("workspace_bots_workspace_idx").on(t.workspaceId),
     index("workspace_bots_bot_idx").on(t.botId),
-  ],
-);
-
-// ─── workspace_member_caps (Phase 8) ───────────────────────────────
-//
-// Per-member daily / monthly USD spend cap on workspace-org-key
-// usage. When a member falls back to the workspace org-key (no
-// personal BYOK), handle-message rejects the turn if the cap would
-// be exceeded.
-//
-// Cap values stored as integer micro-USD (matches
-// llm_usage.cost_usd_micro). 0 = unlimited (default). No row =
-// unlimited. Owner/admin sets caps via Mini App; member sees their
-// own cap reflected on the settings page.
-export const workspaceMemberCaps = pgTable(
-  "workspace_member_caps",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    workspaceId: uuid("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    /** Daily org-key spend cap in micro-USD; 0 = unlimited. */
-    dailyCapUsdMicro: integer("daily_cap_usd_micro").notNull().default(0),
-    /** Rolling-30d org-key spend cap in micro-USD; 0 = unlimited. */
-    monthlyCapUsdMicro: integer("monthly_cap_usd_micro")
-      .notNull()
-      .default(0),
-    ...timestamps,
-  },
-  (t) => [
-    uniqueIndex("workspace_member_caps_pair_uq").on(
-      t.workspaceId,
-      t.userId,
-    ),
-  ],
-);
-
-// ─── llm_usage (Phase 7) ────────────────────────────────────────────
-//
-// Per-turn LLM token usage telemetry. respond.ts records one row per
-// LLM call. Powers the workspace admin dashboard "spend" surface +
-// future per-user / per-workspace cost-cap features (Phase 7.5+).
-//
-// Cost stored as integer micro-USD (cost_usd_micro) — cents × 10000 —
-// to avoid float drift across aggregates. Workspace admin reads
-// SUM(cost_usd_micro) / 1_000_000 for display.
-export const llmUsage = pgTable(
-  "llm_usage",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    workspaceId: uuid("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    /** Provider model id, e.g. 'anthropic/claude-haiku-4.5'. */
-    model: text("model").notNull(),
-    promptTokens: integer("prompt_tokens").notNull(),
-    completionTokens: integer("completion_tokens").notNull(),
-    /** Cost in micro-USD (cents × 10000). 0 when provider didn't bill. */
-    costUsdMicro: integer("cost_usd_micro").notNull().default(0),
-    /** Where the LLM key came from for this turn. */
-    keySource: text("key_source").notNull(), // 'user' | 'workspace' | 'operator'
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    index("llm_usage_workspace_recent_idx").on(
-      t.workspaceId,
-      sql`${t.createdAt} desc`,
-    ),
-    index("llm_usage_user_recent_idx").on(
-      t.userId,
-      sql`${t.createdAt} desc`,
-    ),
-  ],
-);
-
-// ─── licenses (Phase 6) ─────────────────────────────────────────────
-//
-// Self-host license records. SaaS-side: each issued license gets a
-// row (issuance audit + revocation surface). Self-host operator's
-// instance verifies the license JWT offline against the bundled
-// public key — the SaaS DB row is the source of truth for revocation
-// lookups via the optional revocation-list refresh.
-//
-// `key` stores the SIGNED JWT (header.payload.signature). LicensePayload
-// shape is frozen in src/lib/types/billing.ts. Revocation = setting
-// revoked_at; the offline checker reads a periodic export of revoked
-// JWT ids if configured, or accepts that live revocation is impossible
-// without phone-home (acceptable for self-host privacy posture).
-export const licenses = pgTable(
-  "licenses",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    /** Signed JWT — header.payload.signature, base64url. */
-    key: text("key").notNull(),
-    // 'team' | 'workspace'
-    tier: text("tier").notNull(),
-    seats: integer("seats").notNull(),
-    issuedToEmail: text("issued_to_email").notNull(),
-    /** Optional comma-separated workspace_id allowlist (mirrored in JWT payload). */
-    workspaces: text("workspaces"),
-    issuedAt: timestamp("issued_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }),
-    revokedAt: timestamp("revoked_at", { withTimezone: true }),
-    /** Set when issuance was driven by a Stripe / Iyzico subscription. */
-    sourceProvider: text("source_provider"),
-    sourceReference: text("source_reference"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    uniqueIndex("licenses_key_idx").on(t.key),
-    index("licenses_email_idx").on(t.issuedToEmail),
-    index("licenses_revoked_idx").on(t.revokedAt),
   ],
 );
 

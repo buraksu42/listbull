@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 
+import { UmamiAnalytics } from "@/components/UmamiAnalytics";
+
 import "./globals.css";
 
 const isProd = process.env.NEXT_PUBLIC_ENV === "production";
@@ -33,7 +35,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="min-h-dvh">{children}</body>
+      <body className="min-h-dvh">
+        {children}
+        <UmamiAnalytics />
+      </body>
     </html>
   );
 }

@@ -7,19 +7,30 @@
  * - Membership rejection envelopes (Inv-2).
  * - Error envelope helpers (Inv-4).
  */
-import { and, eq, ilike, inArray, isNull } from "drizzle-orm";
+import { and, eq, ilike, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { listMembers, lists } from "@/lib/db/schema";
-import { toItemSnapshot } from "@/lib/db/snapshots";
+import { itemReminders, listMembers, lists } from "@/lib/db/schema";
+import {
+  toAttachmentSnapshot,
+  toItemReminderSnapshot,
+  toItemSnapshot,
+  toListRunSnapshot,
+} from "@/lib/db/snapshots";
 import type { ListRole } from "@/lib/types";
 
 /**
- * `toItemSnapshot` is re-exported from the layer-neutral `db/snapshots.ts`
- * (Phase 4 · P2-7). Existing executor imports (`from "./_shared"`) keep
- * working unchanged; the canonical home is now `@/lib/db/snapshots`.
+ * `toItemSnapshot` + `toItemReminderSnapshot` are re-exported from the
+ * layer-neutral `db/snapshots.ts` (Phase 4 · P2-7). Existing executor
+ * imports (`from "./_shared"`) keep working unchanged; the canonical
+ * home is now `@/lib/db/snapshots`.
  */
-export { toItemSnapshot };
+export {
+  toAttachmentSnapshot,
+  toItemReminderSnapshot,
+  toItemSnapshot,
+  toListRunSnapshot,
+};
 
 /**
  * Discriminated union returned by every executor. Mirrors the tool's
@@ -243,6 +254,53 @@ export function isPast(iso: string): boolean {
  */
 export function escapeLike(input: string): string {
   return input.replace(/[\\%_]/g, "\\$&");
+}
+
+/**
+ * Drizzle transaction handle type — extracted from the db.transaction
+ * callback so helpers can accept it without re-deriving the type.
+ */
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Phase 14d: when an item's `deadline_at` changes, recompute the
+ * concrete `remind_at` of every `before_deadline` reminder for that
+ * item. Always called inside the same transaction that wrote the new
+ * deadline so the offset reminders never desync.
+ *
+ * Behavior:
+ *   - newDeadline === null → delete every `before_deadline` reminder
+ *     for this item. Orphan offsets are meaningless without an anchor.
+ *     Absolute reminders are NOT touched.
+ *   - newDeadline non-null → SQL-level UPDATE setting
+ *     `remind_at = newDeadline - offset_minutes * interval '1 minute'`,
+ *     `sent = false`, `updated_at = now()`. Re-arming on deadline move
+ *     is intentional — moving the deadline is a new ping context.
+ */
+export async function recomputeOffsetReminders(
+  tx: Tx,
+  itemId: string,
+  newDeadline: Date | null,
+): Promise<void> {
+  if (newDeadline === null) {
+    await tx
+      .delete(itemReminders)
+      .where(
+        and(
+          eq(itemReminders.itemId, itemId),
+          eq(itemReminders.kind, "before_deadline"),
+        ),
+      );
+    return;
+  }
+  await tx.execute(sql`
+    update item_reminders
+       set remind_at = ${newDeadline} - (offset_minutes * interval '1 minute'),
+           sent = false,
+           updated_at = now()
+     where item_id = ${itemId}
+       and kind = 'before_deadline'
+  `);
 }
 
 /** Re-exports for executor convenience. */

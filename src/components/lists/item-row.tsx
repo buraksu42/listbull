@@ -1,11 +1,12 @@
 "use client";
 
-import { GripVertical } from "lucide-react";
+import { FileText, GripVertical, Pin } from "lucide-react";
 import * as React from "react";
 
 import { ItemActions } from "@/components/lists/item-actions";
 import { Avatar } from "@/components/lists/member-list";
 import { PriorityIndicator } from "@/components/items/priority-indicator";
+import { ReminderIndicator } from "@/components/items/reminder-indicator";
 import { StatusBadge } from "@/components/items/status-badge";
 import { TagChip } from "@/components/items/tag-chip";
 import type { Item } from "@/lib/types";
@@ -49,6 +50,8 @@ export type ItemRowProps = {
   onToggle: (next: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
+  /** Toggle pinned state; called with the next boolean. */
+  onTogglePin?: (next: boolean) => void;
   /** Truthy when an optimistic mutation hasn't been confirmed yet. */
   pending?: boolean;
   /** Render slot for the drag handle wired to dnd-kit listeners. */
@@ -60,6 +63,12 @@ export type ItemRowProps = {
    */
   assigneeFirstName?: string | null;
   assigneePhotoUrl?: string | null;
+  /**
+   * Phase 16: when true (checklist mode) hide every metadata badge
+   * (priority / reminder / description / status / tags / assignee).
+   * Only the drag handle, checkbox, text body, and actions remain.
+   */
+  compact?: boolean;
 };
 
 export function ItemRow({
@@ -67,10 +76,12 @@ export function ItemRow({
   onToggle,
   onEdit,
   onDelete,
+  onTogglePin,
   pending = false,
   dragHandle,
   assigneeFirstName = null,
   assigneePhotoUrl = null,
+  compact = false,
 }: ItemRowProps) {
   const assignedTo =
     item.assigneeId !== null ? assigneeFirstName ?? "?" : null;
@@ -112,11 +123,35 @@ export function ItemRow({
         ariaLabel={`Toggle ${item.text}`}
       />
 
-      <PriorityIndicator
-        priority={
-          (item.priority as "low" | "normal" | "high") ?? "normal"
-        }
-      />
+      {!compact && (
+        <>
+          <PriorityIndicator
+            priority={
+              (item.priority as "low" | "normal" | "high") ?? "normal"
+            }
+          />
+
+          <ReminderIndicator deadlineAt={item.deadlineAt ?? null} />
+
+          {item.description ? (
+            <span
+              aria-label="açıklama mevcut"
+              title={
+                item.description.length > 80
+                  ? `${item.description.slice(0, 80)}…`
+                  : item.description
+              }
+              style={{
+                display: "inline-flex",
+                color: "var(--lb-muted-fg)",
+                flexShrink: 0,
+              }}
+            >
+              <FileText size={14} aria-hidden="true" />
+            </span>
+          ) : null}
+        </>
+      )}
 
       <button
         type="button"
@@ -134,32 +169,44 @@ export function ItemRow({
         {item.text}
       </button>
 
-      {/* Phase 4.5: status badge (open hidden) + tag chips */}
-      <StatusBadge
-        status={
-          (item.status as
-            | "open"
-            | "in_progress"
-            | "blocked"
-            | "done") ?? "open"
-        }
-      />
-      {(item.tags ?? []).slice(0, 3).map((t) => (
-        <TagChip key={t} tag={t} />
-      ))}
-
-      {item.assigneeId !== null && (
-        <span
-          aria-hidden
-          title={assignedTo ?? undefined}
-          className="shrink-0"
-        >
-          <Avatar
-            name={assigneeFirstName}
-            photoUrl={assigneePhotoUrl}
-            size={28}
+      {!compact && (
+        <>
+          {/* Phase 4.5: status badge (open hidden) + tag chips */}
+          <StatusBadge
+            status={
+              (item.status as
+                | "open"
+                | "in_progress"
+                | "blocked"
+                | "done") ?? "open"
+            }
           />
-        </span>
+          {(item.tags ?? []).slice(0, 3).map((t) => (
+            <TagChip key={t} tag={t} />
+          ))}
+
+          {item.assigneeId !== null && (
+            <span
+              aria-hidden
+              title={assignedTo ?? undefined}
+              className="shrink-0"
+            >
+              <Avatar
+                name={assigneeFirstName}
+                photoUrl={assigneePhotoUrl}
+                size={28}
+              />
+            </span>
+          )}
+        </>
+      )}
+
+      {onTogglePin && (
+        <PinButton
+          pinned={item.pinnedAt !== null && item.pinnedAt !== undefined}
+          onToggle={onTogglePin}
+          itemLabel={item.text}
+        />
       )}
 
       <ItemActions
@@ -168,6 +215,48 @@ export function ItemRow({
         itemLabel={item.text}
       />
     </div>
+  );
+}
+
+/**
+ * PinButton — toggle the item's `pinned_at` state. Filled (accent) when
+ * pinned, outline otherwise. Tooltip swaps between Sabitle / Sabitlemeyi
+ * Kaldır.
+ */
+function PinButton({
+  pinned,
+  onToggle,
+  itemLabel,
+}: {
+  pinned: boolean;
+  onToggle: (next: boolean) => void;
+  itemLabel: string;
+}) {
+  const label = pinned
+    ? `Sabitlemeyi kaldır: ${itemLabel}`
+    : `Sabitle: ${itemLabel}`;
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={pinned ? "Sabitlemeyi kaldır" : "Sabitle"}
+      onClick={() => onToggle(!pinned)}
+      className={cn(
+        "shrink-0 rounded-[var(--lb-r-sm)] p-1.5",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)]",
+      )}
+      style={{
+        color: pinned ? "var(--lb-accent)" : "var(--lb-muted-fg)",
+      }}
+    >
+      <Pin
+        size={16}
+        aria-hidden="true"
+        style={{
+          fill: pinned ? "var(--lb-accent)" : "transparent",
+        }}
+      />
+    </button>
   );
 }
 

@@ -22,7 +22,6 @@ import { db } from "@/lib/db/client";
 import { bots, workspaceBots, workspaces } from "@/lib/db/schema";
 import { getWorkspaceMembership } from "@/lib/db/queries/workspaces";
 import { encrypt } from "@/lib/server/encryption";
-import { enforceTier } from "@/lib/server/middleware/tier-enforce";
 import { env } from "@/lib/env";
 
 export const runtime = "nodejs";
@@ -70,25 +69,6 @@ export async function POST(request: Request, { params }: RouteCtx) {
         },
       },
       { status: 403 },
-    );
-  }
-
-  // Tier gate: white-label bots are Workspace-tier only. Phase 5
-  // logs (BILLING_ENFORCE=false). Phase 5 launch flips to enforce.
-  const tierResult = await enforceTier(workspaceId, {
-    type: "set_org_api_key",
-  });
-  if (tierResult.enforced) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: {
-          code: tierResult.reason,
-          message: tierResult.message,
-          upgradeTo: tierResult.upgradeTo,
-        },
-      },
-      { status: 402 },
     );
   }
 

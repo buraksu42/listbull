@@ -5,7 +5,6 @@ import { notFound } from "next/navigation";
 import { CustomBotSection } from "@/components/workspace/custom-bot-section";
 import { MembersSection } from "@/components/workspace/members-section";
 import { OrgKeySection } from "@/components/workspace/org-key-section";
-import { PlanCard } from "@/components/workspace/plan-card";
 import {
   listWorkspacesForUser,
   resolveActiveWorkspaceId,
@@ -157,21 +156,6 @@ export default async function WorkspaceSettingsPage() {
           </div>
         </section>
 
-        <section>
-          <div
-            style={{
-              fontSize: "var(--lb-fs-xs)",
-              color: "var(--lb-muted-fg)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              marginBottom: "var(--lb-sp-2)",
-            }}
-          >
-            Plan & billing
-          </div>
-          <PlanCard workspace={active} />
-        </section>
-
         <MembersSection
           workspaceId={active.id}
           isOwner={active.role === "owner"}
@@ -184,17 +168,14 @@ export default async function WorkspaceSettingsPage() {
         <CustomBotSection
           workspaceId={active.id}
           canManage={active.role === "owner"}
-          isWorkspaceTier={active.tier === "workspace"}
         />
 
         <OrgKeySection
           workspaceId={active.id}
           canManage={active.role === "owner" || active.role === "admin"}
-          isWorkspaceTier={active.tier === "workspace"}
         />
 
-        {active.tier === "workspace" &&
-          (active.role === "owner" || active.role === "admin") && (
+        {(active.role === "owner" || active.role === "admin") && (
             <Link
               href="/workspace/admin"
               style={{

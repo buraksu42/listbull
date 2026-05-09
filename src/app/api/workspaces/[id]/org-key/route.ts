@@ -1,7 +1,7 @@
 /**
- * Workspace org-level OpenRouter key management (Phase 5.5 / G6).
+ * Workspace org-level OpenRouter key management.
  *
- * Workspace-tier admins can SET / REPLACE / CLEAR an OpenRouter
+ * Workspace owners + admins can SET / REPLACE / CLEAR an OpenRouter
  * key shared across the workspace. Members without personal BYOK
  * fall back to this key during LLM calls — see
  * src/lib/server/bot/handle-message.ts BYOK resolution chain.
@@ -10,8 +10,7 @@
  *   PUT  → set/replace; body { apiKey: string }
  *   DELETE → clear
  *
- * Owner + admin only. Workspace tier only — the
- * `set_org_api_key` tier action gates non-Workspace tiers.
+ * Owner + admin only.
  */
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -21,7 +20,6 @@ import { db } from "@/lib/db/client";
 import { workspaces } from "@/lib/db/schema";
 import { getWorkspaceMembership } from "@/lib/db/queries/workspaces";
 import { encrypt } from "@/lib/server/encryption";
-import { enforceTier } from "@/lib/server/middleware/tier-enforce";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,25 +57,6 @@ async function authorize(
     );
   }
 
-  // Tier gate: Workspace tier only. Phase 5 BILLING_ENFORCE flips
-  // this from logged to enforcing.
-  const tierResult = await enforceTier(workspaceId, {
-    type: "set_org_api_key",
-  });
-  if (tierResult.enforced) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: {
-          code: tierResult.reason,
-          message: tierResult.message,
-          upgradeTo: tierResult.upgradeTo,
-        },
-      },
-      { status: 402 },
-    );
-  }
-
   return { userId };
 }
 
@@ -88,7 +67,6 @@ export async function GET(_request: Request, { params }: RouteCtx) {
 
   const [row] = await db
     .select({
-      tier: workspaces.tier,
       keyEnc: workspaces.openrouterApiKeyEncrypted,
     })
     .from(workspaces)
@@ -105,7 +83,6 @@ export async function GET(_request: Request, { params }: RouteCtx) {
     ok: true,
     data: {
       hasOrgKey: row.keyEnc !== null,
-      tier: row.tier,
     },
   });
 }

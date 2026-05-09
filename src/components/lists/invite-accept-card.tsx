@@ -31,6 +31,14 @@ type Props = {
   isAuthenticated: boolean;
   currentUserCanAccept: boolean;
   usernameMismatch: boolean;
+  /**
+   * Bot handle (without leading @) — supplied by the page from
+   * env.TELEGRAM_BOT_USERNAME. After a successful accept we deeplink
+   * the user into the bot DM (with a `?start=joined_<listId>` payload)
+   * so first-time invitees actually open a chat and pass through
+   * /start, otherwise they sit list-membered but bot-unreachable.
+   */
+  botUsername: string;
 };
 
 /** P2-2: consume Backend-published response shape directly. */
@@ -42,6 +50,7 @@ export function InviteAcceptCard({
   isAuthenticated,
   currentUserCanAccept,
   usernameMismatch,
+  botUsername,
 }: Props) {
   const router = useRouter();
   const [submitting, setSubmitting] = React.useState(false);
@@ -53,9 +62,33 @@ export function InviteAcceptCard({
         `/api/invites/${invite.token}/accept`,
         {},
       );
-      // Hard navigate so the user's back button doesn't drop them back
-      // onto the (now stale) invite screen.
-      window.location.replace(`/lists/${data.listId}`);
+      // Phase 9 UX fix: route the freshly-joined user to the BOT chat
+      // (not /lists/<id> directly). Without /start they have no chat
+      // with the bot, so reminders + slash commands are dead. The
+      // `?start=joined_<listId>` payload is interpreted by /start so
+      // the bot can welcome + drop them into the list.
+      const botLink = `https://t.me/${botUsername}?start=joined_${data.listId}`;
+      const tg = (typeof window !== "undefined"
+        ? (window as unknown as {
+            Telegram?: {
+              WebApp?: { openTelegramLink?: (url: string) => void };
+            };
+          }).Telegram?.WebApp
+        : undefined);
+      if (tg?.openTelegramLink) {
+        tg.openTelegramLink(botLink);
+        // Fallback if the Mini App stays open: still show success state
+        // (user can tap their way out). Settle into the list page after
+        // a short delay so Telegram has time to switch chats.
+        window.setTimeout(() => {
+          window.location.replace(`/lists/${data.listId}`);
+        }, 600);
+      } else {
+        // Outside Telegram (web preview, etc.) — open the t.me URL
+        // first, then fall through to the list page.
+        window.open(botLink, "_blank", "noopener");
+        window.location.replace(`/lists/${data.listId}`);
+      }
     } catch (err) {
       const code = err instanceof ApiError ? err.code : "unknown";
       // The 409 / mismatch code-paths route through the server-rendered

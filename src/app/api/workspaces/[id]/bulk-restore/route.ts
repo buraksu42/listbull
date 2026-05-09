@@ -46,8 +46,11 @@ const itemSnapshotSchema = z.object({
   isCheckable: z.boolean(),
   isDone: z.boolean(),
   assigneeId: z.string().nullable(),
-  dueAt: z.string().nullable(),
-  reminderSent: z.boolean(),
+  // Phase 14d: deadlineAt is the canonical field; legacy dueAt is
+  // accepted for back-compat with old activity_log rows.
+  deadlineAt: z.string().nullable().optional(),
+  dueAt: z.string().nullable().optional(),
+  reminderSent: z.boolean().optional(),
   position: z.number(),
   createdBy: z.string(),
   completedAt: z.string().nullable(),
@@ -186,8 +189,9 @@ async function restoreOne(
   const snap = parsed.data;
 
   await db.transaction(async (tx) => {
-    const dueAt = snap.dueAt ? new Date(snap.dueAt) : null;
-    const reminderSent = dueAt ? dueAt.getTime() <= Date.now() : false;
+    // Phase 14d: prefer canonical deadlineAt, fall back to legacy dueAt.
+    const deadlineSource = snap.deadlineAt ?? snap.dueAt ?? null;
+    const deadlineAt = deadlineSource ? new Date(deadlineSource) : null;
 
     const [created] = await tx
       .insert(items)
@@ -197,8 +201,7 @@ async function restoreOne(
         isCheckable: snap.isCheckable,
         isDone: false,
         assigneeId: null,
-        dueAt,
-        reminderSent,
+        deadlineAt,
         position: snap.position,
         createdBy: snap.createdBy,
         completedAt: null,
@@ -208,7 +211,10 @@ async function restoreOne(
     if (!created) throw new Error("bulk-restore: insert returned no row");
 
     // Activity log row for the restore (item_created mirrors single-
-    // restore convention; preserves the audit chain).
+    // restore convention; preserves the audit chain). Use the shared
+    // snapshot helper so the new shape (status/priority/tags) is
+    // serialized consistently.
+    const { toItemSnapshot } = await import("@/lib/db/snapshots");
     await tx.insert(activityLog).values({
       listId: created.listId,
       entityType: "item",
@@ -216,24 +222,7 @@ async function restoreOne(
       action: "item_created",
       actorId: snap.createdBy,
       payloadBefore: null,
-      payloadAfter: {
-        id: created.id,
-        listId: created.listId,
-        text: created.text,
-        isCheckable: created.isCheckable,
-        isDone: created.isDone,
-        assigneeId: created.assigneeId,
-        dueAt: created.dueAt ? created.dueAt.toISOString() : null,
-        reminderSent: created.reminderSent,
-        position: created.position,
-        createdBy: created.createdBy,
-        completedAt: created.completedAt
-          ? created.completedAt.toISOString()
-          : null,
-        archivedAt: null,
-        createdAt: created.createdAt.toISOString(),
-        updatedAt: created.updatedAt.toISOString(),
-      },
+      payloadAfter: toItemSnapshot(created),
     });
   });
 

@@ -20,17 +20,6 @@ import type {
 export type Workspace = typeof workspaces.$inferSelect;
 export type NewWorkspace = typeof workspaces.$inferInsert;
 
-/**
- * Workspace pricing tiers. Cached on `workspaces.tier`; refreshed by
- * Billing-agent's webhook handler when subscription state changes.
- *
- * Each tier maps to a `member_limit`:
- *   free       → 1
- *   team       → 5
- *   workspace  → 15
- */
-export type WorkspaceTier = "free" | "team" | "workspace";
-
 // ─── WorkspaceMember ────────────────────────────────────────────────
 export type WorkspaceMember = typeof workspaceMembers.$inferSelect;
 export type NewWorkspaceMember = typeof workspaceMembers.$inferInsert;
@@ -38,17 +27,15 @@ export type NewWorkspaceMember = typeof workspaceMembers.$inferInsert;
 /**
  * Roles within a workspace.
  *
- * - `owner`: full control, billing, delete workspace, transfer ownership
- * - `admin`: everything owner can do EXCEPT delete + transfer + billing
- *            (Workspace tier only; Team tier has no admin role)
+ * - `owner`: full control, delete workspace, transfer ownership
+ * - `admin`: everything owner can do EXCEPT delete + transfer
  * - `editor`: mutate items + create lists; cannot mutate members
- * - `viewer`: read-only across workspace (Team+ tier)
- * - `guest`: single-list access only (Team+ tier; gated by
- *            workspace_members + list_members joint membership)
+ * - `viewer`: read-only across workspace
+ * - `guest`: single-list access only (gated by joint
+ *            workspace_members + list_members membership)
  *
  * Distinct from `ListRole` (`owner` | `editor` | `viewer`) which is
- * scoped to a single list. List roles still exist post-pivot for
- * per-list overrides; workspace role is the broader gate.
+ * scoped to a single list.
  */
 export type WorkspaceRole =
   | "owner"
@@ -69,10 +56,8 @@ export type WorkspaceSnapshot = {
   id: string;
   name: string;
   slug: string;
-  tier: WorkspaceTier;
   isPersonal: boolean;
   ownerId: string;
-  memberLimit: number;
   /** ISO 8601 string — soft-delete marker. */
   archivedAt: string | null;
   /** ISO 8601 string */
@@ -121,7 +106,6 @@ export type WorkspaceListItem = {
   id: string;
   name: string;
   slug: string;
-  tier: WorkspaceTier;
   isPersonal: boolean;
   role: WorkspaceRole;
   memberCount: number;
@@ -144,7 +128,6 @@ export type WorkspaceInviteTokenInfo = {
   token: string;
   workspaceId: string;
   workspaceName: string;
-  workspaceTier: WorkspaceTier;
   /** Display name of the user who created the invite. */
   invitedByName: string;
   role: WorkspaceRole;

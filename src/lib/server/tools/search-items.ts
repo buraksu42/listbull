@@ -12,7 +12,7 @@ import "server-only";
 import { and, asc, eq, ilike, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { items, listMembers, lists } from "@/lib/db/schema";
+import { itemReminders, items, listMembers, lists } from "@/lib/db/schema";
 import {
   searchItemsInputSchema,
   type SearchItemsOutput,
@@ -35,6 +35,7 @@ export async function executeSearchItems(
     list_name,
     include_done,
     include_archived,
+    has_reminder,
     limit,
   } = parsed.data;
 
@@ -105,6 +106,19 @@ export async function executeSearchItems(
   }
   if (!include_done) conds.push(eq(items.isDone, false));
   if (!include_archived) conds.push(isNull(items.archivedAt));
+  if (has_reminder) {
+    // Phase 14d: "active reminder" lives in the item_reminders table.
+    // Match items that have at least one unsent, future reminder via
+    // EXISTS subquery — keeps the join cardinality at 1 row per item.
+    conds.push(
+      sql`exists (
+        select 1 from ${itemReminders}
+        where ${itemReminders.itemId} = ${items.id}
+          and ${itemReminders.sent} = false
+          and ${itemReminders.remindAt} > now()
+      )`,
+    );
+  }
 
   // First fetch matching rows (with list info via JOIN).
   const rows = await db
@@ -119,7 +133,12 @@ export async function executeSearchItems(
     .from(items)
     .innerJoin(lists, eq(items.listId, lists.id))
     .where(and(...conds))
-    .orderBy(asc(items.isDone), asc(items.position), asc(items.createdAt))
+    .orderBy(
+      sql`${items.pinnedAt} DESC NULLS LAST`,
+      asc(items.isDone),
+      asc(items.position),
+      asc(items.createdAt),
+    )
     .limit(limit);
 
   // Total matched (for capped pagination feedback). Run a count query

@@ -50,6 +50,90 @@
       "when": 1778091399943,
       "tag": "0006_late_valeria_richards",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778181580128,
+      "tag": "0007_open_boomer",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1778184682974,
+      "tag": "0008_amazing_prism",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778185778383,
+      "tag": "0009_calm_titania",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1778230634747,
+      "tag": "0010_lush_rictor",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1778889600000,
+      "tag": "0011_phase14d_reminders_split",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1778889700000,
+      "tag": "0012_phase14a_item_description",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1778889800000,
+      "tag": "0013_phase14c_user_date_format",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1778889900000,
+      "tag": "0014_phase14b_item_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1778890000000,
+      "tag": "0015_phase16_checklists",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1778890100000,
+      "tag": "0016_phase15_daily_digest",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1778890200000,
+      "tag": "0017_task_recurrence",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1778890300000,
+      "tag": "0018_drop_billing",
+      "breakpoints": true
     }
   ]
 }

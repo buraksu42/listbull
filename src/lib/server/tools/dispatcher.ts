@@ -24,13 +24,20 @@ import { executeUpdateList } from "./update-list";
 import { executeDeleteList } from "./delete-list";
 import { executeRestoreList } from "./restore-list";
 import { executeShareList } from "./share-list";
+import { executeCreateSnapshot } from "./create-snapshot";
 import { executeCancelInvite } from "./cancel-invite";
 import { executeListMembers } from "./list-members";
 import { executeRemoveMember } from "./remove-member";
 import { executeUpdateMemberRole } from "./update-member-role";
 import { executeUpdateSettings } from "./update-settings";
-import { executeScheduleReminder } from "./schedule-reminder";
+import { executeSetDeadline } from "./set-deadline";
+import { executeAddReminder } from "./add-reminder";
+import { executeRemoveReminder } from "./remove-reminder";
+import { executeAttachFileToItem } from "./attach-file-to-item";
+import { executeStartChecklistRun } from "./start-checklist-run";
+import { executeCompleteChecklistRun } from "./complete-checklist-run";
 import { executeAssignItem } from "./assign-item";
+import { executeCreateWorkspace } from "./create-workspace";
 import { executeSwitchWorkspace } from "./switch-workspace";
 import { executeListWorkspaces } from "./list-workspaces";
 import { executeUpdateWorkspace } from "./update-workspace";
@@ -93,6 +100,8 @@ async function routeCall(
       return await executeRestoreList(input, ctx);
     case "share_list":
       return await executeShareList(input, ctx);
+    case "create_snapshot":
+      return await executeCreateSnapshot(input, ctx);
     case "cancel_invite":
       return await executeCancelInvite(input, ctx);
     case "list_members":
@@ -103,10 +112,22 @@ async function routeCall(
       return await executeUpdateMemberRole(input, ctx);
     case "update_settings":
       return await executeUpdateSettings(input, ctx);
-    case "schedule_reminder":
-      return await executeScheduleReminder(input, ctx);
+    case "set_deadline":
+      return await executeSetDeadline(input, ctx);
+    case "add_reminder":
+      return await executeAddReminder(input, ctx);
+    case "remove_reminder":
+      return await executeRemoveReminder(input, ctx);
+    case "attach_file_to_item":
+      return await executeAttachFileToItem(input, ctx);
+    case "start_checklist_run":
+      return await executeStartChecklistRun(input, ctx);
+    case "complete_checklist_run":
+      return await executeCompleteChecklistRun(input, ctx);
     case "assign_item":
       return await executeAssignItem(input, ctx);
+    case "create_workspace":
+      return await executeCreateWorkspace(input, ctx);
     case "switch_workspace":
       return await executeSwitchWorkspace(input, ctx);
     case "list_workspaces":
