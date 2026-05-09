@@ -20,6 +20,14 @@ const serverSchema = z.object({
 
   OPENROUTER_API_KEY: z.string().optional(),
 
+  // Operator-mode gate (post-billing-tear-out). When set, the operator
+  // env-key fallback (env.OPENROUTER_API_KEY) only fires for workspaces
+  // whose owner.telegram_id matches this value. Other workspaces must
+  // BYOK or set a workspace org-key. Leaving this unset disables the
+  // env-key fallback entirely — every workspace must bring its own key.
+  // Numeric Telegram user id (e.g. 123456789).
+  OPERATOR_TELEGRAM_ID: z.coerce.number().int().positive().optional(),
+
   LISTBULL_PER_USER_HOURLY_MSG_LIMIT: z.coerce
     .number()
     .int()
@@ -41,65 +49,11 @@ const serverSchema = z.object({
   // URLs. When unset we fall back to BETTER_AUTH_SECRET.
   SNAPSHOT_SIGNING_KEY: z.string().min(32).optional(),
 
-  // Phase 4.5: tier-enforcement gate. Default 'false' (logs only);
-  // Phase 5 sets 'true' to actively reject 402.
-  BILLING_ENFORCE: z.enum(["true", "false"]).default("false"),
-
-  // Phase 4.5: Stripe + Iyzico configuration. All optional — when
-  // unset, billing routes return 503 service_unavailable and the
-  // Mini App UI hides upgrade CTAs. Operators wire keys at deploy
-  // time via Dokploy env (never committed).
-  STRIPE_SECRET_KEY: z.string().optional(),
-  STRIPE_WEBHOOK_SECRET: z.string().optional(),
-  STRIPE_PRICE_TEAM: z.string().optional(),
-  STRIPE_PRICE_WORKSPACE: z.string().optional(),
-  // Phase 6.5: one-time-payment self-host license SKUs. When the
-  // Stripe webhook receives invoice.payment_succeeded for these
-  // prices, we auto-issue a perpetual license JWT.
-  STRIPE_PRICE_SELFHOST_TEAM: z.string().optional(),
-  STRIPE_PRICE_SELFHOST_WORKSPACE: z.string().optional(),
-
-  IYZICO_API_KEY: z.string().optional(),
-  IYZICO_SECRET_KEY: z.string().optional(),
-  IYZICO_BASE_URL: z.string().url().optional(),
-  IYZICO_WEBHOOK_SECRET: z.string().optional(),
-  IYZICO_PLAN_TEAM: z.string().optional(),
-  IYZICO_PLAN_WORKSPACE: z.string().optional(),
-
-  // Phase 4.5: license-verify gate (self-host Phase 6 prep). Default
-  // 'false' so SaaS deployments are no-op; self-host operators set
-  // 'true' once Phase 6 issuance lands.
-  LICENSE_VERIFY_ENABLED: z.enum(["true", "false"]).default("false"),
-  LICENSE_PUBLIC_KEY: z.string().optional(),
-  LICENSE_KEY: z.string().optional(),
-
-  // Phase 6: SaaS-side license issuance. PEM-encoded Ed25519 private
-  // key used by the issuer to sign JWTs. The matching public half
-  // ships with each self-host build (LICENSE_PUBLIC_KEY) so verifiers
-  // can validate offline. Admin endpoint requires LICENSE_ADMIN_TOKEN
-  // header.
-  LICENSE_PRIVATE_KEY: z.string().optional(),
-  LICENSE_ADMIN_TOKEN: z.string().optional(),
-
-  // Phase 6: optional URL self-host instances periodically refresh
-  // for the newline-separated list of revoked license IDs. When
-  // unset, revocation can't be propagated without phone-home —
-  // acceptable for privacy-first deploys; licenses still expire
-  // via `exp`. SaaS publishes this list at /api/license-revocations.
-  LICENSE_REVOCATION_URL: z.string().url().optional(),
-
-  // Phase 6.5: Resend email delivery for license issuance + general
-  // transactional email. When unset, license issuance still works
-  // — operator delivers JWT manually. RESEND_FROM is the verified
-  // sender (e.g. "listbull <license@listbull.org>").
-  RESEND_API_KEY: z.string().optional(),
-  RESEND_FROM: z.string().optional(),
-
   // Phase 7: Upstash Redis (KV) for cross-pod webhook idempotency +
-  // per-route rate limiting on admin/billing surfaces. When unset,
-  // idempotency falls back to in-memory single-pod cache (existing
-  // Phase 4.5 stub) and rate limiting becomes a no-op. Both safe
-  // defaults — operator opts in by configuring the env.
+  // per-route rate limiting on admin surfaces. When unset, idempotency
+  // falls back to in-memory single-pod cache and rate limiting becomes
+  // a no-op. Both safe defaults — operator opts in by configuring the
+  // env.
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
 });

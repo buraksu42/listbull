@@ -5,7 +5,6 @@ import { notFound } from "next/navigation";
 import { CustomBotSection } from "@/components/workspace/custom-bot-section";
 import { MembersSection } from "@/components/workspace/members-section";
 import { OrgKeySection } from "@/components/workspace/org-key-section";
-import { PlanCard } from "@/components/workspace/plan-card";
 import {
   listWorkspacesForUser,
   resolveActiveWorkspaceId,
@@ -157,21 +156,6 @@ export default async function WorkspaceSettingsPage() {
           </div>
         </section>
 
-        <section>
-          <div
-            style={{
-              fontSize: "var(--lb-fs-xs)",
-              color: "var(--lb-muted-fg)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              marginBottom: "var(--lb-sp-2)",
-            }}
-          >
-            Plan & billing
-          </div>
-          <PlanCard workspace={active} />
-        </section>
-
         <MembersSection
           workspaceId={active.id}
           isOwner={active.role === "owner"}
@@ -184,14 +168,11 @@ export default async function WorkspaceSettingsPage() {
         <CustomBotSection
           workspaceId={active.id}
           canManage={active.role === "owner"}
-          // 2026-05-08: tier gate dropped (all-features-on-free).
-          isWorkspaceTier={true}
         />
 
         <OrgKeySection
           workspaceId={active.id}
           canManage={active.role === "owner" || active.role === "admin"}
-          isWorkspaceTier={true}
         />
 
         {(active.role === "owner" || active.role === "admin") && (

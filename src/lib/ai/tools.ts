@@ -487,7 +487,6 @@ export const switchWorkspaceOutputSchema = z.object({
     id: z.string().uuid(),
     name: z.string(),
     slug: z.string(),
-    tier: z.enum(["free", "team", "workspace"]),
     role: z.enum(["owner", "admin", "editor", "viewer", "guest"]),
   }),
 });
@@ -498,11 +497,9 @@ export type SwitchWorkspaceOutput = z.infer<typeof switchWorkspaceOutputSchema>;
 // ─── 6f.5. create_workspace ──────────────────────────────────────────
 //
 // Create a fresh workspace owned by the caller. Mirrors POST
-// /api/workspaces — name required, free tier by default. Tier-enforce
-// middleware may reject when the caller already exhausted their cap;
-// the executor returns the same envelope the route emits. The new
-// workspace is NOT auto-activated; the LLM should follow up with
-// `switch_workspace` if the user clearly intended to land there.
+// /api/workspaces. The new workspace is NOT auto-activated; the LLM
+// should follow up with `switch_workspace` if the user clearly
+// intended to land there.
 
 export const createWorkspaceInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -513,7 +510,6 @@ export const createWorkspaceOutputSchema = z.object({
     id: z.string().uuid(),
     name: z.string(),
     slug: z.string(),
-    tier: z.enum(["free", "team", "workspace"]),
     is_personal: z.boolean(),
   }),
 });
@@ -535,7 +531,6 @@ export const listWorkspacesOutputSchema = z.object({
       id: z.string().uuid(),
       name: z.string(),
       slug: z.string(),
-      tier: z.enum(["free", "team", "workspace"]),
       is_personal: z.boolean(),
       role: z.enum(["owner", "admin", "editor", "viewer", "guest"]),
       member_count: z.number().int().nonnegative(),
@@ -550,9 +545,7 @@ export type ListWorkspacesOutput = z.infer<typeof listWorkspacesOutputSchema>;
 
 // ─── 6h. update_workspace (Phase 4.5) ─────────────────────────────────
 //
-// Owner-only rename. The slug auto-regenerates from the new name; the
-// `tier` field stays read-only (changing tier requires a billing
-// event, owned by Billing-agent).
+// Owner-only rename. The slug auto-regenerates from the new name.
 
 export const updateWorkspaceInputSchema = z
   .object({
@@ -577,10 +570,7 @@ export type UpdateWorkspaceOutput = z.infer<typeof updateWorkspaceOutputSchema>;
 // ─── 6i. invite_to_workspace (Phase 4.5) ──────────────────────────────
 //
 // Owner / admin invite a user to the active workspace. Phase 4.5
-// schema-only for shared workspaces (Team/Workspace tier) — Free
-// tier has only the Personal Workspace, so this tool returns
-// `tier_exceeded` log entries (and Phase 5 enforces). Mirrors
-// `share_list`'s deeplink + DM pattern.
+// Mirrors `share_list`'s deeplink + DM pattern but at workspace level.
 
 export const inviteToWorkspaceInputSchema = z.object({
   username: z
@@ -599,12 +589,6 @@ export const inviteToWorkspaceOutputSchema = z.object({
   }),
   invitedUsername: z.string(),
   role: z.enum(["admin", "editor", "viewer", "guest"]),
-  /**
-   * Phase 4.5 ships the schema; the actual invite-token + DM flow
-   * lands when shared workspaces become creatable in Phase 5. Until
-   * then this returns `pending_phase_5` for Free-tier callers; tier
-   * middleware logs the attempt.
-   */
   status: z.enum(["invite_sent", "already_member", "pending_phase_5"]),
   warnings: z.array(z.string()).optional(),
 });
@@ -1751,10 +1735,7 @@ export const tools: readonly ToolDefinition[] = [
       "the new workspace shape; the new workspace is NOT auto-active " +
       "— if the user clearly intended to switch into it (e.g. 'iş " +
       "diye yeni workspace aç ve oraya geç'), call `switch_workspace` " +
-      "with the returned `workspace.id` next. Tier-gated: a free-plan " +
-      "user may already have hit their workspace limit; the executor " +
-      "will return `tier_exceeded` and the LLM should phrase the " +
-      "rejection plainly with the upgrade hint.",
+      "with the returned `workspace.id` next.",
     inputSchema: createWorkspaceInputSchema,
     outputSchema: createWorkspaceOutputSchema,
   },
@@ -1789,29 +1770,20 @@ export const tools: readonly ToolDefinition[] = [
     name: "update_workspace",
     description:
       "Rename the active workspace. OWNER-ONLY. Pass `name` (1-120). " +
-      "The slug auto-regenerates. Tier change is NOT supported via " +
-      "this tool — that flows through billing. Use when the user " +
-      "says 'workspace adını <X> yap' / 'rename my workspace to <X>'. " +
-      "Personal Workspace can be renamed freely; the `is_personal` " +
-      "flag stays.",
+      "The slug auto-regenerates. Use when the user says 'workspace " +
+      "adını <X> yap' / 'rename my workspace to <X>'. Personal " +
+      "Workspace can be renamed freely; the `is_personal` flag stays.",
     inputSchema: updateWorkspaceInputSchema,
     outputSchema: updateWorkspaceOutputSchema,
   },
   {
     name: "invite_to_workspace",
     description:
-      "Invite a Telegram user to the active workspace as `admin` " +
-      "(Workspace tier only), `editor` (default), `viewer`, or " +
-      "`guest`. OWNER + ADMIN can call. Operates on the user's " +
-      "ACTIVE workspace — no list_id / list_name argument; switch " +
-      "workspaces first if needed. Pass `username` (with or without " +
-      "leading @ — case is normalized).\n\n" +
-      "Phase 4.5: Free tier users can call this against their " +
-      "Personal Workspace but the executor returns " +
-      "`pending_phase_5` since multi-member workspaces require " +
-      "Team or Workspace tier; tier middleware logs the attempt. " +
-      "Phase 5 enforces tier limits and ships the actual invite-" +
-      "token + DM flow.\n\n" +
+      "Invite a Telegram user to the active workspace as `admin`, " +
+      "`editor` (default), `viewer`, or `guest`. OWNER + ADMIN can " +
+      "call. Operates on the user's ACTIVE workspace — no list_id / " +
+      "list_name argument; switch workspaces first if needed. Pass " +
+      "`username` (with or without leading @ — case is normalized).\n\n" +
       "Distinct from `share_list` which adds a member to a SINGLE " +
       "list. Workspace-level invites grant access to ALL lists in " +
       "the workspace via the workspace_members membership.",

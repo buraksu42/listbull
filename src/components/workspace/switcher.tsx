@@ -65,10 +65,8 @@ export function WorkspaceSwitcher({ workspaces }: Props) {
 
   const personalCount = workspaces.filter((w) => w.isPersonal).length;
   const totalOwned = workspaces.filter((w) => w.role === "owner").length;
-  const canCreateMore = totalOwned > personalCount; // Phase 5 enforces tier
-  // 2026-05-08: tier gate dropped — no "Upgrade" hint while free is the
-  // only tier in play. Re-enable when billing flips on.
-  const upgradeHint = false;
+  void totalOwned;
+  void personalCount;
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
@@ -178,7 +176,6 @@ export function WorkspaceSwitcher({ workspaces }: Props) {
                   </span>
                 )}
               </span>
-              <TierBadge tier={w.tier} />
               <RolePill role={w.role} />
             </button>
           ))}
@@ -214,7 +211,6 @@ export function WorkspaceSwitcher({ workspaces }: Props) {
             </button>
             <button
               type="button"
-              disabled={!canCreateMore && upgradeHint}
               onClick={() => {
                 window.location.href = "/workspace/new";
               }}
@@ -226,43 +222,19 @@ export function WorkspaceSwitcher({ workspaces }: Props) {
                 padding: "var(--lb-sp-2) var(--lb-sp-3)",
                 background: "transparent",
                 border: "none",
-                color: upgradeHint ? "var(--lb-muted-fg)" : "var(--lb-fg)",
+                color: "var(--lb-fg)",
                 fontSize: "var(--lb-fs-sm)",
                 textAlign: "left",
-                cursor: upgradeHint ? "default" : "pointer",
+                cursor: "pointer",
               }}
             >
               <Plus aria-hidden width={14} height={14} />
-              {upgradeHint ? "Upgrade to add workspace" : "Create workspace"}
+              Create workspace
             </button>
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-function TierBadge({ tier }: { tier: string }) {
-  const palette: Record<string, { bg: string; fg: string }> = {
-    free: { bg: "var(--lb-muted)", fg: "var(--lb-muted-fg)" },
-    team: { bg: "var(--lb-accent)", fg: "var(--lb-accent-fg)" },
-    workspace: { bg: "var(--lb-fg)", fg: "var(--lb-bg)" },
-  };
-  const { bg, fg } = palette[tier] ?? palette.free!;
-  return (
-    <span
-      style={{
-        background: bg,
-        color: fg,
-        padding: "2px 6px",
-        borderRadius: "999px",
-        fontSize: "10px",
-        fontWeight: "var(--lb-fw-medium)",
-        textTransform: "capitalize",
-      }}
-    >
-      {tier}
-    </span>
   );
 }
 

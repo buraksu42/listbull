@@ -4,7 +4,7 @@
  * If a new shared type is needed, request via the agent contract — never declare equivalents elsewhere.
  *
  * Phase 4.5 additions live in dedicated modules — workspace.ts,
- * billing.ts, bot.ts — and are re-exported below so consumers can
+ * bot.ts — and are re-exported below so consumers can
  * keep `import { Workspace } from '@/lib/types'`.
  */
 import type {
@@ -24,7 +24,6 @@ import type {
 export type {
   Workspace,
   NewWorkspace,
-  WorkspaceTier,
   WorkspaceMember,
   NewWorkspaceMember,
   WorkspaceRole,
@@ -35,25 +34,6 @@ export type {
   NewWorkspaceInvite,
   WorkspaceInviteTokenInfo,
 } from "./workspace";
-
-export type {
-  Subscription,
-  NewSubscription,
-  SubscriptionStatus,
-  BillingProvider,
-  BillingCustomer,
-  NewBillingCustomer,
-  TierLimits,
-  TierCheckAction,
-  TierCheckResult,
-  LicensePayload,
-  LicenseVerifyResult,
-  License,
-  NewLicense,
-  LicensePublic,
-} from "./billing";
-
-export { TIER_LIMITS } from "./billing";
 
 export type {
   Bot,

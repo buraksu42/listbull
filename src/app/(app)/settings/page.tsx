@@ -6,8 +6,6 @@ import {
   SettingsForm,
   type SettingsInitial,
 } from "@/components/settings/settings-form";
-import { getMemberCap, getUserLlmUsage } from "@/lib/db/queries/llm-usage";
-import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
 import { requireUser } from "@/lib/server/auth/require-user";
 
 export const dynamic = "force-dynamic";
@@ -24,18 +22,11 @@ export const dynamic = "force-dynamic";
  * Phase 4 adds the F1 "Download my data" section below the form.
  */
 export default async function SettingsPage() {
-  const user = await requireUser();
-  const workspaceId = await resolveActiveWorkspaceId(user.id);
-  const [initial, usage, cap, t] = await Promise.all([
+  await requireUser();
+  const [initial, t] = await Promise.all([
     fetchInitialSettings(),
-    getUserLlmUsage(user.id, 30),
-    getMemberCap(workspaceId, user.id),
     getTranslations("settings"),
   ]);
-  const totalTokens = usage.totalPromptTokens + usage.totalCompletionTokens;
-  const hasCap =
-    cap !== null &&
-    (cap.dailyCapUsdMicro > 0 || cap.monthlyCapUsdMicro > 0);
 
   return (
     <main style={{ paddingBottom: "var(--lb-sp-12)" }}>
@@ -59,83 +50,6 @@ export default async function SettingsPage() {
         </h1>
       </header>
       <SettingsForm initial={initial} />
-
-      {totalTokens > 0 && (
-        <section className="flex flex-col gap-2 px-4 pt-2">
-          <h2 className="text-base font-semibold text-[var(--lb-fg)]">
-            Last 30 days
-          </h2>
-          <div
-            className="flex flex-col gap-1 rounded-[var(--lb-radius-md)] border border-[var(--lb-border)] bg-[var(--lb-card)] p-4"
-            style={{ fontSize: "var(--lb-fs-sm)" }}
-          >
-            <p style={{ color: "var(--lb-muted-fg)" }}>
-              {usage.callCount.toLocaleString()} LLM call
-              {usage.callCount === 1 ? "" : "s"} ·{" "}
-              {totalTokens.toLocaleString()} tokens
-              {usage.totalCostUsdMicro > 0 && (
-                <>
-                  {" "}
-                  · ${(usage.totalCostUsdMicro / 1_000_000).toFixed(4)}
-                </>
-              )}
-            </p>
-            <p
-              style={{
-                color: "var(--lb-muted-fg)",
-                fontSize: "var(--lb-fs-xs)",
-              }}
-            >
-              {usage.totalPromptTokens.toLocaleString()} prompt /{" "}
-              {usage.totalCompletionTokens.toLocaleString()} completion
-            </p>
-          </div>
-        </section>
-      )}
-
-      {hasCap && cap && (
-        <section className="flex flex-col gap-2 px-4 pt-2">
-          <h2 className="text-base font-semibold text-[var(--lb-fg)]">
-            Workspace spend cap
-          </h2>
-          <div
-            className="flex flex-col gap-1 rounded-[var(--lb-radius-md)] border border-[var(--lb-border)] bg-[var(--lb-card)] p-4"
-            style={{ fontSize: "var(--lb-fs-sm)" }}
-          >
-            <p style={{ color: "var(--lb-muted-fg)" }}>
-              Bu workspace&apos;te org-key kullanırken senin için
-              ayarlanmış limit.
-            </p>
-            <p style={{ color: "var(--lb-fg)", marginTop: 4 }}>
-              {cap.dailyCapUsdMicro > 0 && (
-                <>
-                  Günlük: $
-                  {(cap.dailyCapUsdMicro / 1_000_000).toFixed(2)}
-                </>
-              )}
-              {cap.dailyCapUsdMicro > 0 &&
-                cap.monthlyCapUsdMicro > 0 &&
-                " · "}
-              {cap.monthlyCapUsdMicro > 0 && (
-                <>
-                  30 günlük: $
-                  {(cap.monthlyCapUsdMicro / 1_000_000).toFixed(2)}
-                </>
-              )}
-            </p>
-            <p
-              style={{
-                color: "var(--lb-muted-fg)",
-                fontSize: "var(--lb-fs-xs)",
-                marginTop: 4,
-              }}
-            >
-              Personal BYOK kullandığında limit uygulanmaz — kendi
-              key&apos;in, kendi harcaman.
-            </p>
-          </div>
-        </section>
-      )}
 
       <section className="flex flex-col gap-3 px-4 pt-2">
         <div className="flex flex-col gap-1">

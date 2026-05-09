@@ -1,7 +1,7 @@
 import { EmptyState } from "@/components/shared/empty-state";
 import { WorkspaceInviteAccept } from "@/components/workspace/invite-accept";
 import { getWorkspaceInviteContextByToken } from "@/lib/db/queries/workspace-invites";
-import type { WorkspaceInviteTokenInfo, WorkspaceRole, WorkspaceTier } from "@/lib/types";
+import type { WorkspaceInviteTokenInfo, WorkspaceRole } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +50,6 @@ export default async function WorkspaceInviteAcceptPage({
     token,
     workspaceId: ctxRow.workspace.id,
     workspaceName: ctxRow.workspace.name,
-    workspaceTier: ctxRow.workspace.tier as WorkspaceTier,
     invitedByName: ctxRow.invitedByName,
     role: ctxRow.invite.role as WorkspaceRole,
     expiresAt: ctxRow.invite.expiresAt.toISOString(),

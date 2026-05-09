@@ -23,7 +23,7 @@ import {
 import { setActiveWorkspace } from "@/lib/db/queries/workspaces";
 import { ERR, err, ok } from "./_shared";
 
-import type { WorkspaceRole, WorkspaceTier } from "@/lib/types";
+import type { WorkspaceRole } from "@/lib/types";
 import type { ExecResult } from "./_shared";
 
 export async function executeSwitchWorkspace(
@@ -42,7 +42,6 @@ export async function executeSwitchWorkspace(
     id: string;
     name: string;
     slug: string;
-    tier: WorkspaceTier;
     role: WorkspaceRole;
   } | null = null;
 
@@ -52,7 +51,6 @@ export async function executeSwitchWorkspace(
         id: workspaces.id,
         name: workspaces.name,
         slug: workspaces.slug,
-        tier: workspaces.tier,
         role: workspaceMembers.role,
       })
       .from(workspaces)
@@ -73,7 +71,6 @@ export async function executeSwitchWorkspace(
       id: row.id,
       name: row.name,
       slug: row.slug,
-      tier: row.tier as WorkspaceTier,
       role: row.role as WorkspaceRole,
     };
     targetId = row.id;
@@ -83,7 +80,6 @@ export async function executeSwitchWorkspace(
         id: workspaces.id,
         name: workspaces.name,
         slug: workspaces.slug,
-        tier: workspaces.tier,
         role: workspaceMembers.role,
       })
       .from(workspaces)
@@ -121,7 +117,6 @@ export async function executeSwitchWorkspace(
       id: row.id,
       name: row.name,
       slug: row.slug,
-      tier: row.tier as WorkspaceTier,
       role: row.role as WorkspaceRole,
     };
     targetId = row.id;
@@ -141,7 +136,6 @@ export async function executeSwitchWorkspace(
       id: candidate.id,
       name: candidate.name,
       slug: candidate.slug,
-      tier: candidate.tier,
       role: candidate.role,
     },
   });

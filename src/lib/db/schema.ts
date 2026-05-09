@@ -544,17 +544,15 @@ export const workspaces = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
-    tier: text("tier").notNull().default("free"),
     isPersonal: boolean("is_personal").notNull().default(false),
     ownerId: uuid("owner_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    memberLimit: integer("member_limit").notNull(),
     /**
-     * Phase 5.5 (G6): Workspace-tier admins can set an org-level
-     * OpenRouter key. When a workspace member doesn't have a
-     * personal BYOK, the LLM resolution falls back to this key.
-     * Encrypted via the same AES-256-GCM helper as user BYOK.
+     * Workspace-level OpenRouter org-key. Members without a personal
+     * BYOK fall back to this key for LLM calls. Encrypted via the
+     * same AES-256-GCM helper as user BYOK. Set via the workspace
+     * settings org-key form.
      */
     openrouterApiKeyEncrypted: text("openrouter_api_key_encrypted"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
@@ -599,75 +597,6 @@ export const workspaceMembers = pgTable(
       t.userId,
     ),
     index("workspace_members_user_idx").on(t.userId),
-  ],
-);
-
-// ─── subscriptions ─────────────────────────────────────────────────
-//
-// Free workspaces have NO row here — absence-of-row = Free.
-// Provider-locked at first paid signup (TR users → Iyzico, others →
-// Stripe). Webhook handlers (src/app/api/webhooks/{stripe,iyzico})
-// upsert keyed by `(provider, provider_subscription_id)`.
-export const subscriptions = pgTable(
-  "subscriptions",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    workspaceId: uuid("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    // 'stripe' | 'iyzico' | 'manual'
-    provider: text("provider").notNull(),
-    providerCustomerId: text("provider_customer_id").notNull(),
-    providerSubscriptionId: text("provider_subscription_id").notNull(),
-    // 'free' | 'team' | 'workspace'
-    tier: text("tier").notNull(),
-    // 'active' | 'past_due' | 'canceled' | 'trialing'
-    status: text("status").notNull(),
-    currentPeriodStart: timestamp("current_period_start", {
-      withTimezone: true,
-    }),
-    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
-    cancelAtPeriodEnd: boolean("cancel_at_period_end")
-      .notNull()
-      .default(false),
-    ...timestamps,
-  },
-  (t) => [
-    uniqueIndex("subscriptions_workspace_id_idx").on(t.workspaceId),
-    uniqueIndex("subscriptions_provider_sub_idx").on(
-      t.provider,
-      t.providerSubscriptionId,
-    ),
-  ],
-);
-
-// ─── billing_customers ─────────────────────────────────────────────
-//
-// One row per (user, provider). Country at first paid signup locks
-// the provider — switching providers later requires manual data
-// migration. `tax_id` collected at checkout for KDV (TR) or EU VAT.
-export const billingCustomers = pgTable(
-  "billing_customers",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    // 'stripe' | 'iyzico'
-    provider: text("provider").notNull(),
-    providerCustomerId: text("provider_customer_id").notNull(),
-    email: text("email").notNull(),
-    // ISO 3166-1 alpha-2 (TR, DE, US, ...)
-    country: text("country").notNull(),
-    taxId: text("tax_id"),
-    ...timestamps,
-  },
-  (t) => [
-    uniqueIndex("billing_customers_user_provider_uq").on(t.userId, t.provider),
-    uniqueIndex("billing_customers_provider_customer_uq").on(
-      t.provider,
-      t.providerCustomerId,
-    ),
   ],
 );
 
@@ -724,130 +653,6 @@ export const workspaceBots = pgTable(
     uniqueIndex("workspace_bots_pair_uq").on(t.workspaceId, t.botId),
     index("workspace_bots_workspace_idx").on(t.workspaceId),
     index("workspace_bots_bot_idx").on(t.botId),
-  ],
-);
-
-// ─── workspace_member_caps (Phase 8) ───────────────────────────────
-//
-// Per-member daily / monthly USD spend cap on workspace-org-key
-// usage. When a member falls back to the workspace org-key (no
-// personal BYOK), handle-message rejects the turn if the cap would
-// be exceeded.
-//
-// Cap values stored as integer micro-USD (matches
-// llm_usage.cost_usd_micro). 0 = unlimited (default). No row =
-// unlimited. Owner/admin sets caps via Mini App; member sees their
-// own cap reflected on the settings page.
-export const workspaceMemberCaps = pgTable(
-  "workspace_member_caps",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    workspaceId: uuid("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    /** Daily org-key spend cap in micro-USD; 0 = unlimited. */
-    dailyCapUsdMicro: integer("daily_cap_usd_micro").notNull().default(0),
-    /** Rolling-30d org-key spend cap in micro-USD; 0 = unlimited. */
-    monthlyCapUsdMicro: integer("monthly_cap_usd_micro")
-      .notNull()
-      .default(0),
-    ...timestamps,
-  },
-  (t) => [
-    uniqueIndex("workspace_member_caps_pair_uq").on(
-      t.workspaceId,
-      t.userId,
-    ),
-  ],
-);
-
-// ─── llm_usage (Phase 7) ────────────────────────────────────────────
-//
-// Per-turn LLM token usage telemetry. respond.ts records one row per
-// LLM call. Powers the workspace admin dashboard "spend" surface +
-// future per-user / per-workspace cost-cap features (Phase 7.5+).
-//
-// Cost stored as integer micro-USD (cost_usd_micro) — cents × 10000 —
-// to avoid float drift across aggregates. Workspace admin reads
-// SUM(cost_usd_micro) / 1_000_000 for display.
-export const llmUsage = pgTable(
-  "llm_usage",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    workspaceId: uuid("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    /** Provider model id, e.g. 'anthropic/claude-haiku-4.5'. */
-    model: text("model").notNull(),
-    promptTokens: integer("prompt_tokens").notNull(),
-    completionTokens: integer("completion_tokens").notNull(),
-    /** Cost in micro-USD (cents × 10000). 0 when provider didn't bill. */
-    costUsdMicro: integer("cost_usd_micro").notNull().default(0),
-    /** Where the LLM key came from for this turn. */
-    keySource: text("key_source").notNull(), // 'user' | 'workspace' | 'operator'
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    index("llm_usage_workspace_recent_idx").on(
-      t.workspaceId,
-      sql`${t.createdAt} desc`,
-    ),
-    index("llm_usage_user_recent_idx").on(
-      t.userId,
-      sql`${t.createdAt} desc`,
-    ),
-  ],
-);
-
-// ─── licenses (Phase 6) ─────────────────────────────────────────────
-//
-// Self-host license records. SaaS-side: each issued license gets a
-// row (issuance audit + revocation surface). Self-host operator's
-// instance verifies the license JWT offline against the bundled
-// public key — the SaaS DB row is the source of truth for revocation
-// lookups via the optional revocation-list refresh.
-//
-// `key` stores the SIGNED JWT (header.payload.signature). LicensePayload
-// shape is frozen in src/lib/types/billing.ts. Revocation = setting
-// revoked_at; the offline checker reads a periodic export of revoked
-// JWT ids if configured, or accepts that live revocation is impossible
-// without phone-home (acceptable for self-host privacy posture).
-export const licenses = pgTable(
-  "licenses",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    /** Signed JWT — header.payload.signature, base64url. */
-    key: text("key").notNull(),
-    // 'team' | 'workspace'
-    tier: text("tier").notNull(),
-    seats: integer("seats").notNull(),
-    issuedToEmail: text("issued_to_email").notNull(),
-    /** Optional comma-separated workspace_id allowlist (mirrored in JWT payload). */
-    workspaces: text("workspaces"),
-    issuedAt: timestamp("issued_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }),
-    revokedAt: timestamp("revoked_at", { withTimezone: true }),
-    /** Set when issuance was driven by a Stripe / Iyzico subscription. */
-    sourceProvider: text("source_provider"),
-    sourceReference: text("source_reference"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    uniqueIndex("licenses_key_idx").on(t.key),
-    index("licenses_email_idx").on(t.issuedToEmail),
-    index("licenses_revoked_idx").on(t.revokedAt),
   ],
 );
 

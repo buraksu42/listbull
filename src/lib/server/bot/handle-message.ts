@@ -28,10 +28,10 @@ import { getRecentMessages, insertMessages } from "@/lib/db/queries/messages";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import {
   getWorkspaceOrgKeyEncrypted,
+  getWorkspaceOwnerTelegramId,
   listWorkspacesForUser,
   resolveActiveWorkspaceId,
 } from "@/lib/db/queries/workspaces";
-import { checkMemberCap, recordLlmUsage } from "@/lib/db/queries/llm-usage";
 import { enforceRateLimit } from "@/lib/server/middleware/rate-limit";
 import { sliceForContext } from "@/lib/ai/conversation";
 import { forwardedMessagePrompt } from "@/lib/ai/prompts/forwarded";
@@ -69,10 +69,6 @@ const COPY = {
     transientError: "Bir şeyler ters gitti, tekrar dener misin?",
     forwardedNoText:
       "İletilen mesajda metin bulamadım — sadece metinli mesajlardan madde çıkarabilirim.",
-    capDaily:
-      "Bu workspace'te günlük harcama limitin doldu. Kendi OpenRouter key'ini ekle ya da yarın tekrar dene.",
-    capMonthly:
-      "Bu workspace'te aylık harcama limitin doldu. Kendi OpenRouter key'ini ekle ya da workspace yöneticine sor.",
     rateLimited:
       "Çok fazla mesaj — biraz yavaşla. Saatlik limitin doldu, biraz sonra tekrar dene.",
     transcribeFailed: "Sesini yazıya çeviremedim, tekrar dener misin?",
@@ -88,10 +84,6 @@ const COPY = {
     transientError: "Something went wrong — try again?",
     forwardedNoText:
       "I didn't find any text in the forwarded message — I can only extract items from messages with text.",
-    capDaily:
-      "Your daily spend cap on this workspace is exhausted. Add your own OpenRouter key or try again tomorrow.",
-    capMonthly:
-      "Your monthly spend cap on this workspace is exhausted. Add your own OpenRouter key or ask the workspace admin.",
     rateLimited:
       "Too many messages — slow down. Your hourly limit is exhausted; try again shortly.",
     transcribeFailed: "I couldn't transcribe that audio — try again?",
@@ -405,18 +397,14 @@ export async function handleMessage(ctx: Context): Promise<void> {
     }
   }
 
-  // BYOK gate (with operator-level fallback per architecture.md AI section):
-  //   1. User's BYOK key wins when set
-  //   2. Otherwise, env.OPENROUTER_API_KEY (operator-level) is used
-  //   3. If neither, surface the noKey copy
-  // OpenRouter API key resolution chain (Phase 5.5 G6):
+  // OpenRouter API key resolution chain (post-billing-tear-out):
   //   1. user's personal BYOK (users.openrouter_api_key_encrypted)
-  //   2. workspace org-key (Workspace tier admin set one)
-  //   3. operator fallback (env.OPENROUTER_API_KEY) — self-host only
+  //   2. workspace org-key (workspaces.openrouter_api_key_encrypted)
+  //   3. operator fallback (env.OPENROUTER_API_KEY) — ONLY when the
+  //      active workspace's owner.telegram_id matches
+  //      env.OPERATOR_TELEGRAM_ID. Without that match the env key is
+  //      not used; users must BYOK or rely on a workspace org-key.
   //   4. nothing → reply with noKey copy
-  //
-  // The active workspace is resolved here too so org-key lookup
-  // can happen before we tell the user "no key configured."
   const workspaceId = await resolveActiveWorkspaceId(user.id);
 
   let apiKey: string | null = null;
@@ -449,29 +437,17 @@ export async function handleMessage(ctx: Context): Promise<void> {
     }
   }
 
-  if (apiKey === null && env.OPENROUTER_API_KEY) {
-    apiKey = env.OPENROUTER_API_KEY;
-    keySource = "operator";
+  if (apiKey === null && env.OPENROUTER_API_KEY && env.OPERATOR_TELEGRAM_ID) {
+    const ownerTelegramId = await getWorkspaceOwnerTelegramId(workspaceId);
+    if (ownerTelegramId === env.OPERATOR_TELEGRAM_ID) {
+      apiKey = env.OPENROUTER_API_KEY;
+      keySource = "operator";
+    }
   }
 
   if (apiKey === null || keySource === null) {
     await ctx.reply(copy.noKey);
     return;
-  }
-
-  // Phase 8 cap gate: only enforced when the workspace org-key is
-  // funding the call. Personal BYOK + operator fallback bypass caps
-  // (the spend isn't workspace-borne).
-  if (keySource === "workspace") {
-    const cap = await checkMemberCap(workspaceId, user.id);
-    if (!cap.ok) {
-      await ctx.reply(
-        cap.reason === "daily_cap_exceeded"
-          ? copy.capDaily
-          : copy.capMonthly,
-      );
-      return;
-    }
   }
 
   // Phase 13: voice / audio / video_note → STT, then continue through
@@ -521,7 +497,6 @@ export async function handleMessage(ctx: Context): Promise<void> {
       ctx,
       user,
       apiKey,
-      keySource,
       forwardedFrom: forward.forwardedFrom,
       forwardedText: text,
       copy,
@@ -596,7 +571,6 @@ export async function handleMessage(ctx: Context): Promise<void> {
       workspaces: workspaceSummary.map((w) => ({
         id: w.id,
         name: w.name,
-        tier: w.tier,
         role: w.role,
         isPersonal: w.isPersonal,
         isActive: w.isActive,
@@ -608,26 +582,6 @@ export async function handleMessage(ctx: Context): Promise<void> {
     assistantText = result.assistantText;
     persisted = result.persistedMessages;
     toolCalls = result.toolCalls;
-
-    // Phase 7: persist LLM usage telemetry. Best-effort — failures
-    // here mustn't block the user-visible reply path.
-    try {
-      await recordLlmUsage({
-        userId: user.id,
-        workspaceId,
-        model: user.llmModel,
-        promptTokens: result.usage.promptTokens,
-        completionTokens: result.usage.completionTokens,
-        // Phase 9: prefer provider-reported cost when available;
-        // recordLlmUsage falls back to MODEL_PRICING when omitted.
-        costUsdMicro: result.usage.providerReportedCost
-          ? result.usage.costUsdMicro
-          : undefined,
-        keySource,
-      });
-    } catch (err) {
-      console.warn("[bot/handle-message] recordLlmUsage failed", err);
-    }
   } catch (error) {
     console.error("[bot/handle-message] respond() threw", error);
     await ctx.reply(copy.transientError);
@@ -775,7 +729,6 @@ async function handleForwardedMessage(args: {
   ctx: Context;
   user: User;
   apiKey: string;
-  keySource: "user" | "workspace" | "operator";
   forwardedFrom: string;
   forwardedText: string;
   copy: (typeof COPY)[keyof typeof COPY];
@@ -785,7 +738,6 @@ async function handleForwardedMessage(args: {
     ctx,
     user,
     apiKey,
-    keySource,
     forwardedFrom,
     forwardedText,
     copy,
@@ -838,7 +790,6 @@ async function handleForwardedMessage(args: {
       workspaces: workspaceSummary.map((w) => ({
         id: w.id,
         name: w.name,
-        tier: w.tier,
         role: w.role,
         isPersonal: w.isPersonal,
         isActive: w.isActive,
@@ -849,28 +800,6 @@ async function handleForwardedMessage(args: {
     });
     assistantText = result.assistantText;
     persisted = result.persistedMessages;
-
-    // Phase 7: persist LLM usage telemetry (best-effort).
-    try {
-      await recordLlmUsage({
-        userId: user.id,
-        workspaceId,
-        model: user.llmModel,
-        promptTokens: result.usage.promptTokens,
-        completionTokens: result.usage.completionTokens,
-        // Phase 9: prefer provider-reported cost when available;
-        // recordLlmUsage falls back to MODEL_PRICING when omitted.
-        costUsdMicro: result.usage.providerReportedCost
-          ? result.usage.costUsdMicro
-          : undefined,
-        keySource,
-      });
-    } catch (err) {
-      console.warn(
-        "[bot/handle-message] forwarded recordLlmUsage failed",
-        err,
-      );
-    }
   } catch (error) {
     console.error("[bot/handle-message] forwarded respond() threw", error);
     await ctx.reply(copy.transientError);

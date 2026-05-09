@@ -30,7 +30,6 @@ export async function executeListWorkspaces(
       id: r.id,
       name: r.name,
       slug: r.slug,
-      tier: r.tier,
       is_personal: r.isPersonal,
       role: r.role,
       member_count: r.memberCount,

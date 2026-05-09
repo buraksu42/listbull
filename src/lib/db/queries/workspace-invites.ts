@@ -22,7 +22,6 @@ export type WorkspaceInviteContext = {
   workspace: {
     id: string;
     name: string;
-    tier: string;
   };
   invitedByName: string;
 };
@@ -36,7 +35,6 @@ export async function getWorkspaceInviteContextByToken(
       workspace: {
         id: workspaces.id,
         name: workspaces.name,
-        tier: workspaces.tier,
       },
       invitedByName: users.telegramFirstName,
     })

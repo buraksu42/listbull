@@ -1,10 +1,9 @@
 /**
  * Executor: `create_workspace` — mirror of `POST /api/workspaces`.
  *
- * Same shape as the Mini App route: tier middleware first, then the
- * `workspaces` + `workspaceMembers (role=owner)` insert in a single
- * transaction. Returns `tier_exceeded` when the caller's tier blocks
- * a new workspace; the LLM is expected to surface the upgrade hint.
+ * Single-tier model post-billing-tear-out: any user can create as
+ * many workspaces as they want. Inserts the `workspaces` row +
+ * `workspaceMembers (role=owner)` row in a single transaction.
  */
 import "server-only";
 
@@ -14,10 +13,8 @@ import {
   createWorkspaceInputSchema,
   type CreateWorkspaceOutput,
 } from "@/lib/ai/tools";
-import { TIER_LIMITS, type WorkspaceTier } from "@/lib/types";
 import { ERR, err, ok } from "./_shared";
 import { slugify } from "@/lib/db/queries/workspaces";
-import { enforceTier } from "@/lib/server/middleware/tier-enforce";
 
 import type { ExecResult } from "./_shared";
 
@@ -30,17 +27,6 @@ export async function executeCreateWorkspace(
     return err(ERR.invalid_input, parsed.error.message);
   }
   const name = parsed.data.name.trim().slice(0, 120);
-
-  // Tier check — workspace creation may be limited on the caller's plan.
-  const tierResult = await enforceTier("", { type: "create_workspace" });
-  if (tierResult.enforced) {
-    return err(
-      "tier_exceeded",
-      tierResult.message ?? "Workspace creation requires an upgrade.",
-    );
-  }
-
-  const tier: WorkspaceTier = "free";
   const slug = slugify(name) || `ws-${ctx.userId.slice(0, 8)}`;
 
   const created = await db.transaction(async (tx) => {
@@ -49,10 +35,8 @@ export async function executeCreateWorkspace(
       .values({
         name,
         slug,
-        tier,
         isPersonal: false,
         ownerId: ctx.userId,
-        memberLimit: TIER_LIMITS[tier].memberLimit,
       })
       .returning();
     if (!w) throw new Error("create-workspace: insert returned no row");
@@ -71,7 +55,6 @@ export async function executeCreateWorkspace(
       id: created.id,
       name: created.name,
       slug: created.slug,
-      tier: created.tier as "free" | "team" | "workspace",
       is_personal: created.isPersonal,
     },
   });

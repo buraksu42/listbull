@@ -9,12 +9,6 @@ type Props = {
   invite: WorkspaceInviteTokenInfo;
 };
 
-const TIER_LABEL: Record<string, string> = {
-  free: "Free",
-  team: "Team",
-  workspace: "Workspace",
-};
-
 const ROLE_LABEL: Record<string, string> = {
   admin: "Admin",
   editor: "Editor",
@@ -159,12 +153,6 @@ export function WorkspaceInviteAccept({ invite }: Props) {
                 borderBottom: "1px solid var(--lb-border)",
               }}
             >
-              <div>
-                Plan:{" "}
-                <span style={{ color: "var(--lb-fg)" }}>
-                  {TIER_LABEL[invite.workspaceTier] ?? invite.workspaceTier}
-                </span>
-              </div>
               <div>
                 Rol:{" "}
                 <span style={{ color: "var(--lb-fg)" }}>

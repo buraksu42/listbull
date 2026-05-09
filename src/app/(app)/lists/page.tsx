@@ -3,7 +3,6 @@ import Link from "next/link";
 import type * as React from "react";
 import { Suspense } from "react";
 
-import { PastDueBanner } from "@/components/billing/past-due-banner";
 import { ListRow } from "@/components/lists/list-row";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ListsListSkeleton } from "@/components/shared/list-skeleton";
@@ -78,7 +77,6 @@ async function ListsContent() {
         />
       </nav>
 
-      <PastDueBanner workspaceId={workspaceId} />
       <ListsBody lists={lists} />
     </>
   );

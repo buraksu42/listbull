@@ -18,7 +18,7 @@ import { db } from "@/lib/db/client";
 import { eq } from "drizzle-orm";
 import { users } from "@/lib/db/schema";
 import { setActiveWorkspace } from "@/lib/db/queries/workspaces";
-import type { WorkspaceInviteTokenInfo, WorkspaceRole, WorkspaceTier } from "@/lib/types";
+import type { WorkspaceInviteTokenInfo, WorkspaceRole } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,7 +43,6 @@ export async function GET(_request: Request, { params }: RouteCtx) {
     token,
     workspaceId: ctxRow.workspace.id,
     workspaceName: ctxRow.workspace.name,
-    workspaceTier: ctxRow.workspace.tier as WorkspaceTier,
     invitedByName: ctxRow.invitedByName,
     role: ctxRow.invite.role as WorkspaceRole,
     expiresAt: ctxRow.invite.expiresAt.toISOString(),

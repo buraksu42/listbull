@@ -20,8 +20,6 @@ export type WorkspaceSummaryForPrompt = {
   /** UUID — included so the LLM can pass workspace_id directly when sure. */
   id: string;
   name: string;
-  /** 'free' | 'team' | 'workspace'. */
-  tier: string;
   /** 'owner' | 'admin' | 'editor' | 'viewer' | 'guest'. */
   role: string;
   isPersonal: boolean;
@@ -47,7 +45,7 @@ export function systemPromptV4(input: SystemPromptV4Input): string {
 
   const active = workspaces.find((w) => w.isActive);
   const activeBlock = active
-    ? `${active.name} (tier: ${active.tier}, your role: ${active.role}${active.isPersonal ? ", Personal" : ""})`
+    ? `${active.name} (your role: ${active.role}${active.isPersonal ? ", Personal" : ""})`
     : "Personal (no active workspace set yet)";
 
   const otherWorkspaces = workspaces.filter((w) => !w.isActive);
@@ -57,7 +55,7 @@ export function systemPromptV4(input: SystemPromptV4Input): string {
       : otherWorkspaces
           .map(
             (w) =>
-              `- ${w.name} (tier: ${w.tier}, your role: ${w.role}${w.isPersonal ? ", Personal" : ""})`,
+              `- ${w.name} (your role: ${w.role}${w.isPersonal ? ", Personal" : ""})`,
           )
           .join("\n");
 
