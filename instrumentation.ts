@@ -17,8 +17,10 @@
 import * as Sentry from "@sentry/nextjs";
 
 export async function register() {
-  if (!process.env.NEXT_PUBLIC_SENTRY_DSN) return;
-
+  // Same rationale as `instrumentation-client.ts`: don't gate the
+  // init call on the DSN — Sentry's SDK no-ops gracefully when DSN
+  // is undefined, but tree-shaking can drop the entire init path if
+  // a build-time conditional sees the env var as static-false.
   if (process.env.NEXT_RUNTIME === "nodejs") {
     Sentry.init({
       dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,

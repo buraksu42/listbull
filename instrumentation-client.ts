@@ -19,18 +19,23 @@
  */
 import * as Sentry from "@sentry/nextjs";
 
-if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
-    environment: process.env.NEXT_PUBLIC_ENV ?? "production",
-    tracesSampleRate: 0.05,
-    // Replays are off by default — Telegram WebApp viewport is small
-    // and replay payload size adds up fast. Flip to 0.1 if a UX bug
-    // ever needs visual reproduction.
-    replaysSessionSampleRate: 0,
-    replaysOnErrorSampleRate: 0,
-    sendDefaultPii: false,
-  });
-}
+// `Sentry.init` is called unconditionally — when DSN is undefined the
+// SDK gracefully becomes a no-op, but the import + init call must
+// land in the browser bundle either way. The previous
+// `if (process.env.NEXT_PUBLIC_SENTRY_DSN)` gate caused Turbopack to
+// tree-shake the entire @sentry/nextjs import out of the bundle when
+// the env var was unset at build time, leaving the dashboard empty
+// and the bundle scan blank — silent broken.
+//
+// Replays off by default — Telegram WebApp viewport adds payload
+// pressure fast. Flip to 0.1 if a UX bug needs visual reproduction.
+Sentry.init({
+  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+  environment: process.env.NEXT_PUBLIC_ENV ?? "production",
+  tracesSampleRate: 0.05,
+  replaysSessionSampleRate: 0,
+  replaysOnErrorSampleRate: 0,
+  sendDefaultPii: false,
+});
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
