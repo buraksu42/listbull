@@ -12,8 +12,7 @@ import { NextResponse } from "next/server";
 import { getSessionUserId } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { itemAttachments, items } from "@/lib/db/schema";
-import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
-import { userCanReadList } from "@/lib/db/queries/items";
+import { getListMember } from "@/lib/db/queries/members";
 import { toAttachmentSnapshot } from "@/lib/db/snapshots";
 import { itemAttachmentsListParamsSchema } from "@/lib/validators/attachments";
 
@@ -58,9 +57,11 @@ export async function GET(_request: Request, { params }: RouteCtx) {
     );
   }
 
-  const workspaceId = await resolveActiveWorkspaceId(userId);
-  const allowed = await userCanReadList(userId, parent.listId, workspaceId);
-  if (!allowed) {
+  // Membership-based read gate (Inv-2) — list_members is the
+  // canonical access signal. Active-workspace constraint dropped to
+  // match the bytes proxy at /api/attachments/[itemId]/[attachmentId].
+  const member = await getListMember(parent.listId, userId);
+  if (!member) {
     return NextResponse.json(
       {
         ok: false,

@@ -5,8 +5,12 @@
  * share one transactional implementation (Inv-1 + activity_log).
  */
 import { NextResponse } from "next/server";
+import { and, asc, eq } from "drizzle-orm";
 
 import { getSessionUserId } from "@/lib/auth/session";
+import { db } from "@/lib/db/client";
+import { itemReminders, items, listMembers } from "@/lib/db/schema";
+import { toItemReminderSnapshot } from "@/lib/db/snapshots";
 import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
 import { executeAddReminder } from "@/lib/server/tools/add-reminder";
 import {
@@ -18,6 +22,63 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type RouteCtx = { params: Promise<{ id: string }> };
+
+export async function GET(_request: Request, { params }: RouteCtx) {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: { code: "unauthorized", message: "Sign in via Telegram" },
+      },
+      { status: 401 },
+    );
+  }
+
+  const { id } = await params;
+  const idCheck = deleteItemParamsSchema.safeParse({ id });
+  if (!idCheck.success) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: { code: "invalid_input", message: "Invalid item id" },
+      },
+      { status: 400 },
+    );
+  }
+
+  // Membership-gated read: caller must be a member of the item's
+  // list (any role). 404 if not — Inv-2 leakage prevention.
+  const [row] = await db
+    .select({ itemId: items.id })
+    .from(items)
+    .innerJoin(
+      listMembers,
+      and(
+        eq(listMembers.listId, items.listId),
+        eq(listMembers.userId, userId),
+      ),
+    )
+    .where(eq(items.id, id))
+    .limit(1);
+  if (!row) {
+    return NextResponse.json(
+      { ok: false, error: { code: "not_found", message: "Item not found" } },
+      { status: 404 },
+    );
+  }
+
+  const reminders = await db
+    .select()
+    .from(itemReminders)
+    .where(eq(itemReminders.itemId, id))
+    .orderBy(asc(itemReminders.remindAt));
+
+  return NextResponse.json({
+    ok: true,
+    data: { reminders: reminders.map(toItemReminderSnapshot) },
+  });
+}
 
 export async function POST(request: Request, { params }: RouteCtx) {
   const userId = await getSessionUserId();

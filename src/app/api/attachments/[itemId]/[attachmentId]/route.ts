@@ -24,11 +24,9 @@ import { NextResponse } from "next/server";
 import { getSessionUserId } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { activityLog, itemAttachments, items } from "@/lib/db/schema";
+import { getListMember } from "@/lib/db/queries/members";
 import { resolveActiveWorkspaceId } from "@/lib/db/queries/workspaces";
-import {
-  userCanReadList,
-  userCanWriteList,
-} from "@/lib/db/queries/items";
+import { userCanWriteList } from "@/lib/db/queries/items";
 import { toAttachmentSnapshot } from "@/lib/db/snapshots";
 import { getBot } from "@/lib/server/bot";
 import { attachmentParamsSchema } from "@/lib/validators/attachments";
@@ -88,9 +86,15 @@ export async function GET(_request: Request, { params }: RouteCtx) {
     );
   }
 
-  const workspaceId = await resolveActiveWorkspaceId(userId);
-  const allowed = await userCanReadList(userId, parent.listId, workspaceId);
-  if (!allowed) {
+  // Membership-based read gate. We deliberately DO NOT constrain to
+  // the caller's active workspace — an item could live in a workspace
+  // the user is a member of but not currently active in (common right
+  // after accepting a list invite, before the user opens that
+  // workspace via the switcher). Phase 14b's bytes proxy was 403'ing
+  // in that window, surfacing as a broken `<img>` in the edit sheet.
+  // list_members membership is the canonical access signal (Inv-2).
+  const member = await getListMember(parent.listId, userId);
+  if (!member) {
     return NextResponse.json(
       {
         ok: false,

@@ -11,6 +11,7 @@ import {
   PRIORITY_META,
   STATUS_META,
 } from "@/components/lists/item-attributes-meta";
+import { RemindersSection } from "@/components/lists/reminders-section";
 import type {
   ItemPriority,
   ItemStatus,
@@ -147,7 +148,11 @@ export function ItemEditSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent ariaLabel="Edit item">
-        <form onSubmit={onSubmit} noValidate>
+        <form
+          onSubmit={onSubmit}
+          noValidate
+          className="flex flex-col flex-1 min-h-0"
+        >
           <SheetHeader>
             <SheetTitle>Edit item</SheetTitle>
             <SheetDescription>
@@ -261,6 +266,8 @@ export function ItemEditSheet({
                 Virgülle ayır. Workspace içinde en fazla 20 farklı etiket.
               </p>
             </div>
+
+            <RemindersSection itemId={item.id} />
 
             <AttachmentsSection itemId={item.id} />
           </SheetBody>
