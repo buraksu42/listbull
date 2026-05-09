@@ -97,7 +97,7 @@ async function ListDetail({
 
       {view === "board" ? (
         <KanbanBoard
-          listId={listId}
+          cacheKey={["items", listId]}
           items={items}
           canWrite={
             currentUserRole === "owner" || currentUserRole === "editor"

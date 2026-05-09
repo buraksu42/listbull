@@ -54,15 +54,31 @@ type Status = (typeof STATUSES)[number];
 
 const DONE_HISTORY_DAYS = 30;
 
-type Props = {
-  listId: string;
-  items: Item[];
-  canWrite: boolean;
+/**
+ * `Item` augmented with optional list info. The workspace-wide variant
+ * passes the list metadata so cards can render a list badge; the
+ * per-list variant omits it (badge hidden).
+ */
+export type KanbanItem = Item & {
+  list?: { id: string; name: string; emoji: string | null };
 };
 
-const itemsKey = (listId: string) => ["items", listId] as const;
+type Props = {
+  /** React Query cache key — distinct per surface so cache invalidations
+   * don't bleed across the per-list and workspace-wide boards. */
+  cacheKey: readonly unknown[];
+  items: KanbanItem[];
+  canWrite: boolean;
+  /** Show "📋 List name" badge on each card (workspace board). */
+  showListBadge?: boolean;
+};
 
-export function KanbanBoard({ listId, items, canWrite }: Props) {
+export function KanbanBoard({
+  cacheKey,
+  items,
+  canWrite,
+  showListBadge = false,
+}: Props) {
   const qc = useQueryClient();
   const [showAllDone, setShowAllDone] = React.useState(false);
 
@@ -86,7 +102,7 @@ export function KanbanBoard({ listId, items, canWrite }: Props) {
   const buckets = React.useMemo(() => {
     // eslint-disable-next-line react-hooks/purity -- 1-frame staleness is fine for a "last 30 days" window; React re-renders on items change anyway.
     const horizon = Date.now() - DONE_HISTORY_DAYS * 24 * 60 * 60 * 1000;
-    const map = new Map<Status, Item[]>();
+    const map = new Map<Status, KanbanItem[]>();
     for (const s of STATUSES) map.set(s, []);
     for (const it of items) {
       const status = (it.status as Status) ?? "open";
@@ -118,10 +134,10 @@ export function KanbanBoard({ listId, items, canWrite }: Props) {
     onError: () => {
       // Optimistic UI rolled back via items invalidate — no manual
       // restore needed because the parent list polls every 5s.
-      qc.invalidateQueries({ queryKey: itemsKey(listId) });
+      qc.invalidateQueries({ queryKey: cacheKey });
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: itemsKey(listId) });
+      qc.invalidateQueries({ queryKey: cacheKey });
     },
   });
 
@@ -149,7 +165,7 @@ export function KanbanBoard({ listId, items, canWrite }: Props) {
     if (fromStatus === toStatus) return;
     // Optimistic: move the card across columns in the cache so the
     // ghost lands in the right column visually.
-    qc.setQueryData<Item[]>(itemsKey(listId), (current) => {
+    qc.setQueryData<KanbanItem[]>(cacheKey, (current) => {
       if (!current) return current;
       return current.map((it) =>
         it.id === active.id ? { ...it, status: toStatus } : it,
@@ -187,7 +203,7 @@ export function KanbanBoard({ listId, items, canWrite }: Props) {
       const newIndex = targetList.findIndex((it) => it.id === overId);
       if (newIndex === -1 || newIndex === movedIndex) {
         // Snap-back the optimistic over change if any (no row write).
-        qc.invalidateQueries({ queryKey: itemsKey(listId) });
+        qc.invalidateQueries({ queryKey: cacheKey });
         return;
       }
       const reordered = arrayMove(targetList, movedIndex, newIndex);
@@ -205,7 +221,7 @@ export function KanbanBoard({ listId, items, canWrite }: Props) {
 
     // Optimistic: write the new status + position into cache so the
     // card lands in the target column at the correct row order.
-    qc.setQueryData<Item[]>(itemsKey(listId), (current) => {
+    qc.setQueryData<KanbanItem[]>(cacheKey, (current) => {
       if (!current) return current;
       return current.map((it) =>
         it.id === activeId
@@ -251,6 +267,7 @@ export function KanbanBoard({ listId, items, canWrite }: Props) {
               canWrite={canWrite}
               showAllDone={showAllDone}
               onToggleShowAllDone={() => setShowAllDone((v) => !v)}
+              showListBadge={showListBadge}
             />
           );
         })}
@@ -267,14 +284,16 @@ function Column({
   canWrite,
   showAllDone,
   onToggleShowAllDone,
+  showListBadge,
 }: {
   status: Status;
   label: string;
   accent: string;
-  items: Item[];
+  items: KanbanItem[];
   canWrite: boolean;
   showAllDone: boolean;
   onToggleShowAllDone: () => void;
+  showListBadge: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   return (
@@ -326,7 +345,12 @@ function Column({
             </li>
           )}
           {items.map((item) => (
-            <KanbanCard key={item.id} item={item} canDrag={canWrite} />
+            <KanbanCard
+              key={item.id}
+              item={item}
+              canDrag={canWrite}
+              showListBadge={showListBadge}
+            />
           ))}
         </ul>
       </SortableContext>
@@ -334,7 +358,15 @@ function Column({
   );
 }
 
-function KanbanCard({ item, canDrag }: { item: Item; canDrag: boolean }) {
+function KanbanCard({
+  item,
+  canDrag,
+  showListBadge,
+}: {
+  item: KanbanItem;
+  canDrag: boolean;
+  showListBadge: boolean;
+}) {
   const {
     attributes,
     listeners,
@@ -392,6 +424,12 @@ function KanbanCard({ item, canDrag }: { item: Item; canDrag: boolean }) {
           {item.text}
         </p>
       </div>
+      {showListBadge && item.list && (
+        <div className="mt-1 inline-flex items-center gap-1 text-[10px] text-[var(--lb-muted-fg)]">
+          <span aria-hidden>{item.list.emoji ?? "📋"}</span>
+          <span className="max-w-[200px] truncate">{item.list.name}</span>
+        </div>
+      )}
       {(item.tags ?? []).length > 0 && (
         <div className="mt-1 flex flex-wrap gap-1">
           {(item.tags ?? []).slice(0, 2).map((t) => (
