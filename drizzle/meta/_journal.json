@@ -120,6 +120,13 @@
       "when": 1778890100000,
       "tag": "0016_phase15_daily_digest",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1778354800000,
+      "tag": "0017_task_recurrence",
+      "breakpoints": true
     }
   ]
 }

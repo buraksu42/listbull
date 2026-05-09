@@ -259,6 +259,8 @@ export type ItemSnapshot = {
   deadlineAt: string | null;
   /** ISO 8601 string — pin-to-top marker. */
   pinnedAt: string | null;
+  /** RFC 5545 RRULE; when set, complete reverts + advances deadline. */
+  taskRecurrenceRule: string | null;
   position: number;
   createdBy: string;
   /** ISO 8601 string */

@@ -60,6 +60,26 @@ const itemEditFormSchema = z.object({
   priority: z.enum(["low", "normal", "high"]),
   /** Comma-separated freeform tags; trimmed/dedup'd before submit. */
   tagsRaw: z.string().optional(),
+  /**
+   * Task-recurrence preset selector. "none" = clear; "custom" =
+   * read from `taskRecurrenceCustom`. Other values map to RRULE
+   * shortcuts (daily / weekday / weekly-mon / monthly-1).
+   */
+  taskRecurrenceMode: z.enum([
+    "none",
+    "daily",
+    "weekday",
+    "weekly_mon",
+    "weekly_tue",
+    "weekly_wed",
+    "weekly_thu",
+    "weekly_fri",
+    "weekly_sat",
+    "weekly_sun",
+    "monthly_1",
+    "custom",
+  ]),
+  taskRecurrenceCustom: z.string().optional(),
 });
 
 type ItemEditFormValues = z.infer<typeof itemEditFormSchema>;
@@ -72,7 +92,54 @@ export type ItemEditPatch = {
   priority?: ItemPriority;
   tags?: string[];
   pinned?: boolean;
+  taskRecurrenceRule?: string | null;
 };
+
+const RECURRENCE_PRESETS: Record<
+  Exclude<ItemEditFormValues["taskRecurrenceMode"], "none" | "custom">,
+  string
+> = {
+  daily: "FREQ=DAILY",
+  weekday: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
+  weekly_mon: "FREQ=WEEKLY;BYDAY=MO",
+  weekly_tue: "FREQ=WEEKLY;BYDAY=TU",
+  weekly_wed: "FREQ=WEEKLY;BYDAY=WE",
+  weekly_thu: "FREQ=WEEKLY;BYDAY=TH",
+  weekly_fri: "FREQ=WEEKLY;BYDAY=FR",
+  weekly_sat: "FREQ=WEEKLY;BYDAY=SA",
+  weekly_sun: "FREQ=WEEKLY;BYDAY=SU",
+  monthly_1: "FREQ=MONTHLY;BYMONTHDAY=1",
+};
+
+function ruleToMode(
+  rule: string | null,
+): {
+  mode: ItemEditFormValues["taskRecurrenceMode"];
+  custom: string;
+} {
+  if (!rule) return { mode: "none", custom: "" };
+  for (const [k, v] of Object.entries(RECURRENCE_PRESETS)) {
+    if (v === rule) {
+      return {
+        mode: k as ItemEditFormValues["taskRecurrenceMode"],
+        custom: "",
+      };
+    }
+  }
+  return { mode: "custom", custom: rule };
+}
+
+function modeToRule(
+  mode: ItemEditFormValues["taskRecurrenceMode"],
+  custom: string,
+): string | null {
+  if (mode === "none") return null;
+  if (mode === "custom") {
+    const t = custom.trim();
+    return t.length > 0 ? t : null;
+  }
+  return RECURRENCE_PRESETS[mode] ?? null;
+}
 
 export function ItemEditSheet({
   item,
@@ -100,12 +167,17 @@ export function ItemEditSheet({
       status: (item?.status as ItemStatus) ?? "open",
       priority: (item?.priority as ItemPriority) ?? "normal",
       tagsRaw: (item?.tags ?? []).join(", "),
+      ...ruleToMode(item?.taskRecurrenceRule ?? null),
+      // Spread above gives `mode` + `custom` keys; rename to form fields.
+      taskRecurrenceMode: ruleToMode(item?.taskRecurrenceRule ?? null).mode,
+      taskRecurrenceCustom: ruleToMode(item?.taskRecurrenceRule ?? null).custom,
     },
   });
 
   // Reset the form whenever a different item is opened.
   React.useEffect(() => {
     if (!item) return;
+    const rec = ruleToMode(item.taskRecurrenceRule ?? null);
     reset({
       text: item.text,
       description: item.description ?? "",
@@ -113,6 +185,8 @@ export function ItemEditSheet({
       status: (item.status as ItemStatus) ?? "open",
       priority: (item.priority as ItemPriority) ?? "normal",
       tagsRaw: (item.tags ?? []).join(", "),
+      taskRecurrenceMode: rec.mode,
+      taskRecurrenceCustom: rec.custom,
     });
   }, [item, reset]);
 
@@ -267,6 +341,57 @@ export function ItemEditSheet({
               </p>
             </div>
 
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="item-edit-recurrence">Tekrar (otomatik yenile)</Label>
+              <Controller
+                control={control}
+                name="taskRecurrenceMode"
+                render={({ field }) => (
+                  <select
+                    id="item-edit-recurrence"
+                    value={field.value}
+                    onChange={(e) =>
+                      field.onChange(
+                        e.target.value as ItemEditFormValues["taskRecurrenceMode"],
+                      )
+                    }
+                    className="rounded-[var(--lb-r-sm)] border border-[var(--lb-border)] bg-[var(--lb-bg)] p-2 text-sm"
+                  >
+                    <option value="none">Tekrarlama yok</option>
+                    <option value="daily">Her gün</option>
+                    <option value="weekday">Hafta içi her gün</option>
+                    <option value="weekly_mon">Her pazartesi</option>
+                    <option value="weekly_tue">Her salı</option>
+                    <option value="weekly_wed">Her çarşamba</option>
+                    <option value="weekly_thu">Her perşembe</option>
+                    <option value="weekly_fri">Her cuma</option>
+                    <option value="weekly_sat">Her cumartesi</option>
+                    <option value="weekly_sun">Her pazar</option>
+                    <option value="monthly_1">Her ayın 1&apos;i</option>
+                    <option value="custom">Özel (RRULE)</option>
+                  </select>
+                )}
+              />
+              {/* Custom RRULE input visible only when mode === "custom" */}
+              <Controller
+                control={control}
+                name="taskRecurrenceMode"
+                render={({ field: modeField }) =>
+                  modeField.value === "custom" ? (
+                    <Input
+                      placeholder="FREQ=WEEKLY;BYDAY=TH"
+                      {...register("taskRecurrenceCustom")}
+                    />
+                  ) : (
+                    <></>
+                  )
+                }
+              />
+              <p className="text-xs text-[var(--lb-muted-fg)]">
+                Tamamlandığında otomatik yenilenir; bir sonraki son tarihe atılır.
+              </p>
+            </div>
+
             <RemindersSection itemId={item.id} />
 
             <AttachmentsSection itemId={item.id} />
@@ -401,6 +526,14 @@ function diffPatch(item: Item, values: ItemEditFormValues): ItemEditPatch {
   const currentTags = (item.tags ?? []).map((t) => t.toLowerCase());
   if (!arraysEqual(nextTags, currentTags)) {
     patch.tags = nextTags;
+  }
+  const nextRule = modeToRule(
+    values.taskRecurrenceMode,
+    values.taskRecurrenceCustom ?? "",
+  );
+  const currentRule = item.taskRecurrenceRule ?? null;
+  if (nextRule !== currentRule) {
+    patch.taskRecurrenceRule = nextRule;
   }
   return patch;
 }

@@ -59,6 +59,7 @@ export const updateItemBodySchema = z
     priority: z.enum(["low", "normal", "high"]).optional(),
     tags: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
     pinned: z.boolean().optional(),
+    taskRecurrenceRule: z.string().trim().min(1).max(500).nullable().optional(),
   })
   .refine(
     (v) =>
@@ -70,10 +71,11 @@ export const updateItemBodySchema = z
       v.status !== undefined ||
       v.priority !== undefined ||
       v.tags !== undefined ||
-      v.pinned !== undefined,
+      v.pinned !== undefined ||
+      v.taskRecurrenceRule !== undefined,
     {
       message:
-        "at least one of text, description, isDone, position, deadlineAt, status, priority, tags, pinned must be supplied",
+        "at least one of text, description, isDone, position, deadlineAt, status, priority, tags, pinned, taskRecurrenceRule must be supplied",
     },
   );
 

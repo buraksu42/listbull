@@ -259,6 +259,16 @@ export const items = pgTable(
      * button or `update_item.pinned`.
      */
     pinnedAt: timestamp("pinned_at", { withTimezone: true }),
+    /**
+     * Task-level RFC 5545 RRULE. When set, completing the item does
+     * NOT permanently mark it done — instead, complete-item advances
+     * the deadline (if present) by the rule's next occurrence and
+     * resets `is_done=false`, `status='open'`, `completed_at=null`.
+     * Distinct from `item_reminders.recurrence_rule` which only re-
+     * fires reminder pings without resurrecting the task. Common
+     * use: "her hafta perşembe" weekly chores.
+     */
+    taskRecurrenceRule: text("task_recurrence_rule"),
     position: integer("position").notNull().default(0),
     createdBy: uuid("created_by")
       .notNull()

@@ -59,7 +59,24 @@ export async function executeUpdateItem(
     target_list_id,
     target_list_name,
     pinned,
+    task_recurrence_rule,
   } = parsed.data;
+
+  // Validate task_recurrence_rule if provided so we don't silently
+  // store garbage.
+  if (typeof task_recurrence_rule === "string") {
+    try {
+      const { RRule } = await import("rrule");
+      RRule.fromString(`RRULE:${task_recurrence_rule}`);
+    } catch (e) {
+      return err(
+        ERR.invalid_input,
+        `Invalid task_recurrence_rule: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
+  }
 
   // Resolve target list (by id or name). The `resolveList` helper handles
   // exact / fuzzy / inbox matching with workspace scoping. We use it
@@ -120,6 +137,7 @@ export async function executeUpdateItem(
       | "position"
       | "list_id"
       | "pinned"
+      | "task_recurrence_rule"
     > = [];
     const warnings: string[] = [];
 
@@ -131,6 +149,15 @@ export async function executeUpdateItem(
       } else if (!pinned && isPinned) {
         patch.pinnedAt = null;
         changes.push("pinned");
+      }
+    }
+
+    if (task_recurrence_rule !== undefined) {
+      const cur = current.taskRecurrenceRule ?? null;
+      const next = task_recurrence_rule ?? null;
+      if (cur !== next) {
+        patch.taskRecurrenceRule = next;
+        changes.push("task_recurrence_rule");
       }
     }
 

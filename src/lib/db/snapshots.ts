@@ -61,6 +61,7 @@ export function toItemSnapshot(row: Item): ItemSnapshot {
     assigneeId: row.assigneeId,
     deadlineAt: row.deadlineAt ? row.deadlineAt.toISOString() : null,
     pinnedAt: row.pinnedAt ? row.pinnedAt.toISOString() : null,
+    taskRecurrenceRule: row.taskRecurrenceRule ?? null,
     position: row.position,
     createdBy: row.createdBy,
     completedAt: row.completedAt ? row.completedAt.toISOString() : null,

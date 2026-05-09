@@ -50,6 +50,8 @@ export const itemSnapshotSchema = z.object({
   deadlineAt: z.string().datetime({ offset: true }).nullable(),
   /** ISO timestamp set when the item was pinned to top; null = not pinned. */
   pinnedAt: z.string().datetime({ offset: true }).nullable(),
+  /** RFC 5545 RRULE for task-level recurrence (auto-resurrect on complete). */
+  taskRecurrenceRule: z.string().nullable(),
   position: z.number().int(),
   createdBy: z.string().uuid(),
   completedAt: z.string().datetime({ offset: true }).nullable(),
@@ -221,6 +223,16 @@ export const updateItemInputSchema = z
      * priority). Omit to leave the pin state unchanged.
      */
     pinned: z.boolean().optional(),
+    /**
+     * Task-level RFC 5545 RRULE. Pass a non-empty string (e.g.
+     * `FREQ=WEEKLY;BYDAY=TH` for "every Thursday") to make this item
+     * auto-resurrect on completion: the deadline advances to the
+     * rule's next occurrence, `is_done` resets, `status` flips back
+     * to `'open'`. Pass `null` to clear (one-shot task again). Omit
+     * to leave unchanged. Distinct from reminder recurrence, which
+     * only re-fires reminder pings without resurrecting the task.
+     */
+    task_recurrence_rule: z.string().trim().min(1).max(500).nullable().optional(),
   })
   .refine(
     (v) =>
@@ -230,10 +242,11 @@ export const updateItemInputSchema = z
       v.position !== undefined ||
       v.target_list_id !== undefined ||
       v.target_list_name !== undefined ||
-      v.pinned !== undefined,
+      v.pinned !== undefined ||
+      v.task_recurrence_rule !== undefined,
     {
       message:
-        "at least one of text, description, deadline_at, position, target_list_id, target_list_name, or pinned must be supplied",
+        "at least one of text, description, deadline_at, position, target_list_id, target_list_name, pinned, or task_recurrence_rule must be supplied",
     },
   );
 
@@ -247,6 +260,7 @@ export const updateItemOutputSchema = z.object({
       "position",
       "list_id",
       "pinned",
+      "task_recurrence_rule",
     ]),
   ),
   /** Soft warnings (e.g. deadline_at_in_past). */
@@ -266,6 +280,13 @@ export const completeItemInputSchema = z.object({
 export const completeItemOutputSchema = z.object({
   item: itemSnapshotSchema,
   was_done: z.boolean(),
+  /**
+   * Soft warnings. Phase X (2026-05-09): `task_recurred` fires when
+   * an item with `task_recurrence_rule` was "completed" but actually
+   * auto-resurrected — deadline advanced, is_done reset. The LLM
+   * should phrase the reply as "Tamam, sonraki: <new deadline>".
+   */
+  warnings: z.array(z.string()).optional(),
 });
 
 export type CompleteItemInput = z.infer<typeof completeItemInputSchema>;
@@ -1348,8 +1369,17 @@ export const tools: readonly ToolDefinition[] = [
       "Past `deadline_at` silently dropped with warning. To manage " +
       "REMINDERS (set/clear ping moments), use `set_deadline` / " +
       "`add_reminder` / `remove_reminder` — `update_item` no longer " +
-      "touches reminders. `changes` names the fields that actually " +
-      "changed.",
+      "touches reminders. " +
+      "Pass `task_recurrence_rule` (RFC 5545 RRULE body, no `RRULE:` " +
+      "prefix) to make the item AUTO-RESURRECT when completed: on " +
+      "complete, deadline advances to the next occurrence and " +
+      "is_done resets. Phrasings: \"her hafta perşembe yenile\" → " +
+      "`FREQ=WEEKLY;BYDAY=TH`; \"her ay 1'i\" → " +
+      "`FREQ=MONTHLY;BYMONTHDAY=1`; \"her gün\" → `FREQ=DAILY`. Pass " +
+      "`task_recurrence_rule: null` to clear (one-shot again). " +
+      "Distinct from reminder recurrence (`add_reminder`'s " +
+      "recurrence_rule) which only re-pings without resurrecting. " +
+      "`changes` names the fields that actually changed.",
     inputSchema: updateItemInputSchema,
     outputSchema: updateItemOutputSchema,
   },

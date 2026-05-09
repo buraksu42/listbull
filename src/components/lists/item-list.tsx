@@ -190,6 +190,9 @@ export function ItemList({
           if (patch.pinned !== undefined) {
             next.pinnedAt = patch.pinned ? new Date() : null;
           }
+          if (patch.taskRecurrenceRule !== undefined) {
+            next.taskRecurrenceRule = patch.taskRecurrenceRule;
+          }
           return next;
         }),
       );
