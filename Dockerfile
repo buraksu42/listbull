@@ -45,6 +45,13 @@ RUN npm ci --no-audit --no-fund --include=dev
 
 COPY tsconfig.json next.config.ts postcss.config.mjs eslint.config.mjs ./
 COPY drizzle.config.ts ./
+# Next.js 16 root-level instrumentation hooks. Without these COPYs the
+# build runs without `instrumentation.ts` / `instrumentation-client.ts`
+# in the context, so Sentry's `register()` + client init never make it
+# into the bundle even when @sentry/nextjs is installed and
+# `withSentryConfig` wraps next.config. Local builds happened to work
+# because they run from the repo root where the files exist.
+COPY instrumentation.ts instrumentation-client.ts ./
 COPY messages ./messages
 COPY public ./public
 COPY src ./src
