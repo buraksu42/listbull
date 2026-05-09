@@ -868,7 +868,7 @@ function Lightbox({
         ✕
       </button>
       <div
-        className="absolute bottom-4 left-1/2 z-[61] flex -translate-x-1/2 gap-2"
+        className="absolute bottom-4 left-1/2 z-[61] flex flex-col items-center gap-1 -translate-x-1/2"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -882,15 +882,13 @@ function Lightbox({
             ? "Yollanıyor…"
             : forwardState === "ok"
               ? "Telegram'a yollandı ✓"
-              : "Telegram'da Aç"}
+              : "Telegram'a yolla"}
         </button>
-        <a
-          href={url}
-          download={attachment.originalFilename ?? undefined}
-          className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-sm text-white"
-        >
-          İndir
-        </a>
+        {forwardState === "ok" && (
+          <span className="text-[11px] text-white/70">
+            Bot sohbetinden indir / kaydet
+          </span>
+        )}
       </div>
       {attachment.kind === "photo" && !imageBroken ? (
         // eslint-disable-next-line @next/next/no-img-element -- proxied bytes
