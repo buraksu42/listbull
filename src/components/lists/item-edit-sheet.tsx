@@ -33,6 +33,7 @@ import {
 import { useTelegramMainButton } from "@/hooks/use-telegram-main-button";
 import {
   attachmentBytesUrl,
+  useForwardAttachment,
   useAttachments,
   useDeleteAttachment,
 } from "@/hooks/use-attachments";
@@ -42,6 +43,7 @@ import {
   FileText as FileIcon,
   Mic,
   Paperclip,
+  Send,
   Trash2,
   Video,
 } from "lucide-react";
@@ -604,7 +606,34 @@ function diffPatch(item: Item, values: ItemEditFormValues): ItemEditPatch {
 function AttachmentsSection({ itemId }: { itemId: string }) {
   const { data: attachments, isLoading, isError } = useAttachments(itemId);
   const deleteMutation = useDeleteAttachment(itemId);
+  const forwardMutation = useForwardAttachment(itemId);
   const [lightboxId, setLightboxId] = React.useState<string | null>(null);
+  const [forwardStatus, setForwardStatus] = React.useState<{
+    id: string;
+    state: "pending" | "ok" | "error";
+    message?: string;
+  } | null>(null);
+
+  const onForward = (attachmentId: string) => {
+    setForwardStatus({ id: attachmentId, state: "pending" });
+    forwardMutation.mutate(attachmentId, {
+      onSuccess: () => {
+        setForwardStatus({ id: attachmentId, state: "ok" });
+        window.setTimeout(
+          () =>
+            setForwardStatus((cur) =>
+              cur?.id === attachmentId ? null : cur,
+            ),
+          3000,
+        );
+      },
+      onError: (err) => {
+        const msg =
+          err instanceof Error ? err.message : "Telegram'a yollanamadı";
+        setForwardStatus({ id: attachmentId, state: "error", message: msg });
+      },
+    });
+  };
 
   const lightboxAttachment =
     lightboxId !== null
@@ -651,6 +680,10 @@ function AttachmentsSection({ itemId }: { itemId: string }) {
                   },
                 })
               }
+              onForward={() => onForward(att.id)}
+              forwardState={
+                forwardStatus?.id === att.id ? forwardStatus.state : null
+              }
               deleting={
                 deleteMutation.isPending && deleteMutation.variables === att.id
               }
@@ -658,11 +691,22 @@ function AttachmentsSection({ itemId }: { itemId: string }) {
           ))}
         </ul>
       )}
+      {forwardStatus?.state === "error" && (
+        <p className="text-xs text-[var(--lb-destructive)]">
+          {forwardStatus.message ?? "Telegram'a yollanamadı."}
+        </p>
+      )}
       {lightboxAttachment && (
         <Lightbox
           itemId={itemId}
           attachment={lightboxAttachment}
           onClose={() => setLightboxId(null)}
+          onForward={() => onForward(lightboxAttachment.id)}
+          forwardState={
+            forwardStatus?.id === lightboxAttachment.id
+              ? forwardStatus.state
+              : null
+          }
         />
       )}
     </div>
@@ -674,16 +718,21 @@ function AttachmentTile({
   attachment,
   onOpen,
   onDelete,
+  onForward,
+  forwardState,
   deleting,
 }: {
   itemId: string;
   attachment: AttachmentSnapshot;
   onOpen: () => void;
   onDelete: () => void;
+  onForward: () => void;
+  forwardState: "pending" | "ok" | "error" | null;
   deleting: boolean;
 }) {
   const isPhoto = attachment.kind === "photo";
   const url = attachmentBytesUrl(itemId, attachment.id);
+  const [imageBroken, setImageBroken] = React.useState(false);
   return (
     <li className="relative">
       <button
@@ -697,13 +746,14 @@ function AttachmentTile({
           attachment.originalFilename ?? `${attachment.kind} ${attachment.id}`
         }
       >
-        {isPhoto ? (
+        {isPhoto && !imageBroken ? (
           // eslint-disable-next-line @next/next/no-img-element -- Telegram CDN through our proxy; <Image> would require domain config.
           <img
             src={url}
             alt={attachment.originalFilename ?? "Fotoğraf"}
             loading="lazy"
             className="h-full w-full object-cover"
+            onError={() => setImageBroken(true)}
           />
         ) : (
           <KindIcon kind={attachment.kind} />
@@ -716,15 +766,37 @@ function AttachmentTile({
         >
           {attachment.originalFilename ?? attachment.kind}
         </span>
-        <button
-          type="button"
-          onClick={onDelete}
-          disabled={deleting}
-          className="text-[var(--lb-destructive)] hover:opacity-80 disabled:opacity-40"
-          aria-label="Eki sil"
-        >
-          <Trash2 size={12} aria-hidden="true" />
-        </button>
+        <span className="inline-flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onForward}
+            disabled={forwardState === "pending"}
+            className="text-[var(--lb-muted-fg)] hover:text-[var(--lb-accent)] disabled:opacity-40"
+            aria-label="Telegram'a yolla"
+            title={
+              forwardState === "ok"
+                ? "Telegram'a yollandı"
+                : "Telegram'a yolla"
+            }
+          >
+            {forwardState === "ok" ? (
+              <span className="text-[10px]" aria-hidden>
+                ✓
+              </span>
+            ) : (
+              <Send size={12} aria-hidden="true" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={deleting}
+            className="text-[var(--lb-destructive)] hover:opacity-80 disabled:opacity-40"
+            aria-label="Eki sil"
+          >
+            <Trash2 size={12} aria-hidden="true" />
+          </button>
+        </span>
       </div>
       {!attachment.hasBackup && (
         <span
@@ -759,11 +831,16 @@ function Lightbox({
   itemId,
   attachment,
   onClose,
+  onForward,
+  forwardState,
 }: {
   itemId: string;
   attachment: AttachmentSnapshot;
   onClose: () => void;
+  onForward: () => void;
+  forwardState: "pending" | "ok" | "error" | null;
 }) {
+  const [imageBroken, setImageBroken] = React.useState(false);
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -790,23 +867,53 @@ function Lightbox({
       >
         ✕
       </button>
-      {attachment.kind === "photo" ? (
+      <div
+        className="absolute bottom-4 left-1/2 z-[61] flex flex-col items-center gap-1 -translate-x-1/2"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onForward}
+          disabled={forwardState === "pending"}
+          className="inline-flex items-center gap-1.5 rounded-full bg-[var(--lb-accent)] px-4 py-2 text-sm font-medium text-[var(--lb-accent-fg,white)] disabled:opacity-60"
+        >
+          <Send size={14} aria-hidden />
+          {forwardState === "pending"
+            ? "Yollanıyor…"
+            : forwardState === "ok"
+              ? "Telegram'a yollandı ✓"
+              : "Telegram'a yolla"}
+        </button>
+        {forwardState === "ok" && (
+          <span className="text-[11px] text-white/70">
+            Bot sohbetinden indir / kaydet
+          </span>
+        )}
+      </div>
+      {attachment.kind === "photo" && !imageBroken ? (
         // eslint-disable-next-line @next/next/no-img-element -- proxied bytes
         <img
           src={url}
           alt={attachment.originalFilename ?? "Ek"}
-          className="max-h-[90vh] max-w-[90vw] object-contain"
+          className="max-h-[80vh] max-w-[90vw] object-contain"
           onClick={(e) => e.stopPropagation()}
+          onError={() => setImageBroken(true)}
         />
       ) : (
-        <a
-          href={url}
-          download={attachment.originalFilename ?? undefined}
-          className="rounded-md bg-[var(--lb-card)] px-4 py-3 text-[var(--lb-fg)] underline"
+        <div
+          className="flex flex-col items-center gap-3 rounded-md bg-[var(--lb-card)] px-6 py-5 text-[var(--lb-fg)]"
           onClick={(e) => e.stopPropagation()}
         >
-          {attachment.originalFilename ?? "Dosyayı indir"}
-        </a>
+          <KindIcon kind={attachment.kind} />
+          <span className="text-sm">
+            {attachment.originalFilename ?? attachment.kind}
+          </span>
+          {imageBroken && (
+            <span className="text-xs text-[var(--lb-muted-fg)]">
+              Önizleme yüklenemedi — Telegram&apos;da aç ya da indir.
+            </span>
+          )}
+        </div>
       )}
     </div>
   );

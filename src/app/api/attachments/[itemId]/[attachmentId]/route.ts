@@ -110,20 +110,46 @@ export async function GET(_request: Request, { params }: RouteCtx) {
   // rolled out.
   try {
     const bot = await getBot();
-    const file = await bot.api.getFile(att.telegramFileId);
+    let file;
+    try {
+      file = await bot.api.getFile(att.telegramFileId);
+    } catch (e) {
+      console.error("[attachments] getFile failed", {
+        attachmentId,
+        kind: att.kind,
+        fileSize: att.fileSize,
+        mimeType: att.mimeType,
+        error: e instanceof Error ? e.message : String(e),
+      });
+      throw e;
+    }
     if (!file.file_path) {
+      console.error("[attachments] getFile returned no file_path", {
+        attachmentId,
+        kind: att.kind,
+        fileSize: att.fileSize,
+      });
       return NextResponse.json(
         {
           ok: false,
-          error: { code: "not_found", message: "File path missing" },
+          error: {
+            code: "file_path_missing",
+            message:
+              "Telegram returned no file_path — likely larger than 20MB.",
+          },
         },
-        { status: 404 },
+        { status: 502 },
       );
     }
     // Telegram CDN URL embeds the bot token; never expose it client-side.
     const tgUrl = `https://api.telegram.org/file/bot${bot.token}/${file.file_path}`;
     const upstream = await fetch(tgUrl);
     if (!upstream.ok || !upstream.body) {
+      console.error("[attachments] CDN fetch non-200", {
+        attachmentId,
+        upstreamStatus: upstream.status,
+        filePath: file.file_path,
+      });
       return NextResponse.json(
         {
           ok: false,

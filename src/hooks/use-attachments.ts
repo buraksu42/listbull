@@ -78,3 +78,20 @@ export function useDeleteAttachment(itemId: string) {
 export function attachmentBytesUrl(itemId: string, attachmentId: string): string {
   return `/api/attachments/${itemId}/${attachmentId}`;
 }
+
+/**
+ * Re-send the attachment from the bot to the user's DM. Fallback for
+ * when the byte-proxy thumbnail / lightbox can't render the file —
+ * Telegram client will display it natively in the bot DM.
+ */
+export function useForwardAttachment(itemId: string) {
+  return useMutation({
+    mutationFn: async (attachmentId: string) => {
+      await fetchJson(
+        `/api/attachments/${itemId}/${attachmentId}/forward`,
+        { method: "POST" },
+      );
+      return attachmentId;
+    },
+  });
+}
