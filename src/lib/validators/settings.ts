@@ -72,20 +72,11 @@ const localeSchema = z.enum(["tr", "en"]);
  * Empty string here means "clear my key" — the route handler nulls the
  * column when the body field is `''`.
  */
-const openrouterKeySchema = z.union([
-  z.literal(""),
-  z
-    .string()
-    .min(8)
-    .max(256)
-    .startsWith("sk-or-", {
-      message: "OpenRouter API key must start with 'sk-or-'",
-    }),
-]);
-
 /**
  * Body of `PATCH /api/settings`. All fields optional; only provided
- * fields are mutated.
+ * fields are mutated. Per-user BYOK was removed — the OpenRouter
+ * API key is workspace-scoped, set via the workspace settings
+ * org-key endpoint instead.
  */
 export const patchSettingsBodySchema = z.object({
   locale: localeSchema.optional(),
@@ -95,23 +86,11 @@ export const patchSettingsBodySchema = z.object({
   /** Phase 14c: display preferences. */
   dateFormat: z.enum(ALLOWED_DATE_FORMATS).optional(),
   timeFormat: z.enum(ALLOWED_TIME_FORMATS).optional(),
-  /** When provided AND non-empty: encrypt + store. When `''`: clear. */
-  openrouterApiKey: openrouterKeySchema.optional(),
 });
 
 export type PatchSettingsBody = z.infer<typeof patchSettingsBodySchema>;
 
-/**
- * Shape of `GET /api/settings` and `PATCH /api/settings`. BYOK key NEVER
- * leaves the server in plaintext — only `byokKeyPreview` (last 4 chars)
- * is exposed.
- *
- * `hasApiKey` is the boolean Frontend uses to decide whether to render
- * the "stored key" UI affordance vs. the empty input. It tracks
- * `users.openrouter_api_key_encrypted IS NOT NULL` (independent of
- * whether the ciphertext is currently decryptable — see settings/route.ts
- * GET, which surfaces `byokKeyPreview: null` when decryption fails).
- */
+/** Shape of `GET /api/settings` and `PATCH /api/settings` envelopes. */
 export type GetSettingsResponse = {
   locale: "tr" | "en";
   timezone: string;
@@ -119,6 +98,4 @@ export type GetSettingsResponse = {
   notificationsEnabled: boolean;
   dateFormat: AllowedDateFormat;
   timeFormat: AllowedTimeFormat;
-  hasApiKey: boolean;
-  byokKeyPreview: string | null;
 };

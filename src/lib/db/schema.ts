@@ -54,8 +54,7 @@ export const users = pgTable(
      */
     dateFormat: text("date_format").notNull().default("DD.MM.YYYY"),
     timeFormat: text("time_format").notNull().default("24h"),
-    openrouterApiKeyEncrypted: text("openrouter_api_key_encrypted"),
-    llmModel: text("llm_model").notNull().default("anthropic/claude-haiku-4.5"),
+    llmModel: text("llm_model").notNull().default("google/gemini-2.5-flash"),
     notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
     /**
      * Phase 15: idempotency marker for the 09:00 daily digest cron.

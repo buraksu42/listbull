@@ -99,14 +99,12 @@ async function fetchInitialSettings(): Promise<SettingsInitial> {
     // defaults so the page still loads. The form will round-trip through
     // the live endpoint on save.
     return {
-      llmModel: "anthropic/claude-haiku-4.5",
+      llmModel: "google/gemini-2.5-flash",
       timezone: "Europe/Istanbul",
       locale: "tr",
       notificationsEnabled: true,
       dateFormat: "DD.MM.YYYY",
       timeFormat: "24h",
-      hasApiKey: false,
-      byokKeyPreview: null,
     };
   }
 }

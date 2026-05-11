@@ -18,16 +18,6 @@ const serverSchema = z.object({
     .min(16, "TELEGRAM_WEBHOOK_SECRET must be ≥16 chars"),
   TELEGRAM_BOT_USERNAME: z.string().min(3),
 
-  OPENROUTER_API_KEY: z.string().optional(),
-
-  // Operator-mode gate (post-billing-tear-out). When set, the operator
-  // env-key fallback (env.OPENROUTER_API_KEY) only fires for workspaces
-  // whose owner.telegram_id matches this value. Other workspaces must
-  // BYOK or set a workspace org-key. Leaving this unset disables the
-  // env-key fallback entirely — every workspace must bring its own key.
-  // Numeric Telegram user id (e.g. 123456789).
-  OPERATOR_TELEGRAM_ID: z.coerce.number().int().positive().optional(),
-
   LISTBULL_PER_USER_HOURLY_MSG_LIMIT: z.coerce
     .number()
     .int()

@@ -4,7 +4,6 @@ import { useMutation } from "@tanstack/react-query";
 import * as React from "react";
 import { useForm, useWatch } from "react-hook-form";
 
-import { ApiKeyField } from "@/components/settings/api-key-field";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
@@ -74,8 +73,6 @@ export type SettingsInitial = {
   notificationsEnabled: boolean;
   dateFormat: DateFormat;
   timeFormat: TimeFormat;
-  hasApiKey: boolean;
-  byokKeyPreview: string | null;
 };
 
 type SettingsFormValues = {
@@ -85,8 +82,6 @@ type SettingsFormValues = {
   notificationsEnabled: boolean;
   dateFormat: DateFormat;
   timeFormat: TimeFormat;
-  /** Empty = no change to stored key. */
-  apiKey: string;
 };
 
 type PatchPayload = Partial<{
@@ -96,7 +91,6 @@ type PatchPayload = Partial<{
   notificationsEnabled: boolean;
   dateFormat: DateFormat;
   timeFormat: TimeFormat;
-  openrouterApiKey: string;
 }>;
 
 const DATE_FORMAT_OPTIONS: Array<{ value: DateFormat; label: string }> = [
@@ -150,13 +144,11 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
       notificationsEnabled: initial.notificationsEnabled,
       dateFormat: initial.dateFormat,
       timeFormat: initial.timeFormat,
-      apiKey: "",
     },
   });
 
   // useWatch's subscription model is React-Compiler-compatible (unlike
   // form.watch which returns a fresh closure each render).
-  const apiKey = useWatch({ control, name: "apiKey" });
   const notificationsEnabled = useWatch({ control, name: "notificationsEnabled" });
   const watchedDateFormat = useWatch({ control, name: "dateFormat" });
   const watchedTimeFormat = useWatch({ control, name: "timeFormat" });
@@ -181,7 +173,6 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
         notificationsEnabled: data.notificationsEnabled,
         dateFormat: data.dateFormat,
         timeFormat: data.timeFormat,
-        apiKey: "",
       });
       // E1: when the user switches language, reload the route so the
       // next-intl request handler picks up the new `users.locale` and
@@ -213,9 +204,6 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
     if (values.timeFormat !== initial.timeFormat) {
       patch.timeFormat = values.timeFormat;
     }
-    if (values.apiKey.trim() !== "") {
-      patch.openrouterApiKey = values.apiKey.trim();
-    }
     if (Object.keys(patch).length === 0) {
       toast.message("Nothing to save.");
       return;
@@ -240,17 +228,6 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6 p-4" noValidate>
-      <Section title="OpenRouter API key" subtitle="BYOK — your key, your spend.">
-        <ApiKeyField
-          id="settings-api-key"
-          label="API key"
-          value={apiKey}
-          onChange={(next) => setValue("apiKey", next, { shouldDirty: true })}
-          hasStoredKey={initial.hasApiKey}
-          storedKeyPreview={initial.byokKeyPreview}
-        />
-      </Section>
-
       <Section title="LLM model" subtitle="Used by the bot for AI responses.">
         <div className="flex flex-col gap-2">
           <Label htmlFor="settings-model">Model</Label>
