@@ -25,10 +25,12 @@ import {
   KeyboardSensor,
   MouseSensor,
   TouchSensor,
-  closestCorners,
+  pointerWithin,
+  rectIntersection,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
@@ -46,6 +48,10 @@ import * as React from "react";
 
 import { GripVertical } from "lucide-react";
 
+import {
+  ItemEditSheet,
+  type ItemEditPatch,
+} from "@/components/lists/item-edit-sheet";
 import { STATUS_META } from "@/components/lists/item-attributes-meta";
 import { Button } from "@/components/ui/button";
 import { apiPatch } from "@/lib/api-client";
@@ -85,6 +91,7 @@ export function KanbanBoard({
 }: Props) {
   const qc = useQueryClient();
   const [showAllDone, setShowAllDone] = React.useState(false);
+  const [editingItem, setEditingItem] = React.useState<KanbanItem | null>(null);
 
   const sensors = useSensors(
     // Mouse + Touch split (PointerSensor was unreliable inside Telegram
@@ -275,10 +282,26 @@ export function KanbanBoard({
     qc.invalidateQueries({ queryKey: cacheKey });
   };
 
+  // Multi-container collision detection: `closestCorners` fails on
+  // empty columns under Telegram WebApp touch — the touch point falls
+  // outside any item rect and corner distances aren't computed. We
+  // try `pointerWithin` first (catches drops anywhere inside a column,
+  // including the empty placeholder area), and fall back to
+  // `rectIntersection` for edge-of-card drops near column boundaries.
+  const collisionDetection = React.useCallback<CollisionDetection>(
+    (args) => {
+      const pointerHits = pointerWithin(args);
+      if (pointerHits.length > 0) return pointerHits;
+      return rectIntersection(args);
+    },
+    [],
+  );
+
   return (
+    <>
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={collisionDetection}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
@@ -308,11 +331,26 @@ export function KanbanBoard({
               showAllDone={showAllDone}
               onToggleShowAllDone={() => setShowAllDone((v) => !v)}
               showListBadge={showListBadge}
+              onItemClick={(it) => setEditingItem(it)}
             />
           );
         })}
       </div>
     </DndContext>
+    {editingItem && (
+      <ItemEditSheet
+        item={editingItem}
+        open={true}
+        onOpenChange={(open) => {
+          if (!open) setEditingItem(null);
+        }}
+        onSave={async (patch: ItemEditPatch) => {
+          await apiPatch(`/api/items/${editingItem.id}`, patch);
+          qc.invalidateQueries({ queryKey: cacheKey });
+        }}
+      />
+    )}
+    </>
   );
 }
 
@@ -325,6 +363,7 @@ function Column({
   showAllDone,
   onToggleShowAllDone,
   showListBadge,
+  onItemClick,
 }: {
   status: Status;
   label: string;
@@ -334,6 +373,7 @@ function Column({
   showAllDone: boolean;
   onToggleShowAllDone: () => void;
   showListBadge: boolean;
+  onItemClick: (item: KanbanItem) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   return (
@@ -390,6 +430,7 @@ function Column({
               item={item}
               canDrag={canWrite}
               showListBadge={showListBadge}
+              onOpen={() => onItemClick(item)}
             />
           ))}
         </ul>
@@ -402,10 +443,12 @@ function KanbanCard({
   item,
   canDrag,
   showListBadge,
+  onOpen,
 }: {
   item: KanbanItem;
   canDrag: boolean;
   showListBadge: boolean;
+  onOpen: () => void;
 }) {
   const {
     attributes,
@@ -469,14 +512,16 @@ function KanbanCard({
             flexShrink: 0,
           }}
         />
-        <p
-          className="line-clamp-3 flex-1 text-sm text-[var(--lb-fg)]"
+        <button
+          type="button"
+          onClick={onOpen}
+          className="line-clamp-3 flex-1 text-left text-sm text-[var(--lb-fg)] bg-transparent border-0 p-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)] rounded-sm"
           style={{
             textDecoration: item.isDone ? "line-through" : "none",
           }}
         >
           {item.text}
-        </p>
+        </button>
       </div>
       {showListBadge && item.list && (
         <div className="mt-1 inline-flex items-center gap-1 text-[10px] text-[var(--lb-muted-fg)]">
