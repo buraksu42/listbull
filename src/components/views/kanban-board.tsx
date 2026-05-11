@@ -31,6 +31,7 @@ import {
   useSensors,
   type DragEndEvent,
   type DragOverEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -167,6 +168,30 @@ export function KanbanBoard({
     [buckets],
   );
 
+  // Snapshot the source status + bucket on drag start so dragEnd can
+  // compute the cross-column move correctly even after dragOver
+  // mutates the optimistic cache. Without this snapshot, `findContainer`
+  // in dragEnd would return the OPTIMISTIC target status (because the
+  // cache moved the card mid-drag), and the handler would mistake a
+  // cross-column drop for a same-column reorder — status never gets
+  // written, server snaps card back on next poll.
+  const dragStartRef = React.useRef<{
+    id: string;
+    status: Status;
+    item: KanbanItem;
+  } | null>(null);
+
+  const handleDragStart = (event: DragStartEvent) => {
+    if (!canWrite) return;
+    const activeId = String(event.active.id);
+    const status = findContainer(activeId);
+    if (!status) return;
+    const list = buckets.get(status) ?? [];
+    const item = list.find((it) => it.id === activeId);
+    if (!item) return;
+    dragStartRef.current = { id: activeId, status, item };
+  };
+
   const handleDragOver = (event: DragOverEvent) => {
     if (!canWrite) return;
     const { active, over } = event;
@@ -188,33 +213,27 @@ export function KanbanBoard({
   const handleDragEnd = (event: DragEndEvent) => {
     if (!canWrite) return;
     const { active, over } = event;
-    if (!over) return;
+    const snapshot = dragStartRef.current;
+    dragStartRef.current = null;
+    if (!over || !snapshot) return;
     const activeId = String(active.id);
     const overId = String(over.id);
 
-    const activeStatus = findContainer(activeId);
+    // Source status comes from drag-start snapshot (resilient against
+    // the optimistic dragOver mutation). Target status comes from
+    // current cache — that's already been moved by dragOver so it
+    // reflects where the card is visually.
+    const activeStatus = snapshot.status;
     const overStatus = findContainer(overId);
-    if (!activeStatus || !overStatus) return;
+    if (!overStatus) return;
 
-    // Reconstruct the post-drag bucket order to compute the new
-    // sparse position. Same-column drops use arrayMove; cross-column
-    // drops splice into the target bucket at the over-card's index
-    // (or end-of-column when dropping on the empty droppable shell).
-    const sourceList = (buckets.get(activeStatus) ?? []).slice();
-    const targetList =
-      activeStatus === overStatus
-        ? sourceList
-        : (buckets.get(overStatus) ?? []).slice();
-
-    const movedIndex = sourceList.findIndex((it) => it.id === activeId);
-    if (movedIndex === -1) return;
-    const moved = sourceList[movedIndex];
-    if (!moved) return;
+    const targetList = (buckets.get(overStatus) ?? []).slice();
 
     if (activeStatus === overStatus) {
+      // Pure reorder within the source column.
+      const movedIndex = targetList.findIndex((it) => it.id === activeId);
       const newIndex = targetList.findIndex((it) => it.id === overId);
-      if (newIndex === -1 || newIndex === movedIndex) {
-        // Snap-back the optimistic over change if any (no row write).
+      if (movedIndex === -1 || newIndex === -1 || newIndex === movedIndex) {
         qc.invalidateQueries({ queryKey: cacheKey });
         return;
       }
@@ -224,15 +243,17 @@ export function KanbanBoard({
       return;
     }
 
-    // Cross-column move.
+    // Cross-column move. The card is already in `targetList` (dragOver
+    // optimistic) so we only need to compute its final index.
     const overIdx = targetList.findIndex((it) => it.id === overId);
     const insertAt = overIdx >= 0 ? overIdx : targetList.length;
-    const reordered = [...targetList];
-    reordered.splice(insertAt, 0, { ...moved, status: overStatus });
+    // `targetList` may already contain the active card from dragOver;
+    // strip it before recomputing position so arithmetic stays clean.
+    const targetWithoutActive = targetList.filter((it) => it.id !== activeId);
+    const reordered = [...targetWithoutActive];
+    reordered.splice(insertAt, 0, { ...snapshot.item, status: overStatus });
     const nextPos = computeSparsePosition(reordered, insertAt);
 
-    // Optimistic: write the new status + position into cache so the
-    // card lands in the target column at the correct row order.
     qc.setQueryData<KanbanItem[]>(cacheKey, (current) => {
       if (!current) return current;
       return current.map((it) =>
@@ -249,12 +270,19 @@ export function KanbanBoard({
     });
   };
 
+  const handleDragCancel = () => {
+    dragStartRef.current = null;
+    qc.invalidateQueries({ queryKey: cacheKey });
+  };
+
   return (
     <DndContext
       sensors={sensors}
       collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
     >
       <div
         className="flex gap-2 overflow-x-auto px-4 pb-4"
