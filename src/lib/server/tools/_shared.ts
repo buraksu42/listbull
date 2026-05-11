@@ -293,9 +293,14 @@ export async function recomputeOffsetReminders(
       );
     return;
   }
+  // postgres-js doesn't auto-serialize Date in `sql` template literals
+  // — pass an ISO string explicitly. Without this we get:
+  // "TypeError: ... Received an instance of Date" from the driver and
+  // the whole transaction rolls back on save.
+  const deadlineIso = newDeadline.toISOString();
   await tx.execute(sql`
     update item_reminders
-       set remind_at = ${newDeadline} - (offset_minutes * interval '1 minute'),
+       set remind_at = ${deadlineIso}::timestamptz - (offset_minutes * interval '1 minute'),
            sent = false,
            updated_at = now()
      where item_id = ${itemId}
