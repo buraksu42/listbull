@@ -19,131 +19,100 @@ DB, the data stays yours.
 
 ## Features
 
-### Core (Phase 1–4)
-- **Conversational item capture** — natural language → action items.
+### Capture + organize
+- **Conversational item capture** — natural language → action items
+  ("yarın 9'da diş hekimi", "süt al, akşam hatırlat").
 - **Forwarded message extraction** — forward any Telegram message;
   the bot extracts up to 20 distinct action items in one round-trip.
-- **Inline mode** — `@listbull_bot <query>` in any chat surfaces your
+- **Voice → STT** — voice notes get transcribed (Gemini Flash via
+  OpenRouter) and processed through the same item-capture path.
+- **Photo / video / document attachments** — bot uploads land on the
+  current item; Mini App lightbox plus "Telegram'a yolla" fallback
+  if the byte-proxy can't preview.
+- **Inline mode** — `@your_bot <query>` in any chat surfaces your
   10 most-recent matching items, deeplinkable.
+
+### Lists + workspaces
+- **Workspaces** — multi-user containers with `owner` / `admin` /
+  `editor` / `viewer` / `guest` roles. Invite via username; members
+  share lists, items, reminders, activity log.
+- **Lists per workspace** — owner / editor / viewer per-list roles
+  layered on top of workspace membership.
+- **Item discipline** — status (open/in_progress/blocked/done),
+  priority (low/normal/high), workspace-scoped tags, deadlines.
+- **Kanban view** — drag-and-drop board per list AND workspace-wide
+  (`/views/board`) with priority + assignee filter chips.
+- **Today / Week / Board smart views** — cross-list aggregations
+  from the workspace home.
+- **Assignees** — owners + members can assign items to any list
+  member (Inv-12).
+- **Task-level recurrence** — RRULE on `items.task_recurrence_rule`;
+  completed item auto-resurrects with the next occurrence.
+
+### Reminders + sharing
+- **Reminders** — natural-language scheduling, multiple per item,
+  absolute or offset-from-deadline, RRULE recurrence on the reminder.
+  Per-minute cron dispatch.
 - **Shareable list snapshots** — HMAC-signed read-only URLs (default
   30-day expiry).
-- **Cross-account sharing** — owner / editor / viewer roles, real-time
-  invite acceptance, full activity log per list.
-- **Audit log + 30-day restore** — `/lists/[id]/audit` page;
-  any deleted item ≤30 days old is restorable in-place from
-  `payload_before`.
-- **Reminders** — natural-language scheduling + per-minute cron.
-- **TR + EN at launch** — 151+ keys parity (Inv-19 enforced via Vitest).
-- **Full data export** — `Settings → Download my data` returns JSON
-  bundle. Optional Hetzner Object Storage signed URL when configured.
-- **BYOK encryption-at-rest** — OpenRouter API key encrypted with
-  AES-256-GCM. Plaintext ephemeral, never logged.
+- **Cross-account sharing** — invite tokens with 7-day TTL, DM
+  delivery via the bot.
+- **Audit log + 30-day restore** — `/lists/[id]/audit`; any deleted
+  item ≤30 days old is restorable in-place from `payload_before`.
 
-### Workspaces + billing (Phase 4.5–5)
-- **Workspaces** — Personal + shared (Team / Workspace tier). Members,
-  per-workspace roles, scoped lists.
-- **Item discipline** — status (open/in_progress/blocked/done),
-  priority (low/normal/high), workspace-scoped tags. Filter chips on
-  the list page.
-- **Multi-bot** — Workspace-tier admins register their own white-label
-  Telegram bot via BotFather; reminder dispatch routes through it,
-  fallback to default platform bot.
-- **24 LLM tools** — Phase 1's 9 tools + 6 workspace tools
-  (switch_workspace, list_workspaces, update_workspace,
-  invite_to_workspace, remove_workspace_member, set_item_attributes)
-  + cancel_invite, list_members, remove_member, update_member_role,
-  update_settings, create_list, update_list, delete_list,
-  restore_list.
-- **Stripe + Iyzico billing** — provider routed by user locale (TR
-  → Iyzico, else Stripe). Webhook idempotency via Upstash KV.
-- **Workspace org-key** — admin sets a workspace-wide OpenRouter key;
-  members without personal BYOK fall back to it.
-
-### Self-host license + admin (Phase 6)
-- **Ed25519 license JWT** — issued by SaaS, verified offline by
-  self-host instances. Workspace-bound payload; revocation list
-  fetched periodically.
-- **Workspace admin dashboard** — `/workspace/admin` for Workspace-
-  tier owner/admin: usage stats, activity timeline, bulk-restore,
-  spend telemetry.
-
-### Telemetry + cost (Phase 7–9)
-- **LLM usage tracking** — every turn writes to `llm_usage` with
-  cost (provider-reported via OpenRouter `usage.cost` when present;
-  client-side rate card otherwise). Per-workspace + per-member +
-  per-model rollups on the admin dashboard.
-- **Spend trend sparkline** — 30-day daily token totals + projection
-  (non-zero-day average × 30).
-- **Per-member spend caps** — workspace admin sets daily/monthly USD
-  caps on org-key usage. Personal BYOK bypasses caps.
-- **Per-user bot rate limit** — `LISTBULL_PER_USER_HOURLY_MSG_LIMIT`
-  env-gated.
-
-### Operations (Phase 10)
-- **Stale-data cleanup cron** — prunes expired invites + activity
-  log past tier retention (free=30d, team=90d, workspace=unlimited).
-- **Extended `/api/health`** — db + bot required (200/503), redis +
-  stripe optional with degraded surface.
-- **Upstash KV** — webhook idempotency + per-route rate limit (admin
-  endpoints + billing checkout) when configured.
-
-### Infrastructure
+### Self-host first
 - **No managed services** — Postgres, Next.js, cron, optional Upstash.
   Deploy on Hetzner, Fly, your laptop — same compose file.
+- **BYOK encryption-at-rest** — OpenRouter API keys encrypted with
+  AES-256-GCM. Plaintext ephemeral, never logged.
+- **Three key-resolution modes** — user BYOK, workspace org-key, or
+  operator-mode env-key (only for workspaces owned by
+  `OPERATOR_TELEGRAM_ID`).
+- **Multi-bot** — workspace owner registers their own white-label
+  Telegram bot via BotFather; reminders + invites route through it.
+- **Full data export** — `Settings → Download my data` returns JSON
+  bundle. Optional Hetzner Object Storage signed URL when configured.
+- **TR + EN parity** — 151+ keys (Inv-19 enforced via Vitest).
+- **No third-party telemetry by default** — Sentry / Umami opt-in via
+  env vars; absent those, no events leave the box.
+
+### Operations
+- **Stale-data cleanup cron** — prunes expired invites + activity log
+  rows >90 days old.
+- **Extended `/api/health`** — db + bot required (200/503), redis
+  optional, surfaces degraded mode.
+- **Upstash KV** — webhook idempotency + per-route rate limit when
+  configured.
+- **Per-user bot rate limit** — `LISTBULL_PER_USER_HOURLY_MSG_LIMIT`.
 - **Accessibility-first Mini App** — keyboard navigation, ARIA labels,
   `prefers-reduced-motion` respected, focus rings everywhere.
 
 ## Quickstart (self-host)
 
-You'll need: Docker (with Compose), a Telegram bot token from
-[@BotFather](https://t.me/BotFather), and ~15 minutes.
+**Full step-by-step guide**: [`docs/self-host.md`](docs/self-host.md)
+— ~30 minutes, end-to-end (bot creation → reverse proxy → migrations
+→ smoke test → optional Sentry/Umami).
+
+TL;DR for the impatient:
 
 ```bash
-# 1. Clone
-git clone https://github.com/buraksu42/listbull.git
-cd listbull
-
-# 2. Configure secrets
+git clone https://github.com/buraksu42/listbull.git && cd listbull
 cp .env.example .env
-# Edit .env. Minimum required:
-#   DATABASE_URL=postgres://listbull:listbull@postgres:5432/listbull
-#   BETTER_AUTH_SECRET=$(openssl rand -base64 48)
-#   BETTER_AUTH_URL=https://your-host.tld   # public URL
-#   ENV_KEY=$(openssl rand -base64 32)
-#   TELEGRAM_BOT_TOKEN=<from @BotFather>
-#   TELEGRAM_WEBHOOK_SECRET=$(openssl rand -hex 32)
-#   TELEGRAM_BOT_USERNAME=<your_bot_without_@>
-#   NEXT_PUBLIC_APP_URL=https://your-host.tld
+# Fill .env (see docs/self-host.md for every field + how to generate
+# secrets). Minimum: DATABASE_URL, BETTER_AUTH_SECRET, ENV_KEY,
+# TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, TELEGRAM_BOT_USERNAME,
+# NEXT_PUBLIC_APP_URL, BETTER_AUTH_URL.
 
-# 3. Bring up the stack (Postgres + app + cron)
 docker compose up -d
-docker compose logs -f app   # wait for "Ready on :3000"
-
-# 4. Run migrations (one-shot)
 docker compose run --rm app npm run db:migrate
-# Phase 4.5+ also requires a one-time data backfill:
-docker compose run --rm app npx tsx \
-  src/lib/server/migrations/workspace-pivot.ts
 
-# 5. Wire your bot
-#    a. Open https://your-host.tld in a browser — you'll see the Mini App.
-#    b. Tell BotFather:
-#         /setdomain  → your-host.tld
-#         /setjoingroups  → Disable
-#         /setinline   → Enable, placeholder "Search items…"
-#         /setmenubutton  → Web App  → https://your-host.tld/app
-#    c. Set the webhook (one-time, run on your laptop):
+# Configure @BotFather: /setdomain, /setmenubutton, /setinline.
+# Then set the webhook (replace TOKEN + SECRET):
 curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
   -H "content-type: application/json" \
-  -d '{
-    "url": "https://your-host.tld/api/telegram/webhook",
-    "secret_token": "<TELEGRAM_WEBHOOK_SECRET from .env>",
-    "drop_pending_updates": true,
-    "allowed_updates": ["message","inline_query","callback_query"]
-  }'
+  -d '{"url":"https://your-host.tld/api/telegram/webhook","secret_token":"<SECRET>"}'
 
-# 6. Send /start to your bot in Telegram → an Inbox is created;
-#    open the Mini App from the menu button to confirm.
+# /start the bot in Telegram → Inbox appears in Mini App.
 ```
 
 ## Stack
