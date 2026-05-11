@@ -254,6 +254,7 @@ export async function executeInviteToWorkspace(
     invitedUsername: lowered,
     role: inviteRole,
     status: "invite_sent",
+    deeplink,
     ...(warnings.length > 0 ? { warnings } : {}),
   });
 }

@@ -45,6 +45,10 @@ export function MembersSection({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  /** Deeplink the inviter shares manually when DM delivery fails
+   *  (invitee hasn't /started the bot). Cleared on next invite attempt. */
+  const [inviteDeeplink, setInviteDeeplink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   async function refresh() {
     try {
@@ -98,6 +102,7 @@ export function MembersSection({
             ok: true;
             data: {
               status: "invite_sent" | "already_member" | "pending_phase_5";
+              deeplink?: string;
               warnings?: string[];
             };
           }
@@ -110,14 +115,20 @@ export function MembersSection({
         setBusy(false);
         return;
       }
+      setInviteDeeplink(null);
+      setCopied(false);
       if (json.data.status === "already_member") {
         setInfo("Bu kullanıcı zaten workspace üyesi.");
       } else if ((json.data.warnings ?? []).includes("invitee_dm_failed")) {
         setInfo(
-          "Davet hazır ama bot'a /start edilmediği için DM atılamadı; linki kendin ulaştırabilirsin.",
+          "Davet hazır ama bot'a /start edilmediği için DM atılamadı; linki aşağıdan kopyalayıp ilet.",
         );
+        if (json.data.deeplink) setInviteDeeplink(json.data.deeplink);
       } else {
         setInfo("Davet linki gönderildi.");
+        // Backup: still show the link in case the invitee blocked the bot
+        // and Telegram returned 200 without delivery.
+        if (json.data.deeplink) setInviteDeeplink(json.data.deeplink);
       }
       setUsername("");
       await refresh();
@@ -404,6 +415,74 @@ export function MembersSection({
               >
                 {info}
               </span>
+            )}
+            {inviteDeeplink && (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "var(--lb-sp-1)",
+                  background: "var(--lb-card)",
+                  border: "1px solid var(--lb-border)",
+                  borderRadius: "var(--lb-radius-md)",
+                  padding: "var(--lb-sp-2) var(--lb-sp-3)",
+                }}
+              >
+                <code
+                  style={{
+                    fontSize: "var(--lb-fs-xs)",
+                    color: "var(--lb-fg)",
+                    wordBreak: "break-all",
+                    fontFamily: "var(--lb-font-mono, monospace)",
+                  }}
+                >
+                  {inviteDeeplink}
+                </code>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "var(--lb-sp-2)",
+                    alignItems: "center",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(inviteDeeplink);
+                        setCopied(true);
+                        window.setTimeout(() => setCopied(false), 2000);
+                      } catch {
+                        // Fallback: user can long-press select the <code>.
+                      }
+                    }}
+                    style={{
+                      background: "var(--lb-accent)",
+                      color: "var(--lb-accent-fg, white)",
+                      border: "none",
+                      padding: "var(--lb-sp-1) var(--lb-sp-3)",
+                      borderRadius: "var(--lb-radius-sm)",
+                      fontSize: "var(--lb-fs-xs)",
+                      fontWeight: "var(--lb-fw-medium)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {copied ? "Kopyalandı ✓" : "Linki kopyala"}
+                  </button>
+                  <a
+                    href={`https://t.me/share/url?url=${encodeURIComponent(inviteDeeplink)}&text=${encodeURIComponent("Listbull workspace daveti")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      fontSize: "var(--lb-fs-xs)",
+                      color: "var(--lb-accent)",
+                      textDecoration: "none",
+                    }}
+                  >
+                    Telegram&apos;da paylaş ↗
+                  </a>
+                </div>
+              </div>
             )}
           </form>
         )}

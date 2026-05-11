@@ -590,6 +590,10 @@ export const inviteToWorkspaceOutputSchema = z.object({
   invitedUsername: z.string(),
   role: z.enum(["admin", "editor", "viewer", "guest"]),
   status: z.enum(["invite_sent", "already_member", "pending_phase_5"]),
+  /** Telegram deeplink the inviter can copy + share when DM delivery
+   *  fails (invitee hasn't /started the bot yet). Always present on
+   *  status === "invite_sent"; absent on "already_member". */
+  deeplink: z.string().url().optional(),
   warnings: z.array(z.string()).optional(),
 });
 
