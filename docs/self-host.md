@@ -239,47 +239,23 @@ curl -s "https://api.telegram.org/bot${TOKEN}/getWebhookInfo" | jq
 
 ---
 
-## 11. OpenRouter strateji seç
+## 11. OpenRouter key'ini set et (workspace'in sahibi sen)
 
-İki seçenek var:
+listbull'da OpenRouter key **workspace seviyesinde** tanımlanır,
+kullanıcı bazında değil. Bir kişi (workspace owner) key'i koyar,
+o workspace'in tüm üyeleri onu kullanır.
 
-### A) Operator-mode (en kolay, kişisel kullanım veya ekibin için)
+Önce Mini App'i aç → /start sonrası **Open App** menu button →
+Workspace ayarları → **Workspace API key** → https://openrouter.ai/keys
+'den aldığın key'i yapıştır → Kaydet.
 
-Sen workspace'in sahibisin, OpenRouter key'ini env'e koyuyorsun, sen
-ve davet ettiğin herkes onu kullanıyor. Aylık $5-10 fatura sana geliyor.
+Key sunucuda AES-256-GCM ile şifrelenir (`ENV_KEY` adım 4'te
+ürettiğin); plaintext bir daha gözükmez.
 
-`.env`'de:
-
-```bash
-OPENROUTER_API_KEY=sk-or-v1-...
-OPERATOR_TELEGRAM_ID=<senin_telegram_user_id>
-```
-
-Telegram user_id'ni öğrenmek için Telegram'da [@userinfobot](https://t.me/userinfobot)'a
-mesaj at, sana sayısal id'yi söyler (ör. `245593450`).
-
-`OPERATOR_TELEGRAM_ID` set olduğunda, sahibi sen olan workspace'lerdeki
-herkes (sen + davet ettiklerin) BYOK olmadan bot kullanabilir. Başka
-biri kendi workspace'i yaratırsa onun BYOK'u zorunlu olur.
-
-### B) BYOK-only (her kullanıcı kendi key'ini getirir)
-
-`.env`'de `OPENROUTER_API_KEY` ve `OPERATOR_TELEGRAM_ID` **boş bırak**.
-Her kullanıcı Mini App ayarlarından kendi OpenRouter key'ini girer.
-Sen fatura yok, kontrol kullanıcıda.
-
-### Hibrit (workspace org-key)
-
-Workspace owner Mini App'in `Workspace ayarları → Workspace API key`
-sekmesinden bir key set edebilir. O workspace'in üyeleri, kişisel
-BYOK'ları yoksa, org-key'i kullanır. Bu operator-mode'a alternatif —
-workspace başına farklı keyler set edilebilir.
-
-`.env` değiştirdiysen restart at:
-
-```bash
-docker compose up -d --force-recreate app cron
-```
+**Maliyet kontrolü**: OpenRouter dashboard'da credit limit + daily cap
+ayarla. Aylık $5 credit yatır, "Don't auto-recharge" + günlük cap.
+Bot key'i bittiğinde OpenRouter 402 döner ve sen Telegram'da
+"transient error" görürsün — dashboard'da credit ekle, geri çalışır.
 
 ---
 
