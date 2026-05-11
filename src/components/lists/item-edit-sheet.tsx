@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as React from "react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch, type Control } from "react-hook-form";
 import { z } from "zod";
 
 import type { LucideIcon } from "lucide-react";
@@ -39,6 +39,7 @@ import {
 } from "@/hooks/use-attachments";
 import type { AttachmentKind, AttachmentSnapshot, Item } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { extractUrls, shortUrl } from "@/lib/utils/extract-urls";
 import {
   FileText as FileIcon,
   Mic,
@@ -145,6 +146,48 @@ function modeToRule(
     return t.length > 0 ? t : null;
   }
   return RECURRENCE_PRESETS[mode] ?? null;
+}
+
+/**
+ * Live-extracts URLs from the description textarea and renders them
+ * as clickable anchors below the input. Users paste links into the
+ * description and can tap them straight from the sheet — no need to
+ * close the sheet, copy a URL out of textarea content, and paste it
+ * into a browser. Subscribes via `useWatch` (React-Compiler friendly).
+ */
+function DescriptionLinks({
+  control,
+}: {
+  control: Control<ItemEditFormValues>;
+}) {
+  const description = useWatch({ control, name: "description" });
+  const urls = React.useMemo(
+    () => extractUrls(description ?? ""),
+    [description],
+  );
+  if (urls.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-col gap-1">
+      <span className="text-[10px] uppercase tracking-wide text-[var(--lb-muted-fg)]">
+        Linkler
+      </span>
+      <ul className="flex flex-col gap-0.5">
+        {urls.map((url) => (
+          <li key={url}>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="break-all text-xs hover:underline"
+              style={{ color: "var(--lb-info, #3B82F6)" }}
+            >
+              {shortUrl(url)} ↗
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 export function ItemEditSheet({
@@ -285,6 +328,7 @@ export function ItemEditSheet({
                   {errors.description.message}
                 </p>
               )}
+              <DescriptionLinks control={control} />
             </div>
 
             <div className="flex flex-col gap-2">

@@ -515,8 +515,11 @@ function KanbanCard({
         <button
           type="button"
           onClick={onOpen}
-          className="line-clamp-3 flex-1 text-left text-sm text-[var(--lb-fg)] bg-transparent border-0 p-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)] rounded-sm"
+          className="line-clamp-3 flex-1 text-left text-sm bg-transparent border-0 p-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)] rounded-sm hover:underline"
           style={{
+            color: item.isDone
+              ? "var(--lb-muted-fg)"
+              : "var(--lb-info, #3B82F6)",
             textDecoration: item.isDone ? "line-through" : "none",
           }}
         >
