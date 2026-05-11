@@ -201,11 +201,16 @@ export function ItemList({
       );
       return { previous };
     },
-    onError: (_err, _vars, ctx) => {
+    onError: (err, _vars, ctx) => {
       if (ctx?.previous) {
         queryClient.setQueryData(itemsKey(listId), ctx.previous);
       }
-      toast.error("Couldn't save changes — try again.");
+      const detail = err instanceof ApiError ? err.message : "";
+      toast.error(
+        detail
+          ? `Kaydedilemedi: ${detail}`
+          : "Kaydedilemedi — tekrar dene.",
+      );
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: itemsKey(listId) });
