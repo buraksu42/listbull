@@ -25,10 +25,23 @@ export default function AppBoot() {
       tg.expand?.();
 
       try {
+        // Detect the browser's IANA timezone so the server can replace
+        // the placeholder UTC default for users whose Telegram client
+        // language doesn't hint at their region (most non-TR users).
+        // Falls back to "UTC" if the browser is too old; the server
+        // ignores any value matching the current stored timezone.
+        let browserTz = "UTC";
+        try {
+          browserTz =
+            Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+        } catch {
+          /* tolerant — IE/old engines */
+        }
+
         const res = await fetch("/api/auth/telegram", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ initData: tg.initData }),
+          body: JSON.stringify({ initData: tg.initData, timezone: browserTz }),
         });
 
         if (!res.ok) {

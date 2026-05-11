@@ -58,7 +58,7 @@ export async function handleStart(ctx: Context): Promise<void> {
   // would all need escaping which makes the welcome copy unreadable in source.
   // Phase 2 LLM router (handle-message.ts) already settled on plain text;
   // /start now matches that convention.
-  const text = tr.welcome(user.telegramFirstName);
+  const text = tr.welcome(user.telegramFirstName, user.timezone);
 
   await ctx.reply(text);
 }
