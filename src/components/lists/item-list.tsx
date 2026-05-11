@@ -140,12 +140,46 @@ export function ItemList({
     onMutate: async ({ id, isDone }) => {
       await queryClient.cancelQueries({ queryKey: itemsKey(listId) });
       const previous = queryClient.getQueryData<Item[]>(itemsKey(listId));
-      queryClient.setQueryData<Item[]>(itemsKey(listId), (current) =>
-        (current ?? []).map((item) =>
-          item.id === id ? { ...item, isDone } : item,
-        ),
-      );
+      // Skip the optimistic isDone flip for recurring items — the
+      // server re-opens them with a new deadline, and flipping them
+      // visually "complete" for one tick before they pop back to
+      // "open" with a new date is confusing. Server response brings
+      // the post-recurrence state straight in.
+      const target = previous?.find((it) => it.id === id);
+      const isRecurring =
+        isDone && Boolean(target?.taskRecurrenceRule);
+      if (!isRecurring) {
+        queryClient.setQueryData<Item[]>(itemsKey(listId), (current) =>
+          (current ?? []).map((item) =>
+            item.id === id ? { ...item, isDone } : item,
+          ),
+        );
+      }
       return { previous };
+    },
+    onSuccess: (response) => {
+      // Server signals `task_recurred` when a recurring item's
+      // completion auto-resurrected it with the next deadline. Surface
+      // a friendlier toast than the generic "tamamlandı" — users were
+      // confused by the disappear-then-reappear behaviour without it.
+      if (response.warnings?.includes("task_recurred")) {
+        const nextDeadline = response.item.deadlineAt;
+        if (nextDeadline) {
+          const formatted = new Intl.DateTimeFormat(undefined, {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          }).format(new Date(nextDeadline));
+          toast.success(
+            `✓ Bu kez tamam — sıradaki: ${formatted}`,
+            { duration: 4000 },
+          );
+        } else {
+          toast.success("✓ Bu kez tamam — sıradaki kuyrukta.");
+        }
+      }
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.previous) {
