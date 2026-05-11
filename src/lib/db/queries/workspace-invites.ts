@@ -297,12 +297,17 @@ export async function listPendingWorkspaceInvites(
     expiresAt: string;
   }>
 > {
+  // Raw `db.execute` skips Drizzle's column-level transforms, so
+  // `timestamptz` values come back as ISO strings from postgres-js,
+  // not Date instances. The previous typing claimed Date and called
+  // `.toISOString()` directly, which threw at runtime and 500'd
+  // /lists/[id] (Sentry caught it). `toIso` normalizes both.
   const rows = await db.execute<{
     token: string;
     invited_username: string;
     role: string;
-    created_at: Date;
-    expires_at: Date;
+    created_at: Date | string;
+    expires_at: Date | string;
   }>(sql`
     SELECT token, invited_username, role, created_at, expires_at
     FROM workspace_invites
@@ -311,11 +316,13 @@ export async function listPendingWorkspaceInvites(
       AND expires_at > NOW()
     ORDER BY created_at DESC
   `);
+  const toIso = (v: Date | string): string =>
+    typeof v === "string" ? new Date(v).toISOString() : v.toISOString();
   return rows.map((r) => ({
     token: r.token,
     invitedUsername: r.invited_username,
     role: r.role,
-    invitedAt: r.created_at.toISOString(),
-    expiresAt: r.expires_at.toISOString(),
+    invitedAt: toIso(r.created_at),
+    expiresAt: toIso(r.expires_at),
   }));
 }
