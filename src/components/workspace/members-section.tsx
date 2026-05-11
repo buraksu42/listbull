@@ -13,6 +13,15 @@ type Member = {
   };
 };
 
+type PendingInvite = {
+  token: string;
+  invitedUsername: string;
+  role: string;
+  invitedAt: string;
+  expiresAt: string;
+  deeplink: string;
+};
+
 type Props = {
   workspaceId: string;
   /** Owner-only role/remove actions; admin can invite. */
@@ -40,6 +49,7 @@ export function MembersSection({
   isPersonal,
 }: Props) {
   const [members, setMembers] = useState<Member[] | null>(null);
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [username, setUsername] = useState("");
   const [role, setRole] = useState<Member["role"]>("editor");
   const [busy, setBusy] = useState(false);
@@ -54,10 +64,13 @@ export function MembersSection({
     try {
       const res = await fetch(`/api/workspaces/${workspaceId}/members`);
       const json = (await res.json().catch(() => null)) as
-        | { ok: true; data: { members: Member[] } }
+        | { ok: true; data: { members: Member[]; pendingInvites?: PendingInvite[] } }
         | { ok: false }
         | null;
-      if (json && json.ok) setMembers(json.data.members);
+      if (json && json.ok) {
+        setMembers(json.data.members);
+        setPendingInvites(json.data.pendingInvites ?? []);
+      }
     } catch {
       // Silent.
     }
@@ -69,10 +82,16 @@ export function MembersSection({
       try {
         const res = await fetch(`/api/workspaces/${workspaceId}/members`);
         const json = (await res.json().catch(() => null)) as
-          | { ok: true; data: { members: Member[] } }
+          | {
+              ok: true;
+              data: { members: Member[]; pendingInvites?: PendingInvite[] };
+            }
           | { ok: false }
           | null;
-        if (!cancelled && json && json.ok) setMembers(json.data.members);
+        if (!cancelled && json && json.ok) {
+          setMembers(json.data.members);
+          setPendingInvites(json.data.pendingInvites ?? []);
+        }
       } catch {
         // Silent.
       }
@@ -81,6 +100,16 @@ export function MembersSection({
       cancelled = true;
     };
   }, [workspaceId]);
+
+  async function onCopyInviteLink(link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Long-press fallback on the code element.
+    }
+  }
 
   async function onInvite(e: FormEvent) {
     e.preventDefault();
@@ -314,6 +343,113 @@ export function MembersSection({
               </li>
             ))}
           </ul>
+        )}
+
+        {pendingInvites.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "var(--lb-sp-2)",
+              borderTop: "1px solid var(--lb-border)",
+              paddingTop: "var(--lb-sp-3)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "var(--lb-fs-xs)",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                color: "var(--lb-muted-fg)",
+              }}
+            >
+              Bekleyen Davetler
+            </div>
+            <ul
+              style={{
+                listStyle: "none",
+                margin: 0,
+                padding: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: "var(--lb-sp-2)",
+              }}
+            >
+              {pendingInvites.map((inv) => (
+                <li
+                  key={inv.token}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "var(--lb-sp-1)",
+                    padding: "var(--lb-sp-2) var(--lb-sp-3)",
+                    background: "var(--lb-card)",
+                    border: "1px solid var(--lb-border)",
+                    borderRadius: "var(--lb-radius-md)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "baseline",
+                      justifyContent: "space-between",
+                      gap: "var(--lb-sp-2)",
+                    }}
+                  >
+                    <span style={{ fontSize: "var(--lb-fs-sm)" }}>
+                      <span style={{ fontWeight: "var(--lb-fw-medium)" }}>
+                        @{inv.invitedUsername}
+                      </span>{" "}
+                      <span
+                        style={{
+                          color: "var(--lb-muted-fg)",
+                          fontSize: "var(--lb-fs-xs)",
+                        }}
+                      >
+                        ({inv.role}) — kabul bekleniyor
+                      </span>
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "var(--lb-sp-2)",
+                      alignItems: "center",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onCopyInviteLink(inv.deeplink)}
+                      style={{
+                        background: "var(--lb-accent)",
+                        color: "var(--lb-accent-fg, white)",
+                        border: "none",
+                        padding: "var(--lb-sp-1) var(--lb-sp-3)",
+                        borderRadius: "var(--lb-radius-sm)",
+                        fontSize: "var(--lb-fs-xs)",
+                        fontWeight: "var(--lb-fw-medium)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {copied ? "Kopyalandı ✓" : "Linki kopyala"}
+                    </button>
+                    <a
+                      href={`https://t.me/share/url?url=${encodeURIComponent(inv.deeplink)}&text=${encodeURIComponent("Listbull workspace daveti")}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        fontSize: "var(--lb-fs-xs)",
+                        color: "var(--lb-accent)",
+                        textDecoration: "none",
+                      }}
+                    >
+                      Paylaş ↗
+                    </a>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {isOwnerOrAdmin && (

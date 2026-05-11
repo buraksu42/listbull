@@ -177,3 +177,43 @@ export async function acceptWorkspaceInvite(
     };
   });
 }
+
+/**
+ * Pending workspace invites for a given workspace — surfaced in the
+ * Mini App's MembersSection so the inviter sees "@x davet edildi
+ * ama henüz katılmadı" alongside the accepted-member list. Excludes
+ * expired and already-accepted rows.
+ */
+export async function listPendingWorkspaceInvites(
+  workspaceId: string,
+): Promise<
+  Array<{
+    token: string;
+    invitedUsername: string;
+    role: string;
+    invitedAt: string;
+    expiresAt: string;
+  }>
+> {
+  const rows = await db.execute<{
+    token: string;
+    invited_username: string;
+    role: string;
+    created_at: Date;
+    expires_at: Date;
+  }>(sql`
+    SELECT token, invited_username, role, created_at, expires_at
+    FROM workspace_invites
+    WHERE workspace_id = ${workspaceId}
+      AND accepted_at IS NULL
+      AND expires_at > NOW()
+    ORDER BY created_at DESC
+  `);
+  return rows.map((r) => ({
+    token: r.token,
+    invitedUsername: r.invited_username,
+    role: r.role,
+    invitedAt: r.created_at.toISOString(),
+    expiresAt: r.expires_at.toISOString(),
+  }));
+}

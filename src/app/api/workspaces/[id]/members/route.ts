@@ -9,11 +9,13 @@
  */
 import { NextResponse } from "next/server";
 
+import { env } from "@/lib/env";
 import { getSessionUserId } from "@/lib/auth/session";
 import {
   getWorkspaceMembership,
   listWorkspaceMembers,
 } from "@/lib/db/queries/workspaces";
+import { listPendingWorkspaceInvites } from "@/lib/db/queries/workspace-invites";
 import { executeInviteToWorkspace } from "@/lib/server/tools/invite-to-workspace";
 
 export const runtime = "nodejs";
@@ -39,8 +41,16 @@ export async function GET(_request: Request, { params }: RouteCtx) {
     );
   }
 
-  const members = await listWorkspaceMembers(workspaceId);
-  return NextResponse.json({ ok: true, data: { members } });
+  const [members, pendingInvites] = await Promise.all([
+    listWorkspaceMembers(workspaceId),
+    listPendingWorkspaceInvites(workspaceId),
+  ]);
+  const botUsername = env.TELEGRAM_BOT_USERNAME;
+  const pending = pendingInvites.map((inv) => ({
+    ...inv,
+    deeplink: `https://t.me/${botUsername}?startapp=wsinvite_${inv.token}`,
+  }));
+  return NextResponse.json({ ok: true, data: { members, pendingInvites: pending } });
 }
 
 export async function POST(request: Request, { params }: RouteCtx) {

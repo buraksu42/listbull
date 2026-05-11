@@ -3,6 +3,8 @@ import type { Context } from "grammy";
 import { env } from "@/lib/env";
 import { ensureInbox } from "@/lib/db/queries/lists";
 import { upsertUserFromTelegram } from "@/lib/db/queries/users";
+import { acceptWorkspaceInvite } from "@/lib/db/queries/workspace-invites";
+import { setActiveWorkspace } from "@/lib/db/queries/workspaces";
 import { pickLocale, t } from "@/lib/server/bot/i18n";
 
 /**
@@ -51,6 +53,59 @@ export async function handleStart(ctx: Context): Promise<void> {
         ? `Hoş geldin, ${user.telegramFirstName}! Listeyi açmak için: ${miniAppUrl}`
         : `Welcome, ${user.telegramFirstName}! Open the list: ${miniAppUrl}`;
     await ctx.reply(greeting);
+    return;
+  }
+
+  // Workspace invite deeplink — when Telegram's `?startapp=` falls
+  // back to opening the bot chat (instead of the Mini App), the
+  // payload arrives here as the /start parameter. Without this branch
+  // the user would see the generic welcome and the invite would
+  // never get accepted — the workspace_invites row stays pending
+  // and the user wonders why the bot says "Workspace owner needs to
+  // set the OpenRouter API key".
+  if (payload.startsWith("wsinvite_")) {
+    const token = payload.slice("wsinvite_".length);
+    const result = await acceptWorkspaceInvite(token, user.id);
+    if (result.ok) {
+      await setActiveWorkspace(user.id, result.workspaceId);
+      const miniAppUrl = `https://t.me/${env.TELEGRAM_BOT_USERNAME}?startapp=`;
+      const msg =
+        locale === "tr"
+          ? result.alreadyAccepted
+            ? `Bu workspace'in zaten üyesisin. Mini App: ${miniAppUrl}`
+            : `Davet kabul edildi — yeni workspace artık aktif. Mini App: ${miniAppUrl}`
+          : result.alreadyAccepted
+            ? `You're already a member of this workspace. Mini App: ${miniAppUrl}`
+            : `Invite accepted — the new workspace is now active. Mini App: ${miniAppUrl}`;
+      await ctx.reply(msg);
+      return;
+    }
+    // Map error codes to user-friendly Turkish/English copy.
+    const errCopy = (() => {
+      switch (result.code) {
+        case "not_found":
+          return locale === "tr"
+            ? "Bu davet linki geçersiz ya da kaldırılmış."
+            : "This invite link is invalid or removed.";
+        case "invite_already_accepted":
+          return locale === "tr"
+            ? "Bu davet zaten kabul edilmiş."
+            : "This invite was already accepted.";
+        case "invite_expired":
+          return locale === "tr"
+            ? "Bu davetin süresi dolmuş. Davet eden kişiden yenisini iste."
+            : "This invite expired. Ask the inviter for a new one.";
+        case "invite_username_mismatch":
+          return locale === "tr"
+            ? `Bu davet @${result.code} adlı kullanıcı için. Senin Telegram username'inle eşleşmiyor.`
+            : "This invite was sent to a different Telegram username.";
+        default:
+          return locale === "tr"
+            ? `Davet kabul edilemedi: ${result.message}`
+            : `Couldn't accept invite: ${result.message}`;
+      }
+    })();
+    await ctx.reply(errCopy);
     return;
   }
 
