@@ -27,7 +27,9 @@ import { env } from "@/lib/env";
 import { getRecentMessages, insertMessages } from "@/lib/db/queries/messages";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import {
+  getWorkspaceMembership,
   getWorkspaceOrgKeyEncrypted,
+  listUserWorkspacesWithKey,
   listWorkspacesForUser,
   resolveActiveWorkspaceId,
 } from "@/lib/db/queries/workspaces";
@@ -422,7 +424,51 @@ export async function handleMessage(ctx: Context): Promise<void> {
   }
 
   if (apiKey === null) {
-    await ctx.reply(copy.noKey);
+    // Context-aware noKey copy: owners get a "set it yourself" CTA;
+    // members get a "your owner needs to set it" hint, plus a
+    // "or switch to <X>" suggestion when another workspace they
+    // belong to does have a key set.
+    const membership = await getWorkspaceMembership(user.id, workspaceId);
+    const otherWithKey = await listUserWorkspacesWithKey(user.id, workspaceId);
+    const isOwner = membership?.role === "owner";
+
+    const lines: string[] = [];
+    if (isOwner) {
+      lines.push(
+        locale === "tr"
+          ? "Bu workspace'in sahibisin ama OpenRouter API key tanımlı değil."
+          : "You own this workspace but no OpenRouter API key is set.",
+      );
+      lines.push(
+        locale === "tr"
+          ? "Mini App → Workspace ayarları → Workspace API key'den ekle. https://openrouter.ai/keys"
+          : "Add one in Mini App → Workspace settings → Workspace API key. https://openrouter.ai/keys",
+      );
+    } else {
+      lines.push(
+        locale === "tr"
+          ? "Bu workspace'in sahibinin OpenRouter API key tanımlaması gerek."
+          : "This workspace's owner needs to set the OpenRouter API key.",
+      );
+    }
+
+    if (otherWithKey.length > 0) {
+      lines.push("");
+      lines.push(
+        locale === "tr"
+          ? "Veya key'i tanımlı olan başka bir workspace'ine geçebilirsin:"
+          : "Or switch to a workspace where a key is already set:",
+      );
+      for (const w of otherWithKey) {
+        lines.push(
+          locale === "tr"
+            ? `  • "${w.name}" workspace'ine geç`
+            : `  • switch to "${w.name}"`,
+        );
+      }
+    }
+
+    await ctx.reply(lines.join("\n"));
     return;
   }
 

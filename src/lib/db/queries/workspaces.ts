@@ -304,6 +304,37 @@ export async function getWorkspaceOwnerTelegramId(
   return row?.telegramId ?? null;
 }
 
+/**
+ * Returns workspaces the user is a member of that ALSO have an
+ * org-key set — used by the noKey copy to suggest switching when
+ * the active workspace can't fund a bot turn but another can.
+ */
+export async function listUserWorkspacesWithKey(
+  userId: string,
+  excludeWorkspaceId?: string,
+): Promise<Array<{ id: string; name: string }>> {
+  const rows = await db
+    .select({
+      id: workspaces.id,
+      name: workspaces.name,
+    })
+    .from(workspaces)
+    .innerJoin(
+      workspaceMembers,
+      and(
+        eq(workspaceMembers.workspaceId, workspaces.id),
+        eq(workspaceMembers.userId, userId),
+      ),
+    )
+    .where(
+      and(
+        sql`${workspaces.openrouterApiKeyEncrypted} IS NOT NULL`,
+        sql`${workspaces.archivedAt} IS NULL`,
+      ),
+    );
+  return rows.filter((r) => r.id !== excludeWorkspaceId);
+}
+
 // Order export, no-op consumer for asc — keeps the import live so
 // drizzle-kit's tree-shaking doesn't accidentally drop the sort dep.
 void asc;
