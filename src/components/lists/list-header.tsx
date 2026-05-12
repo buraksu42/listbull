@@ -66,7 +66,11 @@ export function ListHeader({
 
         <div className="flex items-center gap-1">
           <Link
-            href={`/lists/${listId}/activity`}
+            href={
+              currentUserRole === "owner"
+                ? `/lists/${listId}/audit`
+                : `/lists/${listId}/activity`
+            }
             aria-label={`Activity for ${listName}`}
             className={cn(
               "inline-flex h-11 w-11 items-center justify-center rounded-[var(--lb-r-md)]",
