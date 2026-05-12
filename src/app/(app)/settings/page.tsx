@@ -1,7 +1,6 @@
 import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 
-import { ExportButton } from "@/components/settings/export-button";
 import {
   SettingsForm,
   type SettingsInitial,
@@ -50,25 +49,6 @@ export default async function SettingsPage() {
         </h1>
       </header>
       <SettingsForm initial={initial} />
-
-      <section className="flex flex-col gap-3 px-4 pt-2">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-base font-semibold text-[var(--lb-fg)]">
-            {t("exportTitle")}
-          </h2>
-          <p className="text-xs text-[var(--lb-muted-fg)]">
-            {t("exportDescription")}
-          </p>
-        </div>
-        <div>
-          <ExportButton
-            label={t("exportButton")}
-            pendingLabel={t("exportPending")}
-            successMessage={t("exportSuccess")}
-            failureMessage={t("exportFailed")}
-          />
-        </div>
-      </section>
     </main>
   );
 }
@@ -99,7 +79,6 @@ async function fetchInitialSettings(): Promise<SettingsInitial> {
     // defaults so the page still loads. The form will round-trip through
     // the live endpoint on save.
     return {
-      llmModel: "google/gemini-2.5-flash",
       timezone: "Europe/Istanbul",
       locale: "tr",
       notificationsEnabled: true,

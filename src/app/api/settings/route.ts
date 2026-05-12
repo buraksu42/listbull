@@ -45,7 +45,6 @@ export async function GET() {
   const data: GetSettingsResponse = {
     locale: user.locale === "tr" ? "tr" : "en",
     timezone: user.timezone,
-    llmModel: user.llmModel,
     notificationsEnabled: user.notificationsEnabled,
     dateFormat: user.dateFormat as AllowedDateFormat,
     timeFormat: user.timeFormat as AllowedTimeFormat,
@@ -89,7 +88,6 @@ export async function PATCH(request: Request) {
   const {
     locale,
     timezone,
-    llmModel,
     notificationsEnabled,
     dateFormat,
     timeFormat,
@@ -100,7 +98,6 @@ export async function PATCH(request: Request) {
   };
   if (locale !== undefined) patch.locale = locale;
   if (timezone !== undefined) patch.timezone = timezone;
-  if (llmModel !== undefined) patch.llmModel = llmModel;
   if (notificationsEnabled !== undefined) {
     patch.notificationsEnabled = notificationsEnabled;
   }
@@ -126,7 +123,6 @@ export async function PATCH(request: Request) {
   const data: GetSettingsResponse = {
     locale: updated.locale === "tr" ? "tr" : "en",
     timezone: updated.timezone,
-    llmModel: updated.llmModel,
     notificationsEnabled: updated.notificationsEnabled,
     dateFormat: updated.dateFormat as AllowedDateFormat,
     timeFormat: updated.timeFormat as AllowedTimeFormat,

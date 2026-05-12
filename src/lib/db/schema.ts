@@ -554,6 +554,14 @@ export const workspaces = pgTable(
      * settings org-key form.
      */
     openrouterApiKeyEncrypted: text("openrouter_api_key_encrypted"),
+    /**
+     * Workspace-scoped LLM model — owner-only setting. Every member of
+     * the workspace uses this model for their bot turns. Was per-user
+     * until 0020; the owner controls spend + capability ceiling.
+     */
+    llmModel: text("llm_model")
+      .notNull()
+      .default("google/gemini-2.5-flash"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },

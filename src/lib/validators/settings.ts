@@ -81,7 +81,6 @@ const localeSchema = z.enum(["tr", "en"]);
 export const patchSettingsBodySchema = z.object({
   locale: localeSchema.optional(),
   timezone: timezoneSchema.optional(),
-  llmModel: z.enum(ALLOWED_LLM_MODELS).optional(),
   notificationsEnabled: z.boolean().optional(),
   /** Phase 14c: display preferences. */
   dateFormat: z.enum(ALLOWED_DATE_FORMATS).optional(),
@@ -94,7 +93,6 @@ export type PatchSettingsBody = z.infer<typeof patchSettingsBodySchema>;
 export type GetSettingsResponse = {
   locale: "tr" | "en";
   timezone: string;
-  llmModel: string;
   notificationsEnabled: boolean;
   dateFormat: AllowedDateFormat;
   timeFormat: AllowedTimeFormat;

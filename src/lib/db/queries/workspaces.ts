@@ -286,6 +286,24 @@ export async function getWorkspaceOrgKeyEncrypted(
 }
 
 /**
+ * Workspace-scoped LLM model. Returns the column default
+ * (`google/gemini-2.5-flash`) when the workspace doesn't exist —
+ * caller will hit a noKey path before model selection matters
+ * anyway. Used by handle-message.ts in place of the (now stale)
+ * per-user `users.llm_model`.
+ */
+export async function getWorkspaceLlmModel(
+  workspaceId: string,
+): Promise<string> {
+  const [row] = await db
+    .select({ llmModel: workspaces.llmModel })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+  return row?.llmModel ?? "google/gemini-2.5-flash";
+}
+
+/**
  * Operator-mode gate for the env-key fallback. Returns the workspace
  * owner's Telegram user id (numeric) — the bot key resolution chain
  * checks this against `env.OPERATOR_TELEGRAM_ID` to decide whether

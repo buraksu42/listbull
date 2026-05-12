@@ -27,6 +27,7 @@ import { env } from "@/lib/env";
 import { getRecentMessages, insertMessages } from "@/lib/db/queries/messages";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import {
+  getWorkspaceLlmModel,
   getWorkspaceMembership,
   getWorkspaceOrgKeyEncrypted,
   listUserWorkspacesWithKey,
@@ -577,6 +578,9 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // awareness of every workspace the user belongs to (so it can
   // suggest \`switch_workspace\` when context implies another one).
   const workspaceSummary = await listWorkspacesForUser(user.id);
+  // Active workspace's model — owner-controlled, every member uses
+  // the same one (per-user llm_model was retired in 0020).
+  const workspaceModel = await getWorkspaceLlmModel(workspaceId);
 
   let assistantText = "";
   let persisted: ConversationMessage[] = [];
@@ -598,7 +602,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
         isActive: w.isActive,
       })),
       apiKey,
-      model: user.llmModel,
+      model: workspaceModel,
       toolDispatcher: createToolDispatcher({ userId: user.id, workspaceId }),
     });
     assistantText = result.assistantText;
@@ -797,6 +801,7 @@ async function handleForwardedMessage(args: {
   // messages target the user's currently-active workspace.
   const workspaceId = await resolveActiveWorkspaceId(user.id);
   const workspaceSummary = await listWorkspacesForUser(user.id);
+  const workspaceModel = await getWorkspaceLlmModel(workspaceId);
 
   let assistantText = "";
   let persisted: ConversationMessage[] = [];
@@ -817,7 +822,7 @@ async function handleForwardedMessage(args: {
         isActive: w.isActive,
       })),
       apiKey,
-      model: user.llmModel,
+      model: workspaceModel,
       toolDispatcher: createToolDispatcher({ userId: user.id, workspaceId }),
     });
     assistantText = result.assistantText;
