@@ -43,6 +43,8 @@ import { executeListWorkspaces } from "./list-workspaces";
 import { executeUpdateWorkspace } from "./update-workspace";
 import { executeInviteToWorkspace } from "./invite-to-workspace";
 import { executeRemoveWorkspaceMember } from "./remove-workspace-member";
+import { executeListWorkspaceInvites } from "./list-workspace-invites";
+import { executeCancelWorkspaceInvite } from "./cancel-workspace-invite";
 import { executeSetItemAttributes } from "./set-item-attributes";
 import { ERR } from "./_shared";
 
@@ -138,6 +140,10 @@ async function routeCall(
       return await executeInviteToWorkspace(input, ctx);
     case "remove_workspace_member":
       return await executeRemoveWorkspaceMember(input, ctx);
+    case "list_workspace_invites":
+      return await executeListWorkspaceInvites(input, ctx);
+    case "cancel_workspace_invite":
+      return await executeCancelWorkspaceInvite(input, ctx);
     case "set_item_attributes":
       return await executeSetItemAttributes(input, ctx);
     default:

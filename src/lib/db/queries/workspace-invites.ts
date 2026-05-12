@@ -177,3 +177,152 @@ export async function acceptWorkspaceInvite(
     };
   });
 }
+
+/**
+ * Cancel a pending workspace invite by (workspaceId, username). The
+ * caller is the workspace owner or admin (role check happens in the
+ * executor). Uses FOR UPDATE so a concurrent accept either lands
+ * before our delete (returns `invite_already_accepted`) or blocks
+ * until the row is gone.
+ */
+export type CancelWorkspaceInviteResult =
+  | {
+      ok: true;
+      cancelledInviteId: string;
+      workspaceId: string;
+      workspaceName: string;
+      invitedUsername: string;
+    }
+  | { ok: false; code: string; message: string };
+
+export async function cancelPendingWorkspaceInvite(
+  workspaceId: string,
+  invitedUsername: string,
+): Promise<CancelWorkspaceInviteResult> {
+  const lowered = invitedUsername.trim().replace(/^@/, "").toLowerCase();
+  if (!lowered) {
+    return {
+      ok: false,
+      code: "invalid_input",
+      message: "username is required",
+    };
+  }
+
+  return await db.transaction(async (tx) => {
+    const rows = await tx.execute<{
+      id: string;
+      accepted_at: Date | null;
+      expires_at: Date;
+    }>(
+      sql`SELECT id, accepted_at, expires_at
+          FROM workspace_invites
+          WHERE workspace_id = ${workspaceId}
+            AND invited_username = ${lowered}
+          ORDER BY created_at DESC
+          FOR UPDATE`,
+    );
+    if (rows.length === 0) {
+      return {
+        ok: false,
+        code: "not_found",
+        message: `No invite found for @${lowered} in this workspace.`,
+      };
+    }
+    const now = new Date();
+    const pending = rows.find(
+      (r) => r.accepted_at === null && r.expires_at > now,
+    );
+    if (!pending) {
+      const accepted = rows.find((r) => r.accepted_at !== null);
+      if (accepted) {
+        return {
+          ok: false,
+          code: "invite_already_accepted",
+          message: `@${lowered} already accepted this invite — they're a member now. Use remove_workspace_member to remove them.`,
+        };
+      }
+      // Expired-but-not-accepted: still let the caller clear it.
+      const stale = rows[0];
+      if (!stale) {
+        return {
+          ok: false,
+          code: "not_found",
+          message: "No pending invite found.",
+        };
+      }
+      await tx.execute(
+        sql`DELETE FROM workspace_invites WHERE id = ${stale.id}`,
+      );
+      const [ws] = await tx.execute<{ id: string; name: string }>(
+        sql`SELECT id, name FROM workspaces WHERE id = ${workspaceId}`,
+      );
+      return {
+        ok: true,
+        cancelledInviteId: stale.id,
+        workspaceId,
+        workspaceName: ws?.name ?? "",
+        invitedUsername: lowered,
+      };
+    }
+    await tx.execute(
+      sql`DELETE FROM workspace_invites WHERE id = ${pending.id}`,
+    );
+    const [ws] = await tx.execute<{ id: string; name: string }>(
+      sql`SELECT id, name FROM workspaces WHERE id = ${workspaceId}`,
+    );
+    return {
+      ok: true,
+      cancelledInviteId: pending.id,
+      workspaceId,
+      workspaceName: ws?.name ?? "",
+      invitedUsername: lowered,
+    };
+  });
+}
+
+/**
+ * Pending workspace invites for a given workspace — surfaced in the
+ * Mini App's MembersSection so the inviter sees "@x davet edildi
+ * ama henüz katılmadı" alongside the accepted-member list. Excludes
+ * expired and already-accepted rows.
+ */
+export async function listPendingWorkspaceInvites(
+  workspaceId: string,
+): Promise<
+  Array<{
+    token: string;
+    invitedUsername: string;
+    role: string;
+    invitedAt: string;
+    expiresAt: string;
+  }>
+> {
+  // Raw `db.execute` skips Drizzle's column-level transforms, so
+  // `timestamptz` values come back as ISO strings from postgres-js,
+  // not Date instances. The previous typing claimed Date and called
+  // `.toISOString()` directly, which threw at runtime and 500'd
+  // /lists/[id] (Sentry caught it). `toIso` normalizes both.
+  const rows = await db.execute<{
+    token: string;
+    invited_username: string;
+    role: string;
+    created_at: Date | string;
+    expires_at: Date | string;
+  }>(sql`
+    SELECT token, invited_username, role, created_at, expires_at
+    FROM workspace_invites
+    WHERE workspace_id = ${workspaceId}
+      AND accepted_at IS NULL
+      AND expires_at > NOW()
+    ORDER BY created_at DESC
+  `);
+  const toIso = (v: Date | string): string =>
+    typeof v === "string" ? new Date(v).toISOString() : v.toISOString();
+  return rows.map((r) => ({
+    token: r.token,
+    invitedUsername: r.invited_username,
+    role: r.role,
+    invitedAt: toIso(r.created_at),
+    expiresAt: toIso(r.expires_at),
+  }));
+}

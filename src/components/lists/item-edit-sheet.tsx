@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as React from "react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch, type Control } from "react-hook-form";
 import { z } from "zod";
 
 import type { LucideIcon } from "lucide-react";
@@ -39,6 +39,7 @@ import {
 } from "@/hooks/use-attachments";
 import type { AttachmentKind, AttachmentSnapshot, Item } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { extractUrls, shortUrl } from "@/lib/utils/extract-urls";
 import {
   FileText as FileIcon,
   Mic,
@@ -145,6 +146,48 @@ function modeToRule(
     return t.length > 0 ? t : null;
   }
   return RECURRENCE_PRESETS[mode] ?? null;
+}
+
+/**
+ * Live-extracts URLs from the description textarea and renders them
+ * as clickable anchors below the input. Users paste links into the
+ * description and can tap them straight from the sheet — no need to
+ * close the sheet, copy a URL out of textarea content, and paste it
+ * into a browser. Subscribes via `useWatch` (React-Compiler friendly).
+ */
+function DescriptionLinks({
+  control,
+}: {
+  control: Control<ItemEditFormValues>;
+}) {
+  const description = useWatch({ control, name: "description" });
+  const urls = React.useMemo(
+    () => extractUrls(description ?? ""),
+    [description],
+  );
+  if (urls.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-col gap-1">
+      <span className="text-[10px] uppercase tracking-wide text-[var(--lb-muted-fg)]">
+        Linkler
+      </span>
+      <ul className="flex flex-col gap-0.5">
+        {urls.map((url) => (
+          <li key={url}>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="break-all text-xs hover:underline"
+              style={{ color: "var(--lb-info, #3B82F6)" }}
+            >
+              {shortUrl(url)} ↗
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 export function ItemEditSheet({
@@ -285,6 +328,7 @@ export function ItemEditSheet({
                   {errors.description.message}
                 </p>
               )}
+              <DescriptionLinks control={control} />
             </div>
 
             <div className="flex flex-col gap-2">
@@ -730,9 +774,21 @@ function AttachmentTile({
   forwardState: "pending" | "ok" | "error" | null;
   deleting: boolean;
 }) {
-  const isPhoto = attachment.kind === "photo";
+  // Telegram Bot API's `getFile` caps at 20MB. Files larger than that
+  // can't be previewed in-app — sendPhoto/sendDocument with file_id
+  // still works for re-delivery (no size limit on send), so the
+  // "Telegram'a yolla" path remains the user's access channel.
+  // Skip the byte-proxy attempt entirely to avoid 502 noise.
+  const TWENTY_MB = 20 * 1024 * 1024;
+  const tooLargeForPreview =
+    typeof attachment.fileSize === "number" && attachment.fileSize > TWENTY_MB;
+  const isPhoto = attachment.kind === "photo" && !tooLargeForPreview;
   const url = attachmentBytesUrl(itemId, attachment.id);
   const [imageBroken, setImageBroken] = React.useState(false);
+  const sizeLabel =
+    typeof attachment.fileSize === "number"
+      ? formatBytes(attachment.fileSize)
+      : null;
   return (
     <li className="relative">
       <button
@@ -756,7 +812,14 @@ function AttachmentTile({
             onError={() => setImageBroken(true)}
           />
         ) : (
-          <KindIcon kind={attachment.kind} />
+          <div className="flex flex-col items-center gap-1">
+            <KindIcon kind={attachment.kind} />
+            {sizeLabel && (
+              <span className="text-[10px] text-[var(--lb-muted-fg)]">
+                {sizeLabel}
+              </span>
+            )}
+          </div>
         )}
       </button>
       <div className="mt-1 flex items-center justify-between gap-1 text-[10px]">
@@ -798,16 +861,14 @@ function AttachmentTile({
           </button>
         </span>
       </div>
-      {!attachment.hasBackup && (
-        <span
-          className="absolute right-1 top-1 rounded-full bg-[var(--lb-bg)]/80 px-1 text-[9px] text-[var(--lb-muted-fg)]"
-          title="Henüz yedeklenmedi"
-        >
-          ⏳
-        </span>
-      )}
     </li>
   );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function KindIcon({ kind }: { kind: AttachmentKind }) {

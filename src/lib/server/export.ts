@@ -9,7 +9,6 @@
  *   - `messages`: rows where `user_id = caller`.
  *
  * NEVER included:
- *   - encrypted OpenRouter API key (`openrouter_api_key_encrypted`)
  *   - session cookies
  *   - other users' messages, activity, or item rows
  *

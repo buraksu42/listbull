@@ -54,8 +54,7 @@ export const users = pgTable(
      */
     dateFormat: text("date_format").notNull().default("DD.MM.YYYY"),
     timeFormat: text("time_format").notNull().default("24h"),
-    openrouterApiKeyEncrypted: text("openrouter_api_key_encrypted"),
-    llmModel: text("llm_model").notNull().default("anthropic/claude-haiku-4.5"),
+    llmModel: text("llm_model").notNull().default("google/gemini-2.5-flash"),
     notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
     /**
      * Phase 15: idempotency marker for the 09:00 daily digest cron.
@@ -412,11 +411,6 @@ export const itemAttachments = pgTable(
     /** Telegram-provided thumbnail file_id (videos / documents). */
     thumbnailFileId: text("thumbnail_file_id"),
     originalFilename: text("original_filename"),
-    /** Hetzner Object Storage key — populated by backup-attachments cron. */
-    storageKey: text("storage_key"),
-    storageBackedUpAt: timestamp("storage_backed_up_at", {
-      withTimezone: true,
-    }),
     uploadedByUserId: uuid("uploaded_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -426,10 +420,6 @@ export const itemAttachments = pgTable(
   },
   (t) => [
     index("item_attachments_item_idx").on(t.itemId),
-    // Backup queue: rows still missing a Hetzner copy, FIFO by age.
-    index("item_attachments_backup_queue_idx")
-      .on(t.createdAt)
-      .where(sql`${t.storageBackedUpAt} is null`),
     // Dedup: same (item, telegram_file_unique_id) pair → upsert.
     uniqueIndex("item_attachments_telegram_unique_idx")
       .on(t.itemId, t.telegramFileUniqueId)
@@ -555,6 +545,14 @@ export const workspaces = pgTable(
      * settings org-key form.
      */
     openrouterApiKeyEncrypted: text("openrouter_api_key_encrypted"),
+    /**
+     * Workspace-scoped LLM model — owner-only setting. Every member of
+     * the workspace uses this model for their bot turns. Was per-user
+     * until 0020; the owner controls spend + capability ceiling.
+     */
+    llmModel: text("llm_model")
+      .notNull()
+      .default("google/gemini-2.5-flash"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },

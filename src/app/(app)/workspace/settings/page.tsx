@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CustomBotSection } from "@/components/workspace/custom-bot-section";
+import { LlmModelSection } from "@/components/workspace/llm-model-section";
 import { MembersSection } from "@/components/workspace/members-section";
 import { OrgKeySection } from "@/components/workspace/org-key-section";
 import {
@@ -173,6 +174,11 @@ export default async function WorkspaceSettingsPage() {
         <OrgKeySection
           workspaceId={active.id}
           canManage={active.role === "owner" || active.role === "admin"}
+        />
+
+        <LlmModelSection
+          workspaceId={active.id}
+          canManage={active.role === "owner"}
         />
 
         {(active.role === "owner" || active.role === "admin") && (

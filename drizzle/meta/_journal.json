@@ -134,6 +134,27 @@
       "when": 1778890300000,
       "tag": "0018_drop_billing",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1778890400000,
+      "tag": "0019_drop_user_byok",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1778890500000,
+      "tag": "0020_workspace_llm_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1778890600000,
+      "tag": "0021_drop_attachment_storage",
+      "breakpoints": true
     }
   ]
 }

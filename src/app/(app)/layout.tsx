@@ -3,6 +3,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 
 import { TelegramBackButton } from "@/components/telegram/back-button";
+import { HomeFab } from "@/components/telegram/home-fab";
 import { QueryProvider } from "@/components/telegram/query-provider";
 import { TelegramThemeProvider } from "@/components/telegram/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -38,6 +39,7 @@ export default async function AppLayout({
             >
               {children}
             </div>
+            <HomeFab />
             <Toaster />
           </TelegramThemeProvider>
         </QueryProvider>

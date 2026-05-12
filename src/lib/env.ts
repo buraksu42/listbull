@@ -18,32 +18,12 @@ const serverSchema = z.object({
     .min(16, "TELEGRAM_WEBHOOK_SECRET must be ≥16 chars"),
   TELEGRAM_BOT_USERNAME: z.string().min(3),
 
-  OPENROUTER_API_KEY: z.string().optional(),
-
-  // Operator-mode gate (post-billing-tear-out). When set, the operator
-  // env-key fallback (env.OPENROUTER_API_KEY) only fires for workspaces
-  // whose owner.telegram_id matches this value. Other workspaces must
-  // BYOK or set a workspace org-key. Leaving this unset disables the
-  // env-key fallback entirely — every workspace must bring its own key.
-  // Numeric Telegram user id (e.g. 123456789).
-  OPERATOR_TELEGRAM_ID: z.coerce.number().int().positive().optional(),
-
   LISTBULL_PER_USER_HOURLY_MSG_LIMIT: z.coerce
     .number()
     .int()
     .nonnegative()
     .default(0),
   LISTBULL_HEARTBEAT_URL: z.string().url().optional(),
-
-  // Phase 4 · F1: optional Hetzner Object Storage upload target for
-  // export bundles. When unset, the export route falls back to a
-  // base64 data-URL response so self-hosters with no Object Storage
-  // can still export.
-  HETZNER_OBJECT_STORAGE_ENDPOINT: z.string().url().optional(),
-  HETZNER_OBJECT_STORAGE_BUCKET: z.string().min(1).optional(),
-  HETZNER_OBJECT_STORAGE_REGION: z.string().min(1).optional(),
-  HETZNER_OBJECT_STORAGE_ACCESS_KEY: z.string().min(1).optional(),
-  HETZNER_OBJECT_STORAGE_SECRET_KEY: z.string().min(1).optional(),
 
   // Phase 4 · D2 (Inv-18): optional dedicated HMAC key for snapshot
   // URLs. When unset we fall back to BETTER_AUTH_SECRET.

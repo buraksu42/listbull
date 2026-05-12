@@ -25,10 +25,23 @@ export default function AppBoot() {
       tg.expand?.();
 
       try {
+        // Detect the browser's IANA timezone so the server can replace
+        // the placeholder UTC default for users whose Telegram client
+        // language doesn't hint at their region (most non-TR users).
+        // Falls back to "UTC" if the browser is too old; the server
+        // ignores any value matching the current stored timezone.
+        let browserTz = "UTC";
+        try {
+          browserTz =
+            Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+        } catch {
+          /* tolerant — IE/old engines */
+        }
+
         const res = await fetch("/api/auth/telegram", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ initData: tg.initData }),
+          body: JSON.stringify({ initData: tg.initData, timezone: browserTz }),
         });
 
         if (!res.ok) {
@@ -97,21 +110,28 @@ export default function AppBoot() {
             const listId = startParam.slice("list_".length);
             // Auto-switch active workspace if this list lives in a
             // workspace the user is a member of but not currently
-            // active in. Prevents the freshly-invited "Open the list"
-            // tap from landing on /lists/<id> with the wrong active
-            // workspace, which renders 404.
+            // active in. If the list doesn't exist (deleted /
+            // mis-typed deeplink), fall through to /lists rather
+            // than navigating into a 404 page — Telegram's WebApp
+            // shell renders 404s as a generic "Something went
+            // wrong" duck which gives the user no recourse.
+            let canNavigate = false;
             try {
-              await fetch(
+              const res = await fetch(
                 `/api/workspaces/activate-by-list?listId=${encodeURIComponent(listId)}`,
                 { method: "POST", credentials: "same-origin" },
               );
+              canNavigate = res.ok;
             } catch {
-              // Best-effort; even if the activate call fails the page
-              // will surface its own 404.
+              // Network error — fall through.
             }
-            window.location.replace(
-              `/lists/${encodeURIComponent(listId)}`,
-            );
+            if (canNavigate) {
+              window.location.replace(
+                `/lists/${encodeURIComponent(listId)}`,
+              );
+            } else {
+              window.location.replace("/lists");
+            }
           } else {
             window.location.replace("/lists");
           }

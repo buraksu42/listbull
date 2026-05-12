@@ -27,8 +27,10 @@ import { env } from "@/lib/env";
 import { getRecentMessages, insertMessages } from "@/lib/db/queries/messages";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import {
+  getWorkspaceLlmModel,
+  getWorkspaceMembership,
   getWorkspaceOrgKeyEncrypted,
-  getWorkspaceOwnerTelegramId,
+  listUserWorkspacesWithKey,
   listWorkspacesForUser,
   resolveActiveWorkspaceId,
 } from "@/lib/db/queries/workspaces";
@@ -63,9 +65,9 @@ const TG_MAX_MESSAGE_LEN = 4096;
 const COPY = {
   tr: {
     noKey:
-      "AI özelliklerini kullanmak için Mini App ayarlarından OpenRouter API anahtarınızı ekleyin.",
+      "Bu workspace'in sahibinin OpenRouter API key tanımlaması gerek. Mini App → Workspace ayarları → Workspace API key.",
     keyDecryptError:
-      "API anahtarınız okunamadı. Mini App ayarlarından yeniden ekleyin.",
+      "Workspace API key'i okunamadı. Workspace sahibi key'i tekrar tanımlamalı.",
     transientError: "Bir şeyler ters gitti, tekrar dener misin?",
     forwardedNoText:
       "İletilen mesajda metin bulamadım — sadece metinli mesajlardan madde çıkarabilirim.",
@@ -78,9 +80,9 @@ const COPY = {
   },
   en: {
     noKey:
-      "Add your OpenRouter API key in Mini App settings to use AI features.",
+      "Your workspace owner needs to set the OpenRouter API key. Open the Mini App → Workspace settings → Workspace API key.",
     keyDecryptError:
-      "Couldn't read your API key. Re-enter it in Mini App settings.",
+      "Couldn't read the workspace API key. The workspace owner needs to set it again.",
     transientError: "Something went wrong — try again?",
     forwardedNoText:
       "I didn't find any text in the forwarded message — I can only extract items from messages with text.",
@@ -397,56 +399,77 @@ export async function handleMessage(ctx: Context): Promise<void> {
     }
   }
 
-  // OpenRouter API key resolution chain (post-billing-tear-out):
-  //   1. user's personal BYOK (users.openrouter_api_key_encrypted)
-  //   2. workspace org-key (workspaces.openrouter_api_key_encrypted)
-  //   3. operator fallback (env.OPENROUTER_API_KEY) — ONLY when the
-  //      active workspace's owner.telegram_id matches
-  //      env.OPERATOR_TELEGRAM_ID. Without that match the env key is
-  //      not used; users must BYOK or rely on a workspace org-key.
-  //   4. nothing → reply with noKey copy
+  // OpenRouter API key resolution: workspace org-key is the ONLY path.
+  // The workspace owner sets it in Mini App → Workspace settings →
+  // Workspace API key. Every member of the workspace uses it. Per-user
+  // BYOK and env-key operator fallback were both removed to collapse
+  // the key model to one decision: "whose key funds this workspace?"
   const workspaceId = await resolveActiveWorkspaceId(user.id);
 
   let apiKey: string | null = null;
-  let keySource: "user" | "workspace" | "operator" | null = null;
-  if (user.openrouterApiKeyEncrypted) {
+  const orgKeyEnc = await getWorkspaceOrgKeyEncrypted(workspaceId);
+  if (orgKeyEnc) {
     try {
-      apiKey = decrypt(user.openrouterApiKeyEncrypted);
-      keySource = "user";
+      apiKey = decrypt(orgKeyEnc);
     } catch {
-      // Key blob is unreadable — most likely ENV_KEY rotated.
+      // Encrypted blob unreadable — most likely ENV_KEY rotated.
+      // Surface a distinct copy so the workspace admin knows to rotate
+      // rather than thinking they never set the key.
+      console.warn(
+        "[handle-message] workspace org-key decrypt failed",
+        { workspaceId },
+      );
       await ctx.reply(copy.keyDecryptError);
       return;
     }
   }
 
   if (apiKey === null) {
-    const orgKeyEnc = await getWorkspaceOrgKeyEncrypted(workspaceId);
-    if (orgKeyEnc) {
-      try {
-        apiKey = decrypt(orgKeyEnc);
-        keySource = "workspace";
-      } catch {
-        // Org-key blob unreadable — log + fall through to operator
-        // fallback / noKey. Workspace admin must rotate.
-        console.warn(
-          "[handle-message] workspace org-key decrypt failed",
-          { workspaceId },
+    // Context-aware noKey copy: owners get a "set it yourself" CTA;
+    // members get a "your owner needs to set it" hint, plus a
+    // "or switch to <X>" suggestion when another workspace they
+    // belong to does have a key set.
+    const membership = await getWorkspaceMembership(user.id, workspaceId);
+    const otherWithKey = await listUserWorkspacesWithKey(user.id, workspaceId);
+    const isOwner = membership?.role === "owner";
+
+    const lines: string[] = [];
+    if (isOwner) {
+      lines.push(
+        locale === "tr"
+          ? "Bu workspace'in sahibisin ama OpenRouter API key tanımlı değil."
+          : "You own this workspace but no OpenRouter API key is set.",
+      );
+      lines.push(
+        locale === "tr"
+          ? "Mini App → Workspace ayarları → Workspace API key'den ekle. https://openrouter.ai/keys"
+          : "Add one in Mini App → Workspace settings → Workspace API key. https://openrouter.ai/keys",
+      );
+    } else {
+      lines.push(
+        locale === "tr"
+          ? "Bu workspace'in sahibinin OpenRouter API key tanımlaması gerek."
+          : "This workspace's owner needs to set the OpenRouter API key.",
+      );
+    }
+
+    if (otherWithKey.length > 0) {
+      lines.push("");
+      lines.push(
+        locale === "tr"
+          ? "Veya key'i tanımlı olan başka bir workspace'ine geçebilirsin:"
+          : "Or switch to a workspace where a key is already set:",
+      );
+      for (const w of otherWithKey) {
+        lines.push(
+          locale === "tr"
+            ? `  • "${w.name}" workspace'ine geç`
+            : `  • switch to "${w.name}"`,
         );
       }
     }
-  }
 
-  if (apiKey === null && env.OPENROUTER_API_KEY && env.OPERATOR_TELEGRAM_ID) {
-    const ownerTelegramId = await getWorkspaceOwnerTelegramId(workspaceId);
-    if (ownerTelegramId === env.OPERATOR_TELEGRAM_ID) {
-      apiKey = env.OPENROUTER_API_KEY;
-      keySource = "operator";
-    }
-  }
-
-  if (apiKey === null || keySource === null) {
-    await ctx.reply(copy.noKey);
+    await ctx.reply(lines.join("\n"));
     return;
   }
 
@@ -555,6 +578,9 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // awareness of every workspace the user belongs to (so it can
   // suggest \`switch_workspace\` when context implies another one).
   const workspaceSummary = await listWorkspacesForUser(user.id);
+  // Active workspace's model — owner-controlled, every member uses
+  // the same one (per-user llm_model was retired in 0020).
+  const workspaceModel = await getWorkspaceLlmModel(workspaceId);
 
   let assistantText = "";
   let persisted: ConversationMessage[] = [];
@@ -576,7 +602,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
         isActive: w.isActive,
       })),
       apiKey,
-      model: user.llmModel,
+      model: workspaceModel,
       toolDispatcher: createToolDispatcher({ userId: user.id, workspaceId }),
     });
     assistantText = result.assistantText;
@@ -775,6 +801,7 @@ async function handleForwardedMessage(args: {
   // messages target the user's currently-active workspace.
   const workspaceId = await resolveActiveWorkspaceId(user.id);
   const workspaceSummary = await listWorkspacesForUser(user.id);
+  const workspaceModel = await getWorkspaceLlmModel(workspaceId);
 
   let assistantText = "";
   let persisted: ConversationMessage[] = [];
@@ -795,7 +822,7 @@ async function handleForwardedMessage(args: {
         isActive: w.isActive,
       })),
       apiKey,
-      model: user.llmModel,
+      model: workspaceModel,
       toolDispatcher: createToolDispatcher({ userId: user.id, workspaceId }),
     });
     assistantText = result.assistantText;

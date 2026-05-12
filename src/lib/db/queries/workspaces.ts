@@ -286,6 +286,24 @@ export async function getWorkspaceOrgKeyEncrypted(
 }
 
 /**
+ * Workspace-scoped LLM model. Returns the column default
+ * (`google/gemini-2.5-flash`) when the workspace doesn't exist —
+ * caller will hit a noKey path before model selection matters
+ * anyway. Used by handle-message.ts in place of the (now stale)
+ * per-user `users.llm_model`.
+ */
+export async function getWorkspaceLlmModel(
+  workspaceId: string,
+): Promise<string> {
+  const [row] = await db
+    .select({ llmModel: workspaces.llmModel })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+  return row?.llmModel ?? "google/gemini-2.5-flash";
+}
+
+/**
  * Operator-mode gate for the env-key fallback. Returns the workspace
  * owner's Telegram user id (numeric) — the bot key resolution chain
  * checks this against `env.OPERATOR_TELEGRAM_ID` to decide whether
@@ -302,6 +320,37 @@ export async function getWorkspaceOwnerTelegramId(
     .where(eq(workspaces.id, workspaceId))
     .limit(1);
   return row?.telegramId ?? null;
+}
+
+/**
+ * Returns workspaces the user is a member of that ALSO have an
+ * org-key set — used by the noKey copy to suggest switching when
+ * the active workspace can't fund a bot turn but another can.
+ */
+export async function listUserWorkspacesWithKey(
+  userId: string,
+  excludeWorkspaceId?: string,
+): Promise<Array<{ id: string; name: string }>> {
+  const rows = await db
+    .select({
+      id: workspaces.id,
+      name: workspaces.name,
+    })
+    .from(workspaces)
+    .innerJoin(
+      workspaceMembers,
+      and(
+        eq(workspaceMembers.workspaceId, workspaces.id),
+        eq(workspaceMembers.userId, userId),
+      ),
+    )
+    .where(
+      and(
+        sql`${workspaces.openrouterApiKeyEncrypted} IS NOT NULL`,
+        sql`${workspaces.archivedAt} IS NULL`,
+      ),
+    );
+  return rows.filter((r) => r.id !== excludeWorkspaceId);
 }
 
 // Order export, no-op consumer for asc — keeps the import live so

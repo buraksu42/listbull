@@ -1,10 +1,8 @@
 /**
- * Mini App settings API — GET /api/settings (read prefs + redacted BYOK
- * preview), PATCH /api/settings (mutate any subset of fields).
- *
- * BYOK key NEVER leaves the server in plaintext. GET returns
- * `byokKeyPreview` (last 4 chars) only; the full plaintext only ever
- * lives ephemerally in `respond.ts` after server-side decryption.
+ * Mini App settings API — GET /api/settings (read prefs), PATCH
+ * /api/settings (mutate any subset). Per-user BYOK was removed; the
+ * OpenRouter API key is workspace-scoped and lives behind
+ * /api/workspaces/[id]/org-key.
  */
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -12,7 +10,6 @@ import { NextResponse } from "next/server";
 import { getSessionUserId } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
-import { decrypt, encrypt, redactKey } from "@/lib/server/encryption";
 import {
   patchSettingsBodySchema,
   type AllowedDateFormat,
@@ -45,27 +42,12 @@ export async function GET() {
     );
   }
 
-  let byokKeyPreview: string | null = null;
-  if (user.openrouterApiKeyEncrypted) {
-    try {
-      const plaintext = decrypt(user.openrouterApiKeyEncrypted);
-      byokKeyPreview = redactKey(plaintext);
-    } catch {
-      // Stored ciphertext can't be decrypted (env key rotation, etc.).
-      // Treat as "no key" — UI prompts re-entry.
-      byokKeyPreview = null;
-    }
-  }
-
   const data: GetSettingsResponse = {
     locale: user.locale === "tr" ? "tr" : "en",
     timezone: user.timezone,
-    llmModel: user.llmModel,
     notificationsEnabled: user.notificationsEnabled,
     dateFormat: user.dateFormat as AllowedDateFormat,
     timeFormat: user.timeFormat as AllowedTimeFormat,
-    hasApiKey: !!user.openrouterApiKeyEncrypted,
-    byokKeyPreview,
   };
 
   return NextResponse.json({ ok: true, data });
@@ -106,11 +88,9 @@ export async function PATCH(request: Request) {
   const {
     locale,
     timezone,
-    llmModel,
     notificationsEnabled,
     dateFormat,
     timeFormat,
-    openrouterApiKey,
   } = parsed.data;
 
   const patch: Partial<typeof users.$inferInsert> = {
@@ -118,19 +98,11 @@ export async function PATCH(request: Request) {
   };
   if (locale !== undefined) patch.locale = locale;
   if (timezone !== undefined) patch.timezone = timezone;
-  if (llmModel !== undefined) patch.llmModel = llmModel;
   if (notificationsEnabled !== undefined) {
     patch.notificationsEnabled = notificationsEnabled;
   }
   if (dateFormat !== undefined) patch.dateFormat = dateFormat;
   if (timeFormat !== undefined) patch.timeFormat = timeFormat;
-  if (openrouterApiKey !== undefined) {
-    if (openrouterApiKey === "") {
-      patch.openrouterApiKeyEncrypted = null;
-    } else {
-      patch.openrouterApiKeyEncrypted = encrypt(openrouterApiKey);
-    }
-  }
 
   const [updated] = await db
     .update(users)
@@ -148,25 +120,12 @@ export async function PATCH(request: Request) {
     );
   }
 
-  let byokKeyPreview: string | null = null;
-  if (updated.openrouterApiKeyEncrypted) {
-    try {
-      const plaintext = decrypt(updated.openrouterApiKeyEncrypted);
-      byokKeyPreview = redactKey(plaintext);
-    } catch {
-      byokKeyPreview = null;
-    }
-  }
-
   const data: GetSettingsResponse = {
     locale: updated.locale === "tr" ? "tr" : "en",
     timezone: updated.timezone,
-    llmModel: updated.llmModel,
     notificationsEnabled: updated.notificationsEnabled,
     dateFormat: updated.dateFormat as AllowedDateFormat,
     timeFormat: updated.timeFormat as AllowedTimeFormat,
-    hasApiKey: !!updated.openrouterApiKeyEncrypted,
-    byokKeyPreview,
   };
 
   return NextResponse.json({ ok: true, data });

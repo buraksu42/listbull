@@ -1,6 +1,6 @@
 "use client";
 
-import { History, Home, Share2 } from "lucide-react";
+import { History, Share2 } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -66,24 +66,11 @@ export function ListHeader({
 
         <div className="flex items-center gap-1">
           <Link
-            href="/lists"
-            aria-label="Tüm listeler"
-            title="Tüm listeler"
-            className={cn(
-              "inline-flex h-11 w-11 items-center justify-center rounded-[var(--lb-r-md)]",
-              "hover:bg-[var(--lb-muted)] focus-visible:bg-[var(--lb-muted)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lb-accent)]",
-            )}
-          >
-            <Home
-              className="h-5 w-5"
-              aria-hidden
-              style={{ color: "var(--lb-muted-fg)" }}
-            />
-          </Link>
-
-          <Link
-            href={`/lists/${listId}/activity`}
+            href={
+              currentUserRole === "owner"
+                ? `/lists/${listId}/audit`
+                : `/lists/${listId}/activity`
+            }
             aria-label={`Activity for ${listName}`}
             className={cn(
               "inline-flex h-11 w-11 items-center justify-center rounded-[var(--lb-r-md)]",

@@ -590,6 +590,10 @@ export const inviteToWorkspaceOutputSchema = z.object({
   invitedUsername: z.string(),
   role: z.enum(["admin", "editor", "viewer", "guest"]),
   status: z.enum(["invite_sent", "already_member", "pending_phase_5"]),
+  /** Telegram deeplink the inviter can copy + share when DM delivery
+   *  fails (invitee hasn't /started the bot yet). Always present on
+   *  status === "invite_sent"; absent on "already_member". */
+  deeplink: z.string().url().optional(),
   warnings: z.array(z.string()).optional(),
 });
 
@@ -934,6 +938,70 @@ export const cancelInviteOutputSchema = z.object({
 export type CancelInviteInput = z.infer<typeof cancelInviteInputSchema>;
 export type CancelInviteOutput = z.infer<typeof cancelInviteOutputSchema>;
 
+// ─── 7e. list_workspace_invites — pending invites for active workspace
+//
+// Read-only enumeration of non-accepted, non-expired workspace_invites
+// in the user's active workspace. Powers the bot's "bekleyen davetleri
+// göster" answer + lets the LLM surface a copyable deeplink to manually
+// hand out when the invitee never /starts the bot. Owner + admin only;
+// pending invites can carry the deeplink URL.
+
+export const listWorkspaceInvitesInputSchema = z.object({});
+
+export const listWorkspaceInvitesOutputSchema = z.object({
+  workspace: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+  }),
+  pendingInvites: z.array(
+    z.object({
+      token: z.string(),
+      invitedUsername: z.string(),
+      role: z.enum(["admin", "editor", "viewer", "guest"]),
+      invitedAt: z.string(),
+      expiresAt: z.string(),
+      deeplink: z.string().url(),
+    }),
+  ),
+});
+
+export type ListWorkspaceInvitesInput = z.infer<
+  typeof listWorkspaceInvitesInputSchema
+>;
+export type ListWorkspaceInvitesOutput = z.infer<
+  typeof listWorkspaceInvitesOutputSchema
+>;
+
+// ─── 7f. cancel_workspace_invite — revoke pending workspace invite
+//
+// Mirrors cancel_invite but for workspace-level invites. Owner + admin
+// only. PENDING-only; if the row is already accepted, surface
+// `invite_already_accepted` so the LLM can pivot to remove_member.
+
+export const cancelWorkspaceInviteInputSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .min(1, "username is required")
+    .max(33, "username must be ≤32 chars (plus optional leading @)"),
+});
+
+export const cancelWorkspaceInviteOutputSchema = z.object({
+  workspace: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+  }),
+  invitedUsername: z.string(),
+  cancelledInviteId: z.string().uuid(),
+});
+
+export type CancelWorkspaceInviteInput = z.infer<
+  typeof cancelWorkspaceInviteInputSchema
+>;
+export type CancelWorkspaceInviteOutput = z.infer<
+  typeof cancelWorkspaceInviteOutputSchema
+>;
+
 // ─── 8. set_deadline (Phase 14d) ────────────────────────────────────
 //
 // Set or clear an item's deadline. Replaces the deadline-half of the
@@ -1265,6 +1333,8 @@ export const TOOL_NAMES = [
   "share_list",
   "create_snapshot",
   "cancel_invite",
+  "list_workspace_invites",
+  "cancel_workspace_invite",
   "list_members",
   "remove_member",
   "update_member_role",
@@ -1520,6 +1590,37 @@ export const tools: readonly ToolDefinition[] = [
       "`not_found` (no pending invite), `ambiguous_list`, `invite_already_accepted`.",
     inputSchema: cancelInviteInputSchema,
     outputSchema: cancelInviteOutputSchema,
+  },
+  {
+    name: "list_workspace_invites",
+    description:
+      "READ-ONLY enumeration of pending workspace invites in the " +
+      "user's active workspace (non-accepted, non-expired). Owner + " +
+      "admin only. Use this when the user asks 'bekleyen davetler' " +
+      "/ 'kimi davet ettim?' / 'X'in davet durumu nedir?'. Returns " +
+      "each invite's `invitedUsername`, `role`, `deeplink` (the " +
+      "Telegram link the inviter can manually re-share when the " +
+      "invitee hasn't /started the bot), plus `invitedAt` / " +
+      "`expiresAt` timestamps. No input — operates on the active " +
+      "workspace.",
+    inputSchema: listWorkspaceInvitesInputSchema,
+    outputSchema: listWorkspaceInvitesOutputSchema,
+  },
+  {
+    name: "cancel_workspace_invite",
+    description:
+      "Revoke a PENDING workspace invite (OWNER + ADMIN only). " +
+      "Identifies the invite by `username` alone — workspace invites " +
+      "are scoped to the active workspace, no need to pass " +
+      "workspace_id. Use when the user says '@ali'nin davetini iptal " +
+      "et' / 'davet linkini geri al' / 'davet sil'. Only PENDING " +
+      "(non-accepted) invites can be canceled. If the invitee has " +
+      "ALREADY ACCEPTED, the executor returns `invite_already_accepted` " +
+      "— pivot to `remove_workspace_member` and tell the user '@ali " +
+      "daveti zaten kabul etmişti, workspace'ten çıkardım'. Distinct " +
+      "from `cancel_invite` which targets list-level invites.",
+    inputSchema: cancelWorkspaceInviteInputSchema,
+    outputSchema: cancelWorkspaceInviteOutputSchema,
   },
   {
     name: "list_members",

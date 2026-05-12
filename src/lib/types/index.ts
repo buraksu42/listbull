@@ -296,8 +296,6 @@ export type AttachmentSnapshot = {
   width: number | null;
   height: number | null;
   originalFilename: string | null;
-  /** True when the Hetzner backup completed; false = Telegram-only. */
-  hasBackup: boolean;
   uploadedByUserId: string;
   /** ISO 8601 string. */
   createdAt: string;
