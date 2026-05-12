@@ -32,7 +32,11 @@ export async function handleStart(ctx: Context): Promise<void> {
     languageCode: from.language_code ?? null,
   });
 
-  await ensureInbox(user.id);
+  // ensureInbox is deferred until after the payload branches — invited
+  // users (wsinvite_/joined_) don't need an auto-created Personal
+  // workspace; they're being added to someone else's workspace and
+  // surfacing an extra empty Personal in the switcher is just
+  // clutter. Only the plain /start path (no payload) creates Personal.
 
   const locale = pickLocale(user.locale);
   const tr = t(locale);
@@ -108,6 +112,10 @@ export async function handleStart(ctx: Context): Promise<void> {
     await ctx.reply(errCopy);
     return;
   }
+
+  // Plain /start (no recognized payload). Create the Personal
+  // workspace + Inbox now so the user has somewhere to start.
+  await ensureInbox(user.id);
 
   // Plain text (no parse_mode) — MarkdownV2 reserved characters (!, ., -, etc.)
   // would all need escaping which makes the welcome copy unreadable in source.
