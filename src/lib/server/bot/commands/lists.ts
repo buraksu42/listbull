@@ -32,7 +32,12 @@ export async function handleLists(ctx: Context): Promise<void> {
   const lines = lists.map((list) => {
     const emoji = list.emoji ?? (list.isInbox ? "📥" : "•");
     const name = list.isInbox ? tr.inboxLabel : list.name;
-    const deeplink = `${env.NEXT_PUBLIC_APP_URL}/lists/${list.id}`;
+    // Mini App startapp deeplink — Telegram opens this inside the
+    // bot's Mini App with start_param=list_<id>, which the /app boot
+    // route consumes to navigate into /lists/<id>. Using the raw
+    // NEXT_PUBLIC_APP_URL would prompt "Open this link?" + bounce the
+    // user into their browser.
+    const deeplink = `https://t.me/${env.TELEGRAM_BOT_USERNAME}?startapp=list_${list.id}`;
     return `${escapeMarkdownV2(emoji)} [${escapeMarkdownV2(name)}](${deeplink})`;
   });
 
