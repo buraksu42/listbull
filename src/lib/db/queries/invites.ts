@@ -154,17 +154,10 @@ export async function acceptInvite(
     if (!caller) {
       return { ok: false, code: "not_found", message: "Caller not found." };
     }
-    const callerLowered = (caller.telegramUsername ?? "").toLowerCase();
-    if (
-      callerLowered.length === 0 ||
-      callerLowered !== inviteRow.invited_username
-    ) {
-      return {
-        ok: false,
-        code: "invite_username_mismatch",
-        message: "This invite was sent to a different Telegram username.",
-      };
-    }
+    // Note: no telegram_username equality check — token is the gate.
+    // See workspace-invites.ts acceptWorkspaceInvite for the same
+    // rationale.
+    void caller;
 
     // Recover gracefully: if the user is somehow already a member (e.g.
     // a parallel accept landed first), idempotently flip the invite

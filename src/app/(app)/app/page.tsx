@@ -38,10 +38,35 @@ export default function AppBoot() {
           /* tolerant — IE/old engines */
         }
 
+        // Detect the browser's preferred date order so US/ISO/EU users
+        // see dates in the layout they actually read in. Same applied-
+        // only-on-default rule as timezone: server keeps an explicit
+        // pick from /settings.
+        let browserDateFormat: "DD.MM.YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD" =
+          "DD.MM.YYYY";
+        try {
+          const parts = new Intl.DateTimeFormat().formatToParts(
+            new Date(2026, 0, 31),
+          );
+          const order = parts
+            .filter((p) => p.type === "year" || p.type === "month" || p.type === "day")
+            .map((p) => p.type[0])
+            .join("");
+          if (order === "mdy") browserDateFormat = "MM/DD/YYYY";
+          else if (order === "ymd") browserDateFormat = "YYYY-MM-DD";
+          // else dmy / other → keep DD.MM.YYYY default
+        } catch {
+          /* tolerant — IE/old engines */
+        }
+
         const res = await fetch("/api/auth/telegram", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ initData: tg.initData, timezone: browserTz }),
+          body: JSON.stringify({
+            initData: tg.initData,
+            timezone: browserTz,
+            dateFormat: browserDateFormat,
+          }),
         });
 
         if (!res.ok) {

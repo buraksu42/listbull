@@ -116,17 +116,13 @@ export async function acceptWorkspaceInvite(
     if (!caller) {
       return { ok: false, code: "not_found", message: "Caller not found." };
     }
-    const callerLowered = (caller.telegramUsername ?? "").toLowerCase();
-    if (
-      callerLowered.length === 0 ||
-      callerLowered !== inviteRow.invited_username
-    ) {
-      return {
-        ok: false,
-        code: "invite_username_mismatch",
-        message: "This invite was sent to a different Telegram username.",
-      };
-    }
+    // Note: no telegram_username equality check. The 32-byte invite
+    // token is the credential — anyone who can produce it can accept.
+    // The `invited_username` field is retained for audit (who was the
+    // intended recipient when the inviter generated the link) but does
+    // not gate acceptance. Inviters who want strict gating should share
+    // the link only with the intended recipient.
+    void caller;
 
     const existingMember = await tx.query.workspaceMembers.findFirst({
       where: and(

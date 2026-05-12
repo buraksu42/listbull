@@ -28,6 +28,10 @@ const requestSchema = z.object({
     .max(64)
     .regex(/^[A-Za-z][A-Za-z0-9_+\-/]+$/)
     .optional(),
+  /** Browser-detected date format (derived from
+   *  `Intl.DateTimeFormat().formatToParts` order). Same apply-on-default
+   *  rule — never overrides an explicitly-chosen value. */
+  dateFormat: z.enum(["DD.MM.YYYY", "MM/DD/YYYY", "YYYY-MM-DD"]).optional(),
 });
 
 export async function POST(request: Request) {
@@ -72,14 +76,30 @@ export async function POST(request: Request) {
   // OR via /settings), we never touch it again — second boot from a
   // different device with a different tz won't surprise-overwrite
   // their choice.
+  const patch: Partial<typeof users.$inferInsert> = {};
   if (
     body.timezone &&
     body.timezone !== "UTC" &&
     user.timezone === "UTC"
   ) {
+    patch.timezone = body.timezone;
+  }
+  // Same rule for date_format: only replace when the user is still
+  // on the schema default ("DD.MM.YYYY"). Browser-derived value
+  // distinguishes US (MM/DD/YYYY) from ISO regions (YYYY-MM-DD) from
+  // the bulk default (DD.MM.YYYY).
+  if (
+    body.dateFormat &&
+    body.dateFormat !== "DD.MM.YYYY" &&
+    user.dateFormat === "DD.MM.YYYY"
+  ) {
+    patch.dateFormat = body.dateFormat;
+  }
+  if (Object.keys(patch).length > 0) {
+    patch.updatedAt = new Date();
     const [updated] = await db
       .update(users)
-      .set({ timezone: body.timezone, updatedAt: new Date() })
+      .set(patch)
       .where(eq(users.id, user.id))
       .returning();
     if (updated) user = updated;
