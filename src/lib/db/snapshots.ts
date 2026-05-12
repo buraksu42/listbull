@@ -74,10 +74,9 @@ export function toItemSnapshot(row: Item): ItemSnapshot {
 /**
  * Convert an `ItemAttachment` row into a JSON-safe `AttachmentSnapshot`.
  *
- * Hides the raw `telegramFileId` and `storageKey` from the client-
- * facing shape — both are server-side resolvers (Telegram CDN proxy
- * + Hetzner pre-signed URL); leaking them invites scraping and
- * cross-bot file_id sharing.
+ * Hides the raw `telegramFileId` from the client-facing shape —
+ * server-side byte proxy resolves it; leaking would invite scraping
+ * and cross-bot file_id sharing.
  */
 export function toAttachmentSnapshot(row: ItemAttachment): AttachmentSnapshot {
   return {
@@ -91,7 +90,6 @@ export function toAttachmentSnapshot(row: ItemAttachment): AttachmentSnapshot {
     width: row.width,
     height: row.height,
     originalFilename: row.originalFilename,
-    hasBackup: row.storageBackedUpAt !== null,
     uploadedByUserId: row.uploadedByUserId,
     createdAt: row.createdAt.toISOString(),
   };

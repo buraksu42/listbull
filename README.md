@@ -70,8 +70,11 @@ DB, the data stays yours.
   `OPERATOR_TELEGRAM_ID`).
 - **Multi-bot** — workspace owner registers their own white-label
   Telegram bot via BotFather; reminders + invites route through it.
-- **Full data export** — `Settings → Download my data` returns JSON
-  bundle. Optional Hetzner Object Storage signed URL when configured.
+- **Attachment storage** — `telegram_file_id`-only. Files live on
+  Telegram CDN; preview via Bot API getFile (≤20MB), "Telegram'a
+  yolla" fallback re-sends to bot DM for any size. Zero managed
+  storage. Bot token rotation invalidates all file_ids — plan
+  accordingly.
 - **TR + EN parity** — 151+ keys (Inv-19 enforced via Vitest).
 - **No third-party telemetry by default** — Sentry / Umami opt-in via
   env vars; absent those, no events leave the box.

@@ -411,11 +411,6 @@ export const itemAttachments = pgTable(
     /** Telegram-provided thumbnail file_id (videos / documents). */
     thumbnailFileId: text("thumbnail_file_id"),
     originalFilename: text("original_filename"),
-    /** Hetzner Object Storage key — populated by backup-attachments cron. */
-    storageKey: text("storage_key"),
-    storageBackedUpAt: timestamp("storage_backed_up_at", {
-      withTimezone: true,
-    }),
     uploadedByUserId: uuid("uploaded_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -425,10 +420,6 @@ export const itemAttachments = pgTable(
   },
   (t) => [
     index("item_attachments_item_idx").on(t.itemId),
-    // Backup queue: rows still missing a Hetzner copy, FIFO by age.
-    index("item_attachments_backup_queue_idx")
-      .on(t.createdAt)
-      .where(sql`${t.storageBackedUpAt} is null`),
     // Dedup: same (item, telegram_file_unique_id) pair → upsert.
     uniqueIndex("item_attachments_telegram_unique_idx")
       .on(t.itemId, t.telegramFileUniqueId)

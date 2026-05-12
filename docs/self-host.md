@@ -444,7 +444,35 @@ Postgres dump cron'u önerilir:
   | gzip > /backups/listbull-$(date +\%Y\%m\%d-\%H).sql.gz
 ```
 
-Backup destination önerisi: Hetzner Object Storage veya Backblaze B2.
+Backup destination önerisi: Hetzner Storage Box, Backblaze B2 veya
+benzeri S3-uyumlu obje depo.
+
+---
+
+## Attachment'lar nasıl saklanır
+
+listbull dosyaları **kendi sunucunda saklamaz**. Bot intake aldığında
+sadece `telegram_file_id` (Telegram'ın CDN referansı) DB'ye yazılır;
+dosyanın kendisi Telegram'ın altyapısında durur. Avantajı: sıfır disk +
+sıfır storage faturası.
+
+Mini App içinde dosya görüntüleme:
+- **≤20MB**: Bot API `getFile` çekip stream eder → lightbox preview
+- **>20MB**: Bot API limiti nedeniyle preview yok. Lightbox typed icon
+  + size etiketi gösterir, **"Telegram'a yolla"** butonu (file_id ile
+  `sendDocument/sendPhoto` — size limiti yok) dosyayı bot DM'inize geri
+  iletir; orada Telegram client native save / forward / open with
+  affordance'larını kullanırsın.
+
+⚠️ **Bot token rotation = attachment loss.** Telegram'da bot
+yeniden yaratırsan veya `/revoke` ile token değiştirirsen tüm eski
+`telegram_file_id` değerleri **geçersiz olur**. Bu Telegram Bot API'nın
+yapısal sınırı; listbull'un kontrolü dışında. Plan:
+- BotFather'da bot token'ını rotate etmeden önce kullanıcılara haber ver.
+- Kritik attachment'lar varsa kullanıcılar Telegram client içinde bot
+  DM'inden manual `Save to gallery` yapabilir.
+- DB pg_dump backup'ları bu sorunu **çözmez** — sadece metadata
+  korunur, dosyalar Telegram tarafında.
 
 ---
 

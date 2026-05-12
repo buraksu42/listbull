@@ -25,16 +25,6 @@ const serverSchema = z.object({
     .default(0),
   LISTBULL_HEARTBEAT_URL: z.string().url().optional(),
 
-  // Phase 4 · F1: optional Hetzner Object Storage upload target for
-  // export bundles. When unset, the export route falls back to a
-  // base64 data-URL response so self-hosters with no Object Storage
-  // can still export.
-  HETZNER_OBJECT_STORAGE_ENDPOINT: z.string().url().optional(),
-  HETZNER_OBJECT_STORAGE_BUCKET: z.string().min(1).optional(),
-  HETZNER_OBJECT_STORAGE_REGION: z.string().min(1).optional(),
-  HETZNER_OBJECT_STORAGE_ACCESS_KEY: z.string().min(1).optional(),
-  HETZNER_OBJECT_STORAGE_SECRET_KEY: z.string().min(1).optional(),
-
   // Phase 4 · D2 (Inv-18): optional dedicated HMAC key for snapshot
   // URLs. When unset we fall back to BETTER_AUTH_SECRET.
   SNAPSHOT_SIGNING_KEY: z.string().min(32).optional(),

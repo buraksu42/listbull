@@ -774,9 +774,21 @@ function AttachmentTile({
   forwardState: "pending" | "ok" | "error" | null;
   deleting: boolean;
 }) {
-  const isPhoto = attachment.kind === "photo";
+  // Telegram Bot API's `getFile` caps at 20MB. Files larger than that
+  // can't be previewed in-app — sendPhoto/sendDocument with file_id
+  // still works for re-delivery (no size limit on send), so the
+  // "Telegram'a yolla" path remains the user's access channel.
+  // Skip the byte-proxy attempt entirely to avoid 502 noise.
+  const TWENTY_MB = 20 * 1024 * 1024;
+  const tooLargeForPreview =
+    typeof attachment.fileSize === "number" && attachment.fileSize > TWENTY_MB;
+  const isPhoto = attachment.kind === "photo" && !tooLargeForPreview;
   const url = attachmentBytesUrl(itemId, attachment.id);
   const [imageBroken, setImageBroken] = React.useState(false);
+  const sizeLabel =
+    typeof attachment.fileSize === "number"
+      ? formatBytes(attachment.fileSize)
+      : null;
   return (
     <li className="relative">
       <button
@@ -800,7 +812,14 @@ function AttachmentTile({
             onError={() => setImageBroken(true)}
           />
         ) : (
-          <KindIcon kind={attachment.kind} />
+          <div className="flex flex-col items-center gap-1">
+            <KindIcon kind={attachment.kind} />
+            {sizeLabel && (
+              <span className="text-[10px] text-[var(--lb-muted-fg)]">
+                {sizeLabel}
+              </span>
+            )}
+          </div>
         )}
       </button>
       <div className="mt-1 flex items-center justify-between gap-1 text-[10px]">
@@ -842,16 +861,14 @@ function AttachmentTile({
           </button>
         </span>
       </div>
-      {!attachment.hasBackup && (
-        <span
-          className="absolute right-1 top-1 rounded-full bg-[var(--lb-bg)]/80 px-1 text-[9px] text-[var(--lb-muted-fg)]"
-          title="Henüz yedeklenmedi"
-        >
-          ⏳
-        </span>
-      )}
     </li>
   );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function KindIcon({ kind }: { kind: AttachmentKind }) {

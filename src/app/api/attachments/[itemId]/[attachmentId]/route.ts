@@ -104,10 +104,25 @@ export async function GET(_request: Request, { params }: RouteCtx) {
     );
   }
 
-  // TODO Phase 14b.1: when storageKey/storageBackedUpAt are set, prefer
-  // the Hetzner pre-signed URL (302 redirect). For now, always go via
-  // the Telegram CDN — works while the Hetzner backup cron is being
-  // rolled out.
+  // Bot API getFile caps at 20 MB. Larger files would burn a request
+  // round-trip just to come back with "file is too big" — short-
+  // circuit so the client can render the "Telegram'a yolla" affordance
+  // without waiting on a doomed proxy attempt.
+  const TWENTY_MB = 20 * 1024 * 1024;
+  if (typeof att.fileSize === "number" && att.fileSize > TWENTY_MB) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: {
+          code: "file_too_large_for_preview",
+          message:
+            "File exceeds Telegram Bot API's 20MB getFile limit. Use the 'Telegram'a yolla' affordance instead.",
+        },
+      },
+      { status: 413 },
+    );
+  }
+
   try {
     const bot = await getBot();
     let file;

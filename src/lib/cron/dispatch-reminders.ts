@@ -471,21 +471,6 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  // Phase 14b: piggy-back the attachments backup pass onto the same
-  // 60s tick. The pass is a no-op when Hetzner Object Storage is
-  // unconfigured, so this stays safe across self-host deployments.
-  // Failures here MUST NOT taint the reminder pipeline's exit code —
-  // log and move on.
-  try {
-    const { backupAttachmentsBatch } = await import("./backup-attachments");
-    const result = await backupAttachmentsBatch();
-    if (result.picked > 0) {
-      console.log("[cron/backup-attachments]", result);
-    }
-  } catch (error) {
-    console.error("[cron/backup-attachments] threw", error);
-  }
-
   // Phase 15: 09:00 daily digest. Run once per UTC hour at minute :00
   // (cron tick fires every 60s, so up to 60 ticks may match; the
   // pickup query filters down to users whose local hour is currently
