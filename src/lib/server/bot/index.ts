@@ -8,6 +8,7 @@ import { handleShare } from "@/lib/server/bot/commands/share";
 import { handleSnapshot } from "@/lib/server/bot/commands/snapshot";
 import { handleStart } from "@/lib/server/bot/commands/start";
 import { handleMessage } from "@/lib/server/bot/handle-message";
+import { handleChosenInlineResult } from "@/lib/server/bot/handlers/chosen-inline-result";
 import { handleInlineQuery } from "@/lib/server/bot/handlers/inline-query";
 import { db } from "@/lib/db/client";
 import { bots } from "@/lib/db/schema";
@@ -129,6 +130,7 @@ function registerHandlers(bot: Bot): void {
   bot.command("reset", handleReset);
   bot.command("snapshot", handleSnapshot);
   bot.on("inline_query", handleInlineQuery);
+  bot.on("chosen_inline_result", handleChosenInlineResult);
   // Phase 14b: register on `message` (not `message:text`) so photos /
   // videos / documents / audio / voice / video_note also flow into
   // handleMessage. Slash commands stay routed via `bot.command()`

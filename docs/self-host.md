@@ -202,6 +202,9 @@ Telegram'da [@BotFather](https://t.me/BotFather)'a dön, botunu seç,
 - **`/setdomain`** → `myapp.com` (bot Mini App'i açabilsin)
 - **`/setjoingroups`** → **Disable** (bot grup eklenmesin)
 - **`/setinline`** → **Enable**, placeholder: `Search items…`
+- **`/setinlinefeedback`** → bot seç → **Enabled** (Quick Create için
+  zorunlu — Telegram aksi takdirde `chosen_inline_result` update'i
+  yollamaz)
 - **`/setmenubutton`** → **Web App** → `https://myapp.com/app`
 
 Menu button Telegram chat'inde sağ alttaki "/" yerine **Web App**
@@ -224,7 +227,7 @@ curl -X POST "https://api.telegram.org/bot${TOKEN}/setWebhook" \
     \"url\": \"https://myapp.com/api/telegram/webhook\",
     \"secret_token\": \"${SECRET}\",
     \"drop_pending_updates\": true,
-    \"allowed_updates\": [\"message\",\"inline_query\",\"callback_query\"]
+    \"allowed_updates\": [\"message\",\"inline_query\",\"chosen_inline_result\",\"callback_query\"]
   }"
 ```
 

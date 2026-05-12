@@ -98,10 +98,71 @@ export async function handleInlineQuery(ctx: Context): Promise<void> {
     };
   });
 
-  await ctx.answerInlineQuery([...listArticles, ...itemArticles], {
-    cache_time: CACHE_SECONDS,
-    is_personal: true,
-  });
+  // Quick-create result — prepended when the query is non-empty so
+  // the user can add an item to their active workspace's Inbox
+  // without leaving the host chat. Selection fires
+  // `chosen_inline_result` server-side (see handler in
+  // chosen-inline-result.ts); the host-chat message is a tiny
+  // confirmation card so the recipient sees what just happened.
+  const trimmed = query.trim();
+  const quickCreateArticles: InlineQueryResultArticle[] =
+    trimmed.length > 0 && trimmed.length <= 200
+      ? [
+          {
+            type: "article",
+            // id is base64url(query) so the chosen_inline_result handler
+            // can recover the exact text. Telegram caps id at 64 bytes.
+            id: `create:${encodeIdPayload(trimmed)}`,
+            title:
+              locale === "tr"
+                ? `➕ Inbox'a ekle: ${trimmed.slice(0, 50)}`
+                : `➕ Add to Inbox: ${trimmed.slice(0, 50)}`,
+            description:
+              locale === "tr"
+                ? "Aktif workspace'inin Inbox listesine yeni item"
+                : "Add as a new item in your active workspace's Inbox",
+            input_message_content: {
+              message_text:
+                locale === "tr"
+                  ? `✓ Inbox'a eklendi: ${trimmed}`
+                  : `✓ Added to Inbox: ${trimmed}`,
+              link_preview_options: { is_disabled: true },
+            },
+          },
+        ]
+      : [];
+
+  await ctx.answerInlineQuery(
+    [...quickCreateArticles, ...listArticles, ...itemArticles],
+    {
+      cache_time: CACHE_SECONDS,
+      is_personal: true,
+    },
+  );
+}
+
+/**
+ * Pack a free-text query into a Telegram-safe inline-result id. We
+ * base64url-encode + truncate to 60 bytes total (`create:` prefix +
+ * payload), letting `chosen_inline_result` parse the original text
+ * back out without ambiguity.
+ */
+function encodeIdPayload(text: string): string {
+  const bytes = Buffer.from(text, "utf8");
+  // 60 - "create:".length = 53 raw bytes max; base64 ~= ceil(53/3)*4 = 72
+  // chars which exceeds the 64-byte id ceiling. Truncate input bytes
+  // so the encoded form fits.
+  const MAX_RAW = 36; // 36 → base64 48 chars + "create:" = 55; safe.
+  const truncated = bytes.subarray(0, MAX_RAW);
+  return truncated.toString("base64url");
+}
+
+export function decodeIdPayload(b64: string): string {
+  try {
+    return Buffer.from(b64, "base64url").toString("utf8");
+  } catch {
+    return "";
+  }
 }
 
 /**
