@@ -553,6 +553,16 @@ export const workspaces = pgTable(
     llmModel: text("llm_model")
       .notNull()
       .default("google/gemini-2.5-flash"),
+    /**
+     * Optional Telegram group/supergroup chat_id bound to this
+     * workspace. When set, messages from this chat route to this
+     * workspace (gated on workspace membership of the sender). One
+     * chat can only bind to one workspace (partial unique index in
+     * migration 0022).
+     */
+    linkedTelegramChatId: bigint("linked_telegram_chat_id", {
+      mode: "number",
+    }),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },
@@ -562,6 +572,9 @@ export const workspaces = pgTable(
     uniqueIndex("workspaces_personal_per_owner_uq")
       .on(t.ownerId)
       .where(sql`${t.isPersonal} = true`),
+    uniqueIndex("workspaces_linked_chat_id_uq")
+      .on(t.linkedTelegramChatId)
+      .where(sql`${t.linkedTelegramChatId} IS NOT NULL`),
   ],
 );
 

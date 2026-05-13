@@ -353,6 +353,140 @@ export async function listUserWorkspacesWithKey(
   return rows.filter((r) => r.id !== excludeWorkspaceId);
 }
 
+// ─── Group binding (Phase 16/group) ───────────────────────────────────
+//
+// A workspace can optionally be linked to a Telegram group chat_id.
+// When the bot receives a message in that group, the message routes
+// to this workspace (gated on the sender being a workspace member).
+// One chat ↔ at most one workspace (partial unique index in 0022).
+
+/**
+ * Resolve a workspace by its bound Telegram chat_id. Returns null when
+ * no workspace is bound to this chat or the workspace is archived.
+ */
+export async function getWorkspaceByChatId(
+  chatId: number,
+): Promise<{ id: string; name: string; ownerId: string } | null> {
+  const [row] = await db
+    .select({
+      id: workspaces.id,
+      name: workspaces.name,
+      ownerId: workspaces.ownerId,
+    })
+    .from(workspaces)
+    .where(
+      and(
+        eq(workspaces.linkedTelegramChatId, chatId),
+        sql`${workspaces.archivedAt} IS NULL`,
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * List the workspaces owned by a user (role = "owner") so the
+ * /bindgroup picker can show their options. Returns name + id, ordered
+ * by created_at ASC (oldest first — Personal is usually first).
+ */
+export async function listOwnedWorkspaces(
+  userId: string,
+): Promise<Array<{ id: string; name: string; isPersonal: boolean }>> {
+  return db
+    .select({
+      id: workspaces.id,
+      name: workspaces.name,
+      isPersonal: workspaces.isPersonal,
+    })
+    .from(workspaces)
+    .where(
+      and(
+        eq(workspaces.ownerId, userId),
+        sql`${workspaces.archivedAt} IS NULL`,
+      ),
+    )
+    .orderBy(asc(workspaces.createdAt));
+}
+
+/**
+ * Bind a workspace to a Telegram group chat. Caller must already have
+ * verified the actor is the workspace owner. Returns:
+ *   - `{ ok: true }` on success
+ *   - `{ ok: false, code: "chat_in_use", workspaceName }` if some other
+ *     workspace already owns this chat (partial unique index violation
+ *     surfaces as a friendly error rather than a Postgres exception).
+ *   - `{ ok: false, code: "workspace_in_use" }` if the workspace is
+ *     already bound to a different chat (we keep it 1:1).
+ */
+export type BindResult =
+  | { ok: true }
+  | { ok: false; code: "chat_in_use"; conflictingWorkspaceName: string }
+  | { ok: false; code: "workspace_in_use"; currentChatId: number };
+
+export async function bindWorkspaceToChat(
+  workspaceId: string,
+  chatId: number,
+): Promise<BindResult> {
+  return db.transaction(async (tx) => {
+    // Already bound to a different chat?
+    const [ws] = await tx
+      .select({
+        id: workspaces.id,
+        linkedTelegramChatId: workspaces.linkedTelegramChatId,
+      })
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .limit(1);
+    if (
+      ws?.linkedTelegramChatId != null &&
+      ws.linkedTelegramChatId !== chatId
+    ) {
+      return {
+        ok: false,
+        code: "workspace_in_use",
+        currentChatId: ws.linkedTelegramChatId,
+      };
+    }
+
+    // Some other workspace already owns this chat?
+    const [conflict] = await tx
+      .select({ name: workspaces.name })
+      .from(workspaces)
+      .where(
+        and(
+          eq(workspaces.linkedTelegramChatId, chatId),
+          sql`${workspaces.id} <> ${workspaceId}`,
+        ),
+      )
+      .limit(1);
+    if (conflict) {
+      return {
+        ok: false,
+        code: "chat_in_use",
+        conflictingWorkspaceName: conflict.name,
+      };
+    }
+
+    await tx
+      .update(workspaces)
+      .set({ linkedTelegramChatId: chatId })
+      .where(eq(workspaces.id, workspaceId));
+    return { ok: true };
+  });
+}
+
+/**
+ * Unbind whatever workspace owns this chat. No-op if nothing is bound.
+ * Called by the operator's `/unbindgroup` command AND by the
+ * `my_chat_member` handler when the bot is kicked from the group.
+ */
+export async function unbindChat(chatId: number): Promise<void> {
+  await db
+    .update(workspaces)
+    .set({ linkedTelegramChatId: null })
+    .where(eq(workspaces.linkedTelegramChatId, chatId));
+}
+
 // Order export, no-op consumer for asc — keeps the import live so
 // drizzle-kit's tree-shaking doesn't accidentally drop the sort dep.
 void asc;
