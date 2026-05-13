@@ -13,6 +13,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "cron": "tsx --tsconfig tsconfig.cron.json src/lib/cron/dispatch-reminders.ts",
+    "setup:bot": "tsx --tsconfig tsconfig.cron.json scripts/setup-bot.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",

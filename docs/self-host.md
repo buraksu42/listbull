@@ -194,51 +194,69 @@ docker compose exec postgres psql -U listbull -d listbull \
 
 ---
 
-## 9. BotFather'ı konfigüre et
+## 9. Bot'u konfigüre et
 
-Telegram'da [@BotFather](https://t.me/BotFather)'a dön, botunu seç,
-**Bot Settings** → şunları yap:
+İki kısımdan ibaret:
 
-- **`/setdomain`** → `myapp.com` (bot Mini App'i açabilsin)
-- **`/setjoingroups`** → **Disable** (bot grup eklenmesin)
+1. **Otomatik kısım** — webhook, slash komutları, chat-menu button.
+   Tek script ile bitiyor.
+2. **Manuel kısım** — `/newapp`, `/setmainminiapp`, `/setdomain`,
+   `/setinline`, `/setinlinefeedback`, `/setjoingroups`. Bunlar
+   BotFather'a özel komutlar; Telegram public Bot API'de karşılığı
+   YOK, manuel çalıştırmak zorundasın.
+
+### 9a. Otomatik (script)
+
+Repo root'unda:
+
+```bash
+TELEGRAM_BOT_TOKEN="<your bot token>" \
+TELEGRAM_WEBHOOK_SECRET="<your webhook secret>" \
+APP_BASE_URL="https://myapp.com" \
+  npm run setup:bot
+```
+
+Script şunları yapar:
+
+- `setWebhook` → `https://myapp.com/api/telegram/webhook` (allowed
+  updates: message, inline_query, **chosen_inline_result**,
+  callback_query — Quick Create için `chosen_inline_result` zorunlu)
+- `setMyCommands` → /start, /help, /lists, /share, /snapshot, /reset
+- `setChatMenuButton` → Web App → `https://myapp.com/app`
+- `getWebhookInfo` ile doğrular (pending=0, last_error=none beklenir)
+- Sonunda **manuel BotFather adımlarını ekranına basar**, copy-paste
+  ederek BotFather chat'ine girersin.
+
+### 9b. Manuel (BotFather chat'i)
+
+Script bittikten sonra basacağı adımlar (referans için burada da var):
+
+[@BotFather](https://t.me/BotFather) → botunu seç → **Bot Settings**:
+
+- **`/setdomain`** → `myapp.com`
+- **`/setjoingroups`** → **Disable**
 - **`/setinline`** → **Enable**, placeholder: `Search items…`
-- **`/setinlinefeedback`** → bot seç → **Enabled** (Quick Create için
-  zorunlu — Telegram aksi takdirde `chosen_inline_result` update'i
+- **`/setinlinefeedback`** → **Enabled** (Quick Create'in zorunlu
+  ayağı — Telegram aksi takdirde `chosen_inline_result` update'ini
   yollamaz)
-- **`/setmenubutton`** → **Web App** → `https://myapp.com/app`
 
-Menu button Telegram chat'inde sağ alttaki "/" yerine **Web App**
-ikonuyla görünecek.
+**Chat-list "Aç / Open" butonu için (Direct-link Mini App)** —
+Telegram chat listesinde bot satırının yanında doğrudan launch ikonu
+çıkması için ek olarak:
 
----
+- **`/newapp`** → bot seç →
+  - Title: `listbull`
+  - Description: kısa pitch (ör. `AI list assistant — quick lists, reminders, shared`)
+  - Photo: 640×360 PNG (yoksa `/cancel` ile atla, Telegram default kullanır)
+  - Web App URL: `https://myapp.com/app`
+  - Short name: `app` → link `t.me/<bot_username>/app` olur
+- **`/setmainminiapp`** → bot seç → az önce yarattığın `app` →
+  **Enabled**
 
-## 10. Telegram webhook'unu set et
-
-Bot'a gelen mesajların sunucuna gelmesi için Telegram'a webhook URL'i
-söylemen gerek (tek sefer):
-
-```bash
-TOKEN="<TELEGRAM_BOT_TOKEN .env'den>"
-SECRET="<TELEGRAM_WEBHOOK_SECRET .env'den>"
-
-curl -X POST "https://api.telegram.org/bot${TOKEN}/setWebhook" \
-  -H "content-type: application/json" \
-  -d "{
-    \"url\": \"https://myapp.com/api/telegram/webhook\",
-    \"secret_token\": \"${SECRET}\",
-    \"drop_pending_updates\": true,
-    \"allowed_updates\": [\"message\",\"inline_query\",\"chosen_inline_result\",\"callback_query\"]
-  }"
-```
-
-`{"ok":true,...}` cevabı almalısın.
-
-Doğrulama:
-
-```bash
-curl -s "https://api.telegram.org/bot${TOKEN}/getWebhookInfo" | jq
-# "url" senin domain'ini göstermeli, "pending_update_count": 0
-```
+İki adımı yaptıktan sonra Telegram client'ı **tam restart et** (chat-
+list affordance aggressively cache'leniyor). Bot'un chat satırının
+yanında launch ikonu çıkar; menu button'dan AYRIDIR — ikisi birlikte
+çalışır.
 
 ---
 

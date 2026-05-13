@@ -437,19 +437,69 @@ export async function handleMessage(ctx: Context): Promise<void> {
     if (isOwner) {
       lines.push(
         locale === "tr"
-          ? "Bu workspace'in sahibisin ama OpenRouter API key tanımlı değil."
-          : "You own this workspace but no OpenRouter API key is set.",
+          ? "Bu workspace'in sahibisin ama OpenRouter API key tanımlı değil. Onsuz AI cevap veremem."
+          : "You own this workspace but no OpenRouter API key is set. I can't reply without one.",
+      );
+      lines.push("");
+      lines.push(
+        locale === "tr"
+          ? "🔑 OpenRouter ne?"
+          : "🔑 What's OpenRouter?",
       );
       lines.push(
         locale === "tr"
-          ? "Mini App → Workspace ayarları → Workspace API key'den ekle. https://openrouter.ai/keys"
-          : "Add one in Mini App → Workspace settings → Workspace API key. https://openrouter.ai/keys",
+          ? "listbull, Claude / GPT / Gemini gibi modellere OpenRouter üzerinden ulaşır. Sen kendi key'ini koyarsın, sadece kendi kullandığın kadar ödersin — listbull seninle model sağlayıcı arasında durmaz, kullanım datası bize gelmez."
+          : "listbull reaches Claude / GPT / Gemini through OpenRouter. You set your own key, you pay only for what you use — listbull doesn't sit between you and the model provider, no usage telemetry comes to us.",
+      );
+      lines.push("");
+      lines.push(
+        locale === "tr"
+          ? "📋 Key nasıl alınır (~3 dk)"
+          : "📋 How to get a key (~3 min)",
+      );
+      lines.push(
+        locale === "tr"
+          ? "  1. openrouter.ai/keys → Sign in (Google / GitHub yeter)"
+          : "  1. openrouter.ai/keys → Sign in (Google / GitHub work)",
+      );
+      lines.push(
+        locale === "tr"
+          ? "  2. Settings → Credits → min $5 yükle (default model claude-haiku-4.5 ile ~5000 mesaj)"
+          : "  2. Settings → Credits → add at least $5 (≈5,000 messages on the default claude-haiku-4.5 model)",
+      );
+      lines.push(
+        locale === "tr"
+          ? "  3. Keys → 'Create Key' → kopyala (sk-or-v1-… ile başlar)"
+          : "  3. Keys → 'Create Key' → copy (starts with sk-or-v1-…)",
+      );
+      lines.push("");
+      lines.push(
+        locale === "tr"
+          ? "📥 Nereye yapıştırırım"
+          : "📥 Where to paste it",
+      );
+      lines.push(
+        locale === "tr"
+          ? "Mini App'i aç (alt sağdaki Open App butonu) → Workspace ayarları → Workspace API key → yapıştır → Kaydet. Key sunucuda AES-256-GCM ile şifrelenir; bir daha plaintext görünmez. Bu workspace'in tüm üyeleri bu key'i kullanır (sen taşırsın)."
+          : "Open Mini App (Open App button bottom-right) → Workspace settings → Workspace API key → paste → Save. The key is AES-256-GCM encrypted at rest; you'll never see it plaintext again. Every member of this workspace uses this key (you bear the cost).",
+      );
+      lines.push("");
+      lines.push(
+        locale === "tr"
+          ? "💡 İpucu: Settings → Models'tan farklı bir default model seçebilirsin (Claude Sonnet 4 daha akıllı, biraz pahalı; Haiku 4.5 ucuz + hızlı; Gemini 2.5 Flash en ucuz)."
+          : "💡 Tip: Settings → Models lets you pick a different default (Claude Sonnet 4 smarter but pricier; Haiku 4.5 cheap + fast; Gemini 2.5 Flash cheapest).",
       );
     } else {
       lines.push(
         locale === "tr"
-          ? "Bu workspace'in sahibinin OpenRouter API key tanımlaması gerek."
-          : "This workspace's owner needs to set the OpenRouter API key.",
+          ? "Bu workspace'in sahibinin OpenRouter API key tanımlaması gerek. Sen üyesin, key'i sen koyamazsın."
+          : "This workspace's owner needs to set the OpenRouter API key. You're a member, you can't set it.",
+      );
+      lines.push("");
+      lines.push(
+        locale === "tr"
+          ? "Owner'a şu adımları ilet: openrouter.ai/keys → key al ($5+ credit) → Mini App → Workspace ayarları → Workspace API key → yapıştır."
+          : "Pass these steps to the owner: openrouter.ai/keys → get a key ($5+ credit) → Mini App → Workspace settings → Workspace API key → paste.",
       );
     }
 
@@ -457,8 +507,8 @@ export async function handleMessage(ctx: Context): Promise<void> {
       lines.push("");
       lines.push(
         locale === "tr"
-          ? "Veya key'i tanımlı olan başka bir workspace'ine geçebilirsin:"
-          : "Or switch to a workspace where a key is already set:",
+          ? "🔄 Veya key'i tanımlı başka bir workspace'ine geç:"
+          : "🔄 Or switch to a workspace where a key is already set:",
       );
       for (const w of otherWithKey) {
         lines.push(
@@ -469,7 +519,9 @@ export async function handleMessage(ctx: Context): Promise<void> {
       }
     }
 
-    await ctx.reply(lines.join("\n"));
+    await ctx.reply(lines.join("\n"), {
+      link_preview_options: { is_disabled: true },
+    });
     return;
   }
 

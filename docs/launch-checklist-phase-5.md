@@ -197,6 +197,42 @@ https://prod.listbull.org/app
 listbull        (button label)
 ```
 
+```
+/setinlinefeedback
+@listbull_bot
+Enabled
+```
+
+(Required so Telegram routes `chosen_inline_result` updates — Quick
+Create from inline mode depends on it.)
+
+### 3d.1. Direct-link Mini App (chat-list "Open" affordance)
+
+This is what surfaces an "Open" button next to the bot's row in
+Telegram's chat list (and a prominent CTA in the bot's profile sheet).
+Separate from the menu button; both stay live together.
+
+```
+/newapp
+@listbull_bot
+Title:        listbull
+Description:  AI list assistant — quick lists, reminders, shared
+Photo:        upload handoff/brand/png/listbull-app-icon-1024.png
+Web App URL:  https://prod.listbull.org/app
+Short name:   app          → link becomes t.me/listbull_bot/app
+```
+
+```
+/setmainminiapp
+@listbull_bot
+app          (the short_name from /newapp above)
+Enabled
+```
+
+After this, **restart your Telegram client** (the chat-list affordance
+is cached aggressively). The launch icon appears next to the bot's
+row; tapping it opens the Mini App without entering the chat first.
+
 ### 3e. Webhook (one-time `setWebhook` call)
 
 Run on your laptop:
@@ -212,7 +248,7 @@ curl -X POST "https://api.telegram.org/bot${TOKEN}/setWebhook" \
     \"url\": \"${URL}\",
     \"secret_token\": \"${SECRET}\",
     \"drop_pending_updates\": true,
-    \"allowed_updates\": [\"message\",\"inline_query\",\"callback_query\"]
+    \"allowed_updates\": [\"message\",\"inline_query\",\"chosen_inline_result\",\"callback_query\"]
   }"
 ```
 
