@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CustomBotSection } from "@/components/workspace/custom-bot-section";
+import { DefaultListVisibilitySection } from "@/components/workspace/default-list-visibility-section";
 import { LlmModelSection } from "@/components/workspace/llm-model-section";
 import { MembersSection } from "@/components/workspace/members-section";
 import { OrgKeySection } from "@/components/workspace/org-key-section";
@@ -177,6 +178,11 @@ export default async function WorkspaceSettingsPage() {
         />
 
         <LlmModelSection
+          workspaceId={active.id}
+          canManage={active.role === "owner"}
+        />
+
+        <DefaultListVisibilitySection
           workspaceId={active.id}
           canManage={active.role === "owner"}
         />

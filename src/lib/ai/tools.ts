@@ -403,6 +403,8 @@ export const updateListInputSchema = z
     emoji: z.string().trim().min(1).max(8).nullable().optional(),
     /** Phase 16: toggle checklist mode on/off. */
     is_checklist: z.boolean().optional(),
+    /** Phase 16/#28: toggle list visibility public/private. */
+    visibility: z.enum(["public", "private"]).optional(),
   })
   .refine((v) => v.list_id !== undefined || v.list_name !== undefined, {
     message: "Either list_id or list_name is required",
@@ -411,9 +413,11 @@ export const updateListInputSchema = z
     (v) =>
       v.name !== undefined ||
       v.emoji !== undefined ||
-      v.is_checklist !== undefined,
+      v.is_checklist !== undefined ||
+      v.visibility !== undefined,
     {
-      message: "At least one of `name`, `emoji`, or `is_checklist` must be supplied",
+      message:
+        "At least one of `name`, `emoji`, `is_checklist`, or `visibility` must be supplied",
     },
   );
 
@@ -423,8 +427,11 @@ export const updateListOutputSchema = z.object({
     name: z.string(),
     emoji: z.string().nullable(),
     is_checklist: z.boolean(),
+    visibility: z.enum(["public", "private"]),
   }),
-  changes: z.array(z.enum(["name", "emoji", "is_checklist"])),
+  changes: z.array(
+    z.enum(["name", "emoji", "is_checklist", "visibility"]),
+  ),
 });
 
 export type UpdateListInput = z.infer<typeof updateListInputSchema>;

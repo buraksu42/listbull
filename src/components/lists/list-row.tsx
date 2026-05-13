@@ -5,11 +5,12 @@ import type { ListWithCounts } from "@/lib/db/queries/lists";
 export function ListRow({ list }: { list: ListWithCounts }) {
   const emoji = list.emoji ?? (list.isInbox ? "📥" : "📋");
   const total = list.openCount + list.doneCount;
+  const isPublic = list.visibility === "public";
 
   return (
     <Link
       href={`/lists/${list.id}`}
-      aria-label={`${list.isInbox ? "Inbox" : list.name} — ${list.openCount} open, ${list.doneCount} done`}
+      aria-label={`${list.isInbox ? "Inbox" : list.name} — ${list.openCount} open, ${list.doneCount} done${isPublic ? ", public" : ""}`}
       style={{
         display: "flex",
         alignItems: "center",
@@ -27,12 +28,25 @@ export function ListRow({ list }: { list: ListWithCounts }) {
       <span
         style={{
           flex: 1,
-          fontSize: "var(--lb-fs-lg)",
-          fontWeight: "var(--lb-fw-medium)",
-          letterSpacing: "var(--lb-tracking-title)",
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--lb-sp-2)",
+          minWidth: 0,
         }}
       >
-        {list.isInbox ? "Inbox" : list.name}
+        <span
+          style={{
+            fontSize: "var(--lb-fs-lg)",
+            fontWeight: "var(--lb-fw-medium)",
+            letterSpacing: "var(--lb-tracking-title)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {list.isInbox ? "Inbox" : list.name}
+        </span>
+        {!list.isInbox && <VisibilityBadge isPublic={isPublic} />}
       </span>
       <span
         aria-hidden
@@ -49,5 +63,35 @@ export function ListRow({ list }: { list: ListWithCounts }) {
             : `${list.openCount}/${total}`}
       </span>
     </Link>
+  );
+}
+
+function VisibilityBadge({ isPublic }: { isPublic: boolean }) {
+  return (
+    <span
+      aria-label={isPublic ? "public list" : "private list"}
+      title={
+        isPublic
+          ? "Public — workspace üyeleri görür"
+          : "Private — sadece list üyeleri görür"
+      }
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        fontSize: "var(--lb-fs-xs)",
+        color: "var(--lb-muted-fg)",
+        background: isPublic
+          ? "color-mix(in srgb, var(--lb-accent) 12%, transparent)"
+          : "transparent",
+        border: isPublic
+          ? "1px solid color-mix(in srgb, var(--lb-accent) 35%, transparent)"
+          : "1px solid var(--lb-border)",
+        borderRadius: 6,
+        padding: "1px 6px",
+        flexShrink: 0,
+      }}
+    >
+      {isPublic ? "🌐" : "🔒"}
+    </span>
   );
 }

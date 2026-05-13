@@ -27,7 +27,8 @@ export async function executeUpdateList(
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
-  const { list_id, list_name, name, emoji, is_checklist } = parsed.data;
+  const { list_id, list_name, name, emoji, is_checklist, visibility } =
+    parsed.data;
 
   // Resolve list (owner-only path — search list_members for owner role).
   const found = await resolveOwnedList(
@@ -48,7 +49,7 @@ export async function executeUpdateList(
   const current = found.list;
 
   // Compute the patch + which fields actually changed.
-  const changes: Array<"name" | "emoji" | "is_checklist"> = [];
+  const changes: Array<"name" | "emoji" | "is_checklist" | "visibility"> = [];
   const patch: Partial<typeof lists.$inferInsert> = {
     updatedAt: new Date(),
   };
@@ -64,6 +65,10 @@ export async function executeUpdateList(
     patch.isChecklist = is_checklist;
     changes.push("is_checklist");
   }
+  if (visibility !== undefined && visibility !== current.visibility) {
+    patch.visibility = visibility;
+    changes.push("visibility");
+  }
 
   if (changes.length === 0) {
     // Idempotent no-op: requested state matches current; skip activity_log.
@@ -73,6 +78,7 @@ export async function executeUpdateList(
         name: current.name,
         emoji: current.emoji,
         is_checklist: current.isChecklist,
+        visibility: current.visibility as "public" | "private",
       },
       changes: [],
     });
@@ -102,6 +108,7 @@ export async function executeUpdateList(
         name: updated.name,
         emoji: updated.emoji,
         is_checklist: updated.isChecklist,
+        visibility: updated.visibility as "public" | "private",
       },
       changes,
     });
