@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Footer } from "@/components/marketing/footer";
 import { GITHUB_URL } from "@/components/marketing/links";
+import { SiteHeader } from "@/components/marketing/site-header";
 
 export const metadata = {
   title: "Install listbull — self-host guide",
@@ -33,6 +34,8 @@ export default function InstallPage() {
         flexDirection: "column",
       }}
     >
+      <SiteHeader />
+
       <header
         style={{
           padding: "var(--lb-sp-12) var(--lb-sp-4) var(--lb-sp-8)",

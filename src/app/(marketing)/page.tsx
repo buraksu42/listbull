@@ -4,6 +4,7 @@ import { FeaturesGrid } from "@/components/marketing/features-grid";
 import { Footer } from "@/components/marketing/footer";
 import { Hero } from "@/components/marketing/hero";
 import { HowItWorks } from "@/components/marketing/how-it-works";
+import { SiteHeader } from "@/components/marketing/site-header";
 
 export const metadata = {
   title: "listbull — open-source Telegram-native AI list assistant",
@@ -41,6 +42,8 @@ export default function MarketingHome() {
           flexDirection: "column",
         }}
       >
+        <SiteHeader />
+
         <Hero
           tagline="AI lists, on your Telegram, on your server."
           subtitle="Self-host the Telegram-native AI list assistant. Talk to it like a friend, share lists with your group, run reminders — all on infrastructure you control."
