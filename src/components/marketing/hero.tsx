@@ -1,12 +1,17 @@
 /**
- * Marketing landing hero — light-only surface.
+ * Marketing landing hero — light-only surface, DIY-first OSS framing.
  *
  * Anti-list strict: no glassmorphism, no gradient text, no neon glow, no
- * cosmic imagery, no stock illustrations. Just the brand mark + wordmark
- * + tagline + subtitle + two CTAs (Open in Telegram, View on GitHub).
+ * cosmic imagery, no stock illustrations. Brand mark scales large (~220px
+ * desktop, smaller on mobile via clamp), wordmark + tagline below, then
+ * two CTAs (Deploy your own → /install, View on GitHub).
  *
- * a11y: skip link to "How it works" lives at the top of the page-level
- * landing component (not here) so it's the very first focusable element.
+ * Primary CTA points at the in-repo install guide, not the hosted bot —
+ * the site positions self-hosting as the canonical path. Demo-bot
+ * disclosure lives in the footer.
+ *
+ * a11y: skip link to "How it works" lives at the page-level so it's the
+ * very first focusable element.
  */
 import Link from "next/link";
 
@@ -14,25 +19,23 @@ import { BrandMark } from "@/components/marketing/brand-mark";
 import { GITHUB_URL } from "@/components/marketing/links";
 
 type HeroProps = {
-  botUrl: string;
   tagline: string;
   subtitle: string;
-  openInTelegramLabel: string;
+  deployLabel: string;
   viewOnGitHubLabel: string;
 };
 
 export function Hero({
-  botUrl,
   tagline,
   subtitle,
-  openInTelegramLabel,
+  deployLabel,
   viewOnGitHubLabel,
 }: HeroProps) {
   return (
     <section
       aria-label="listbull"
       style={{
-        padding: "var(--lb-sp-12) var(--lb-sp-4) var(--lb-sp-10)",
+        padding: "var(--lb-sp-14) var(--lb-sp-4) var(--lb-sp-12)",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -40,12 +43,25 @@ export function Hero({
         textAlign: "center",
       }}
     >
-      <BrandMark size={72} ariaLabel="listbull" />
+      {/* Brand mark scales fluidly: 140px floor (mobile), 240px ceiling
+          (wide desktop). 22vw covers the in-between span without media
+          queries. */}
+      <div
+        style={{
+          width: "clamp(140px, 22vw, 240px)",
+          height: "clamp(140px, 22vw, 240px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <BrandMark size="100%" ariaLabel="listbull" />
+      </div>
 
       <span
         className="lb-wordmark"
         style={{
-          fontSize: "var(--lb-fs-3xl)",
+          fontSize: "clamp(1.75rem, 4vw, 2.5rem)",
           color: "var(--lb-ink-deep)",
         }}
       >
@@ -54,11 +70,12 @@ export function Hero({
 
       <h1
         style={{
-          fontSize: "var(--lb-fs-4xl)",
+          fontSize: "clamp(2.25rem, 5.5vw, 4rem)",
           fontWeight: "var(--lb-fw-bold)",
           letterSpacing: "var(--lb-tracking-title)",
-          lineHeight: 1.15,
-          maxWidth: 640,
+          lineHeight: 1.1,
+          maxWidth: 800,
+          margin: 0,
         }}
       >
         {tagline}
@@ -66,10 +83,11 @@ export function Hero({
 
       <p
         style={{
-          fontSize: "var(--lb-fs-xl)",
+          fontSize: "clamp(1.05rem, 1.6vw, 1.25rem)",
           color: "var(--lb-muted-fg)",
-          lineHeight: 1.5,
-          maxWidth: 560,
+          lineHeight: 1.55,
+          maxWidth: 620,
+          margin: 0,
         }}
       >
         {subtitle}
@@ -81,10 +99,11 @@ export function Hero({
           gap: "var(--lb-sp-3)",
           flexWrap: "wrap",
           justifyContent: "center",
+          marginTop: "var(--lb-sp-2)",
         }}
       >
         <Link
-          href={botUrl}
+          href="/install"
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -98,7 +117,7 @@ export function Hero({
             textDecoration: "none",
           }}
         >
-          {openInTelegramLabel}
+          {deployLabel}
         </Link>
         <a
           href={GITHUB_URL}

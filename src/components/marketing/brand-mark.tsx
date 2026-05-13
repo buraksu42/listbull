@@ -15,7 +15,7 @@
 import * as React from "react";
 
 type BrandMarkProps = {
-  size?: number;
+  size?: number | string;
   className?: string;
   ariaLabel?: string;
 };

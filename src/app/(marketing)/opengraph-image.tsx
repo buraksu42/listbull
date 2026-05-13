@@ -85,7 +85,7 @@ export default function OgImage() {
             textAlign: "center",
           }}
         >
-          Your todos, in Telegram.
+          AI lists, on your Telegram, on your server.
         </div>
 
         <div
@@ -96,7 +96,7 @@ export default function OgImage() {
             marginTop: 24,
           }}
         >
-          Open source · BYOK · Self-hostable
+          Open source · self-hostable · BYOK
         </div>
       </div>
     ),

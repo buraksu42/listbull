@@ -1,31 +1,63 @@
 /**
- * Marketing footer — short, no chrome. Surfaces both:
- *  - the GitHub repo (this codebase) for self-hosters
- *  - the project home (listbull.org) for "what is this" / install docs
+ * Marketing footer — short, nav links + demo-bot disclosure.
+ *
+ * Nav order: Home / Features / Install / GitHub. Demo-bot disclosure is
+ * a single muted line — the hosted @listbull_bot is a convenience, not
+ * the canonical path. Self-host is the canonical path.
  */
-import { GITHUB_URL, PROJECT_HOME_URL } from "@/components/marketing/links";
+import Link from "next/link";
+
+import { GITHUB_URL } from "@/components/marketing/links";
 
 type FooterProps = {
   hostedLabel: string;
   licenseLabel: string;
   copyrightLabel: string;
-  projectHomeLabel?: string;
 };
 
 export function Footer({
   hostedLabel,
   licenseLabel,
   copyrightLabel,
-  projectHomeLabel = "Project home & install docs",
 }: FooterProps) {
   return (
     <footer
       style={{
-        padding: "var(--lb-sp-8) var(--lb-sp-4)",
+        padding: "var(--lb-sp-10) var(--lb-sp-4) var(--lb-sp-8)",
         textAlign: "center",
         borderTop: "1px solid var(--lb-border)",
       }}
     >
+      <nav
+        aria-label="footer"
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "center",
+          gap: "var(--lb-sp-5)",
+          marginBottom: "var(--lb-sp-6)",
+          fontSize: "var(--lb-fs-md)",
+        }}
+      >
+        <Link href="/" style={{ color: "inherit" }}>
+          Home
+        </Link>
+        <Link href="/features" style={{ color: "inherit" }}>
+          Features
+        </Link>
+        <Link href="/install" style={{ color: "inherit" }}>
+          Install
+        </Link>
+        <a
+          href={GITHUB_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: "inherit" }}
+        >
+          GitHub
+        </a>
+      </nav>
+
       <ul
         style={{
           listStyle: "none",
@@ -39,24 +71,16 @@ export function Footer({
         }}
       >
         <li>
+          Demo:{" "}
           <a
-            href={PROJECT_HOME_URL}
+            href="https://t.me/listbull_bot"
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: "inherit" }}
           >
-            {projectHomeLabel} → {PROJECT_HOME_URL.replace("https://", "")}
-          </a>
-        </li>
-        <li>
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "inherit" }}
-          >
-            {GITHUB_URL.replace("https://", "")}
-          </a>
+            @listbull_bot
+          </a>{" "}
+          — operator-hosted, 30-day data retention, not for production.
         </li>
         <li>{hostedLabel}</li>
         <li>{licenseLabel}</li>
