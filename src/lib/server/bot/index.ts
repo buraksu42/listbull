@@ -8,6 +8,7 @@ import { handleReset } from "@/lib/server/bot/commands/reset";
 import { handleShare } from "@/lib/server/bot/commands/share";
 import { handleSnapshot } from "@/lib/server/bot/commands/snapshot";
 import { handleStart } from "@/lib/server/bot/commands/start";
+import { handleToday } from "@/lib/server/bot/commands/today";
 import { handleUnbindGroup } from "@/lib/server/bot/commands/unbind-group";
 import { handleMessage } from "@/lib/server/bot/handle-message";
 import { handleBindCallback } from "@/lib/server/bot/handlers/bind-callback";
@@ -133,6 +134,7 @@ function registerHandlers(bot: Bot): void {
   bot.command("share", handleShare);
   bot.command("reset", handleReset);
   bot.command("snapshot", handleSnapshot);
+  bot.command("today", handleToday);
   bot.command("bindgroup", handleBindGroup);
   bot.command("unbindgroup", handleUnbindGroup);
   bot.on("inline_query", handleInlineQuery);

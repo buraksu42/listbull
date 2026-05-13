@@ -83,6 +83,7 @@ async function main(): Promise<void> {
       { command: "lists", description: "Show your lists" },
       { command: "share", description: "Share a list with someone" },
       { command: "snapshot", description: "Send a list snapshot to chat" },
+      { command: "today", description: "Today's tasks for this workspace" },
       { command: "bindgroup", description: "Bind a workspace to a group" },
       { command: "unbindgroup", description: "Unbind a workspace from this group" },
       { command: "reset", description: "Clear conversation context" },
