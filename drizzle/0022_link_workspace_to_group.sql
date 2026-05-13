@@ -11,8 +11,8 @@
 -- handle values up to 2^53-1 and Telegram chat_ids stay well below.
 
 ALTER TABLE workspaces
-  ADD COLUMN linked_telegram_chat_id BIGINT;
+  ADD COLUMN IF NOT EXISTS linked_telegram_chat_id BIGINT;
 
-CREATE UNIQUE INDEX workspaces_linked_chat_id_uq
+CREATE UNIQUE INDEX IF NOT EXISTS workspaces_linked_chat_id_uq
   ON workspaces (linked_telegram_chat_id)
   WHERE linked_telegram_chat_id IS NOT NULL;
