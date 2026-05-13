@@ -5,6 +5,7 @@ import Link from "next/link";
 import * as React from "react";
 
 import { ShareSheet, useShareDeeplink } from "@/components/lists/share-sheet";
+import { VisibilityToggle } from "@/components/lists/visibility-toggle";
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,14 +24,17 @@ export function ListHeader({
   emoji,
   isInbox,
   currentUserRole,
+  visibility,
 }: {
   listId: string;
   listName: string;
   emoji: string;
   isInbox: boolean;
   currentUserRole: "owner" | "editor" | "viewer";
+  visibility: "public" | "private";
 }) {
   const canShare = currentUserRole === "owner" && !isInbox;
+  const showVisibility = !isInbox;
   const [shareOpen, setShareOpen] = React.useState(false);
 
   // Hook reads `?share=1` once and pops the sheet (only when canShare).
@@ -65,6 +69,14 @@ export function ListHeader({
         </h1>
 
         <div className="flex items-center gap-1">
+          {showVisibility && (
+            <VisibilityToggle
+              listId={listId}
+              listName={listName}
+              initialVisibility={visibility}
+              canManage={currentUserRole === "owner"}
+            />
+          )}
           <Link
             href={
               currentUserRole === "owner"

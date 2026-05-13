@@ -75,6 +75,7 @@ async function ListDetail({
         emoji={emoji}
         isInbox={list.isInbox}
         currentUserRole={currentUserRole}
+        visibility={list.visibility as "public" | "private"}
       />
 
       {!list.isInbox && (
