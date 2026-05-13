@@ -111,6 +111,15 @@ export const lists = pgTable(
      * a `list_runs` row capturing pre-reset completion stats.
      */
     isChecklist: boolean("is_checklist").notNull().default(false),
+    /**
+     * Phase 16/#28: visibility within the workspace. 'public' lists
+     * are readable + writable by every workspace member according to
+     * their workspace role (owner/admin/editor write, viewer/guest
+     * read). 'private' lists keep the legacy list_members gate.
+     * Default comes from workspaces.default_list_visibility at insert
+     * time; the app layer fills this in.
+     */
+    visibility: text("visibility").notNull().default("private"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },
@@ -120,6 +129,9 @@ export const lists = pgTable(
     uniqueIndex("lists_workspace_inbox_unique")
       .on(t.workspaceId)
       .where(sql`${t.isInbox} = true`),
+    index("lists_workspace_visibility_idx")
+      .on(t.workspaceId, t.visibility)
+      .where(sql`${t.archivedAt} IS NULL`),
   ],
 );
 
@@ -578,6 +590,15 @@ export const workspaces = pgTable(
      * (idempotency, analogous to users.daily_digest_sent_on).
      */
     lastDailyPushOn: date("last_daily_push_on"),
+    /**
+     * Default visibility for new lists in this workspace ('public' or
+     * 'private'). At list creation we copy this into lists.visibility
+     * unless the caller passes an override. Existing workspaces ship
+     * with 'private' to keep historical behavior intact.
+     */
+    defaultListVisibility: text("default_list_visibility")
+      .notNull()
+      .default("private"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },

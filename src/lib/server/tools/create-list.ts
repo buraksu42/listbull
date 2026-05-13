@@ -8,11 +8,14 @@
  */
 import "server-only";
 
+import { eq } from "drizzle-orm";
+
 import { db } from "@/lib/db/client";
 import {
   activityLog,
   listMembers,
   lists,
+  workspaces,
 } from "@/lib/db/schema";
 import {
   createListInputSchema,
@@ -31,7 +34,7 @@ export async function executeCreateList(
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
-  const { name, emoji, is_checklist } = parsed.data;
+  const { name, emoji, is_checklist, visibility } = parsed.data;
 
   // Default emoji if neither user nor LLM supplied one. Avoids "naked"
   // list names in the bot's reply that look out-of-place next to other
@@ -42,6 +45,21 @@ export async function executeCreateList(
     emoji === undefined ? (is_checklist ? "☑️" : "📋") : emoji;
 
   return await db.transaction(async (tx) => {
+    // Visibility resolution (Phase 16/#28):
+    //   1. caller-supplied input wins
+    //   2. else inherit workspaces.default_list_visibility
+    let finalVisibility: "public" | "private" = visibility ?? "private";
+    if (!visibility) {
+      const [ws] = await tx
+        .select({
+          defaultListVisibility: workspaces.defaultListVisibility,
+        })
+        .from(workspaces)
+        .where(eq(workspaces.id, ctx.workspaceId))
+        .limit(1);
+      if (ws?.defaultListVisibility === "public") finalVisibility = "public";
+    }
+
     const [created] = await tx
       .insert(lists)
       .values({
@@ -51,6 +69,7 @@ export async function executeCreateList(
         workspaceId: ctx.workspaceId,
         isInbox: false,
         isChecklist: is_checklist ?? false,
+        visibility: finalVisibility,
       })
       .returning();
     if (!created) throw new Error("create-list: insert returned no row");
@@ -77,6 +96,7 @@ export async function executeCreateList(
         name: created.name,
         emoji: created.emoji,
         is_checklist: created.isChecklist,
+        visibility: finalVisibility,
       },
     });
   });

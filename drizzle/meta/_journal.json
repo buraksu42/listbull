@@ -176,6 +176,13 @@
       "when": 1778890900000,
       "tag": "0024_workspace_daily_push",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1778891000000,
+      "tag": "0025_list_visibility",
+      "breakpoints": true
     }
   ]
 }

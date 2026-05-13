@@ -61,6 +61,7 @@ export async function generateExportBundle(
       workspaceId: lists.workspaceId,
       isInbox: lists.isInbox,
       isChecklist: lists.isChecklist,
+      visibility: lists.visibility,
       archivedAt: lists.archivedAt,
       createdAt: lists.createdAt,
       updatedAt: lists.updatedAt,

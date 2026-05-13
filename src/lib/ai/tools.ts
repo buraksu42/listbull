@@ -367,6 +367,13 @@ export const createListInputSchema = z.object({
    * every item back to status='open' and logs a `list_runs` row.
    */
   is_checklist: z.boolean().optional(),
+  /**
+   * Phase 16/#28: list visibility within the workspace. 'public'
+   * opens the list to every workspace member; 'private' keeps the
+   * legacy list_members gate. Omit (or null) to inherit the
+   * workspace's `default_list_visibility`.
+   */
+  visibility: z.enum(["public", "private"]).optional(),
 });
 
 export const createListOutputSchema = z.object({
@@ -375,6 +382,7 @@ export const createListOutputSchema = z.object({
     name: z.string(),
     emoji: z.string().nullable(),
     is_checklist: z.boolean(),
+    visibility: z.enum(["public", "private"]),
   }),
 });
 

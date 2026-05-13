@@ -3,14 +3,17 @@
  * route. Membership/role checks live here too so executors and routes
  * share one canonical path.
  */
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { items, listMembers, lists } from "@/lib/db/schema";
-import type { Item, ListRole, NewItem } from "@/lib/types";
+import { items, listMembers, lists, workspaceMembers } from "@/lib/db/schema";
+import type { Item, ListRole, NewItem, WorkspaceRole } from "@/lib/types";
 
 /** Roles allowed to mutate items in a list. Viewer is read-only. */
 const WRITE_ROLES: ListRole[] = ["owner", "editor"];
+
+/** Workspace roles that grant write access on PUBLIC lists. */
+const WORKSPACE_WRITE_ROLES: WorkspaceRole[] = ["owner", "admin", "editor"];
 
 /**
  * Fetch one item by primary key. Returns undefined for missing rows.
@@ -75,7 +78,8 @@ export async function userCanWriteList(
   listId: string,
   workspaceId: string,
 ): Promise<boolean> {
-  const rows = await db
+  // Path A: legacy list_members row with a write-capable role.
+  const listMemberRows = await db
     .select({ id: listMembers.id })
     .from(listMembers)
     .innerJoin(lists, eq(lists.id, listMembers.listId))
@@ -88,21 +92,45 @@ export async function userCanWriteList(
       ),
     )
     .limit(1);
-  return rows.length > 0;
+  if (listMemberRows.length > 0) return true;
+
+  // Path B (Phase 16/#28): list is public AND caller is a workspace
+  // member with a write-capable workspace role.
+  const publicRows = await db
+    .select({ id: lists.id })
+    .from(lists)
+    .innerJoin(
+      workspaceMembers,
+      and(
+        eq(workspaceMembers.workspaceId, lists.workspaceId),
+        eq(workspaceMembers.userId, userId),
+      ),
+    )
+    .where(
+      and(
+        eq(lists.id, listId),
+        eq(lists.workspaceId, workspaceId),
+        sql`${lists.visibility} = 'public'`,
+        inArray(workspaceMembers.role, WORKSPACE_WRITE_ROLES),
+      ),
+    )
+    .limit(1);
+  return publicRows.length > 0;
 }
 
 /**
- * Membership predicate: does the user have ANY role (owner | editor |
- * viewer) on the given list within the active workspace? Used by
- * read-only Mini App routes (e.g. attachment GET) where viewers
- * should still be able to fetch bytes.
+ * Membership predicate: can the user READ the given list in the
+ * active workspace? Two paths:
+ *   - list_members row exists (any role), OR
+ *   - list.visibility='public' AND user is a workspace member
+ *     (any workspace role can read public lists).
  */
 export async function userCanReadList(
   userId: string,
   listId: string,
   workspaceId: string,
 ): Promise<boolean> {
-  const rows = await db
+  const listMemberRows = await db
     .select({ id: listMembers.id })
     .from(listMembers)
     .innerJoin(lists, eq(lists.id, listMembers.listId))
@@ -114,5 +142,25 @@ export async function userCanReadList(
       ),
     )
     .limit(1);
-  return rows.length > 0;
+  if (listMemberRows.length > 0) return true;
+
+  const publicRows = await db
+    .select({ id: lists.id })
+    .from(lists)
+    .innerJoin(
+      workspaceMembers,
+      and(
+        eq(workspaceMembers.workspaceId, lists.workspaceId),
+        eq(workspaceMembers.userId, userId),
+      ),
+    )
+    .where(
+      and(
+        eq(lists.id, listId),
+        eq(lists.workspaceId, workspaceId),
+        sql`${lists.visibility} = 'public'`,
+      ),
+    )
+    .limit(1);
+  return publicRows.length > 0;
 }

@@ -1,7 +1,12 @@
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { items, listMembers, lists } from "@/lib/db/schema";
+import {
+  items,
+  listMembers,
+  lists,
+  workspaceMembers,
+} from "@/lib/db/schema";
 import { ensurePersonalWorkspace } from "./workspaces";
 import type { Item, List, NewList } from "@/lib/types";
 
@@ -73,20 +78,41 @@ export async function listListsForUser(
   userId: string,
   workspaceId: string,
 ): Promise<ListWithCounts[]> {
+  // Phase 16/#28: visibility-aware enumeration. A list is visible to
+  // the user when EITHER a list_members row exists (any role) OR the
+  // list is public AND the user is a workspace member. We pivot off
+  // `lists` (instead of list_members like before) and OR-join both
+  // membership paths.
   const rows = await db
     .select({
       list: lists,
       openCount: sql<number>`count(*) filter (where ${items.id} is not null and ${items.isDone} = false and ${items.archivedAt} is null)`,
       doneCount: sql<number>`count(*) filter (where ${items.id} is not null and ${items.isDone} = true and ${items.archivedAt} is null)`,
     })
-    .from(listMembers)
-    .innerJoin(lists, eq(listMembers.listId, lists.id))
+    .from(lists)
+    .innerJoin(
+      workspaceMembers,
+      and(
+        eq(workspaceMembers.workspaceId, lists.workspaceId),
+        eq(workspaceMembers.userId, userId),
+      ),
+    )
+    .leftJoin(
+      listMembers,
+      and(
+        eq(listMembers.listId, lists.id),
+        eq(listMembers.userId, userId),
+      ),
+    )
     .leftJoin(items, eq(items.listId, lists.id))
     .where(
       and(
-        eq(listMembers.userId, userId),
         eq(lists.workspaceId, workspaceId),
         isNull(lists.archivedAt),
+        or(
+          sql`${listMembers.id} IS NOT NULL`,
+          sql`${lists.visibility} = 'public'`,
+        ),
       ),
     )
     .groupBy(lists.id)
@@ -116,7 +142,8 @@ export async function userCanReadList(
   listId: string,
   workspaceId: string,
 ): Promise<boolean> {
-  const rows = await db
+  // Path A: legacy list_members row.
+  const listMemberRows = await db
     .select({ id: listMembers.id })
     .from(listMembers)
     .innerJoin(lists, eq(lists.id, listMembers.listId))
@@ -128,7 +155,28 @@ export async function userCanReadList(
       ),
     )
     .limit(1);
-  return rows.length > 0;
+  if (listMemberRows.length > 0) return true;
+
+  // Path B (Phase 16/#28): public list + workspace member.
+  const publicRows = await db
+    .select({ id: lists.id })
+    .from(lists)
+    .innerJoin(
+      workspaceMembers,
+      and(
+        eq(workspaceMembers.workspaceId, lists.workspaceId),
+        eq(workspaceMembers.userId, userId),
+      ),
+    )
+    .where(
+      and(
+        eq(lists.id, listId),
+        eq(lists.workspaceId, workspaceId),
+        sql`${lists.visibility} = 'public'`,
+      ),
+    )
+    .limit(1);
+  return publicRows.length > 0;
 }
 
 /** Get a list by ID; returns undefined if missing or archived. */
