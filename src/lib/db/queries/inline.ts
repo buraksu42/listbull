@@ -345,6 +345,104 @@ export async function searchInlineByTag(
 }
 
 /**
+ * Phase 16/inline-B: "share list" smart query.
+ *
+ * Returns up to 5 lists matching `query` (ILIKE), each with the first
+ * 5 open items as a preview, so the inline handler can render rich
+ * "share this list" cards. Different shape than searchInlineLists
+ * (which is just metadata + open count).
+ */
+export type InlineListPreview = {
+  listId: string;
+  listName: string;
+  listEmoji: string | null;
+  openCount: number;
+  /** First 5 open items as plain text rows, ready to render. */
+  previewItems: string[];
+};
+
+const LIST_PREVIEW_CARDS_CAP = 5;
+const LIST_PREVIEW_ITEMS_CAP = 5;
+
+export async function searchInlineListPreviews(
+  userId: string,
+  query: string,
+): Promise<InlineListPreview[]> {
+  const trimmed = query.trim();
+  const conds = [
+    eq(listMembers.userId, userId),
+    isNull(lists.archivedAt),
+  ];
+  if (trimmed.length > 0) {
+    const escaped = escapeLike(trimmed);
+    conds.push(sql`${lists.name} ILIKE ${"%" + escaped + "%"}`);
+  }
+
+  // Fetch the matching list metadata first; preview items come in a
+  // second query so the row count stays bounded by LIST_PREVIEW_CARDS_CAP.
+  const listRows = await db
+    .select({
+      listId: lists.id,
+      listName: lists.name,
+      listEmoji: lists.emoji,
+      openCount: sql<number>`(
+        SELECT count(*)::int FROM ${items}
+        WHERE ${items.listId} = ${lists.id}
+          AND ${items.isDone} = false
+          AND ${items.archivedAt} IS NULL
+      )`,
+    })
+    .from(lists)
+    .innerJoin(listMembers, eq(listMembers.listId, lists.id))
+    .where(and(...conds))
+    .orderBy(desc(lists.createdAt))
+    .limit(LIST_PREVIEW_CARDS_CAP);
+
+  if (listRows.length === 0) return [];
+
+  const listIds = listRows.map((r) => r.listId);
+
+  // One query for all preview items across the matched lists.
+  // ROW_NUMBER inside Postgres prunes to the first N items per list
+  // without N round-trips.
+  const previewRows = await db.execute<{
+    list_id: string;
+    text: string;
+    rn: number;
+  }>(sql`
+    SELECT list_id, text, rn FROM (
+      SELECT
+        ${items.listId} AS list_id,
+        ${items.text} AS text,
+        ROW_NUMBER() OVER (
+          PARTITION BY ${items.listId}
+          ORDER BY ${items.position} ASC, ${items.createdAt} ASC
+        ) AS rn
+      FROM ${items}
+      WHERE ${items.listId} = ANY(${listIds})
+        AND ${items.isDone} = false
+        AND ${items.archivedAt} IS NULL
+    ) sub
+    WHERE sub.rn <= ${LIST_PREVIEW_ITEMS_CAP}
+  `);
+
+  const byList = new Map<string, string[]>();
+  for (const row of previewRows) {
+    const arr = byList.get(row.list_id) ?? [];
+    arr.push(row.text);
+    byList.set(row.list_id, arr);
+  }
+
+  return listRows.map((r) => ({
+    listId: r.listId,
+    listName: r.listName,
+    listEmoji: r.listEmoji,
+    openCount: r.openCount,
+    previewItems: byList.get(r.listId) ?? [],
+  }));
+}
+
+/**
  * Compute [start, end) window for "next N local-days" given a
  * timezone, returning UTC Date objects suitable for the DB. dayOffset
  * is the start offset (0 = today), dayCount the window length.

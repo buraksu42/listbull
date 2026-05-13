@@ -25,11 +25,13 @@ import type { InlineQueryResultArticle } from "grammy/types";
 
 import {
   INLINE_RESULT_CAP,
+  type InlineListPreview,
   type InlineListRow,
   type InlineSearchRow,
   searchInlineByAssignee,
   searchInlineByTag,
   searchInlineItems,
+  searchInlineListPreviews,
   searchInlineLists,
   searchInlineToday,
   searchInlineWeek,
@@ -65,6 +67,23 @@ export async function handleInlineQuery(ctx: Context): Promise<void> {
 
   const locale = pickLocale(user.locale);
   const query = inline.query ?? "";
+
+  // List-share short-circuit: `@bot :listname` → rich preview cards
+  // for matching lists (up to 5), each with first 5 items inline so
+  // the user can forward a list snapshot to another chat without
+  // leaving the picker.
+  const shareTarget = parseListSharePrefix(query);
+  if (shareTarget !== null) {
+    const previews = await searchInlineListPreviews(user.id, shareTarget);
+    const cards = previews.map((p) =>
+      buildListSharePreviewCard(p, locale),
+    );
+    await ctx.answerInlineQuery(cards, {
+      cache_time: CACHE_SECONDS,
+      is_personal: true,
+    });
+    return;
+  }
 
   // Smart-query short-circuit: recognized prefixes route to filtered
   // queries instead of the plain ILIKE search. The summary card
@@ -275,6 +294,74 @@ export function mapRowToInlineResult(
     title,
     description,
     deeplink,
+  };
+}
+
+// ─── List-share plumbing (Phase 16/inline-B) ─────────────────────────
+
+/**
+ * `@bot :foo` activates list-share mode and the rest of the query is
+ * fed to `searchInlineListPreviews`. `:` alone surfaces the user's
+ * most-recent lists (so a "share without remembering the name" tap
+ * still works). Returns the search fragment, or null when the query
+ * isn't a list-share invocation.
+ */
+export function parseListSharePrefix(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith(":")) return null;
+  return trimmed.slice(1).trim();
+}
+
+function buildListSharePreviewCard(
+  preview: InlineListPreview,
+  locale: "tr" | "en",
+): InlineQueryResultArticle {
+  const emoji = preview.listEmoji ?? "📋";
+  const titleRaw = `${emoji} ${preview.listName}`.replace(/\s+/g, " ").trim();
+  const title = titleRaw.length > TITLE_MAX
+    ? `${titleRaw.slice(0, TITLE_MAX - 1)}…`
+    : titleRaw;
+  const description =
+    locale === "tr"
+      ? `${preview.openCount} açık öğe · liste'yi paylaş`
+      : `${preview.openCount} open · share this list`;
+
+  // Inserted message body: list header + first 5 items + deeplink to
+  // the full list in the Mini App.
+  const lines: string[] = [
+    `${emoji} ${preview.listName} (${preview.openCount} ${locale === "tr" ? "açık" : "open"})`,
+    "",
+  ];
+  for (const itemText of preview.previewItems) {
+    const truncated =
+      itemText.length > 60 ? `${itemText.slice(0, 60)}…` : itemText;
+    lines.push(`• ${truncated}`);
+  }
+  if (preview.openCount > preview.previewItems.length) {
+    lines.push(
+      locale === "tr"
+        ? `… ve ${preview.openCount - preview.previewItems.length} daha`
+        : `… and ${preview.openCount - preview.previewItems.length} more`,
+    );
+  }
+  lines.push("");
+  const startapp = `list_${preview.listId}`;
+  const deeplink = `https://t.me/${env.TELEGRAM_BOT_USERNAME}?startapp=${startapp}`;
+  lines.push(
+    locale === "tr"
+      ? `📲 Tümünü gör: ${deeplink}`
+      : `📲 See all: ${deeplink}`,
+  );
+
+  return {
+    type: "article",
+    id: `share:${preview.listId}`,
+    title,
+    description,
+    input_message_content: {
+      message_text: lines.join("\n"),
+      link_preview_options: { is_disabled: true },
+    },
   };
 }
 
