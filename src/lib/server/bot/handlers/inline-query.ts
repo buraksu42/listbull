@@ -26,8 +26,13 @@ import type { InlineQueryResultArticle } from "grammy/types";
 import {
   INLINE_RESULT_CAP,
   type InlineListRow,
+  type InlineSearchRow,
+  searchInlineByAssignee,
+  searchInlineByTag,
   searchInlineItems,
   searchInlineLists,
+  searchInlineToday,
+  searchInlineWeek,
 } from "@/lib/db/queries/inline";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
@@ -60,6 +65,37 @@ export async function handleInlineQuery(ctx: Context): Promise<void> {
 
   const locale = pickLocale(user.locale);
   const query = inline.query ?? "";
+
+  // Smart-query short-circuit: recognized prefixes route to filtered
+  // queries instead of the plain ILIKE search. The summary card
+  // describes what the filter matched; rest of the cards are the
+  // matching items. List search is skipped — these prefixes are
+  // semantic, "matching list names" wouldn't make sense.
+  const smart = parseSmartQuery(query);
+  if (smart) {
+    const matched = await runSmartQuery(smart, user.id, user.timezone);
+    const summary = buildSmartSummaryCard(smart, matched.length, locale);
+    const itemArticles = matched.map((row) => {
+      const result = mapRowToInlineResult(row, locale);
+      return {
+        type: "article" as const,
+        id: `item:${result.id}`,
+        title: result.title,
+        description: result.description,
+        input_message_content: {
+          message_text: result.deeplink,
+          link_preview_options: { is_disabled: false },
+        },
+        ...(result.thumbUrl ? { thumb_url: result.thumbUrl } : {}),
+      };
+    });
+    await ctx.answerInlineQuery([summary, ...itemArticles], {
+      cache_time: CACHE_SECONDS,
+      is_personal: true,
+    });
+    return;
+  }
+
   const [itemRows, listRows] = await Promise.all([
     searchInlineItems(user.id, query),
     searchInlineLists(user.id, query),
@@ -239,6 +275,159 @@ export function mapRowToInlineResult(
     title,
     description,
     deeplink,
+  };
+}
+
+// ─── Smart-query plumbing (Phase 16/inline-C) ────────────────────────
+
+type SmartQuery =
+  | { kind: "today" }
+  | { kind: "week" }
+  | { kind: "assignee"; username: string }
+  | { kind: "tag"; tag: string };
+
+/**
+ * Recognize a smart-query prefix. Returns null when the query is a
+ * plain text search. Matching is case-insensitive and forgiving — we
+ * accept "bugün", "today", "BUGÜN" all the same.
+ */
+export function parseSmartQuery(raw: string): SmartQuery | null {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return null;
+
+  const lower = trimmed.toLowerCase();
+  if (lower === "bugün" || lower === "bugun" || lower === "today") {
+    return { kind: "today" };
+  }
+  if (
+    lower === "hafta" ||
+    lower === "bu hafta" ||
+    lower === "week" ||
+    lower === "this week"
+  ) {
+    return { kind: "week" };
+  }
+
+  if (trimmed.startsWith("@")) {
+    const username = trimmed.slice(1).split(/\s+/)[0] ?? "";
+    if (username.length === 0) return null;
+    return { kind: "assignee", username };
+  }
+
+  if (trimmed.startsWith("#")) {
+    const tag = trimmed.slice(1).split(/\s+/)[0] ?? "";
+    if (tag.length === 0) return null;
+    return { kind: "tag", tag };
+  }
+
+  return null;
+}
+
+async function runSmartQuery(
+  q: SmartQuery,
+  userId: string,
+  timezone: string,
+): Promise<InlineSearchRow[]> {
+  switch (q.kind) {
+    case "today":
+      return searchInlineToday(userId, timezone);
+    case "week":
+      return searchInlineWeek(userId, timezone);
+    case "assignee":
+      return searchInlineByAssignee(userId, q.username);
+    case "tag":
+      return searchInlineByTag(userId, q.tag);
+  }
+}
+
+/**
+ * The first card in a smart-query result describes what the filter
+ * matched ("📅 Bugün için 3 item"). Tapping the summary inserts a
+ * deeplink to the matching Mini App view (today/week) or, for
+ * assignee/tag, a textual summary the user can paste.
+ */
+function buildSmartSummaryCard(
+  q: SmartQuery,
+  matchCount: number,
+  locale: "tr" | "en",
+): InlineQueryResultArticle {
+  let icon: string;
+  let title: string;
+  let description: string;
+  let messageText: string;
+
+  const botUsername = env.TELEGRAM_BOT_USERNAME;
+
+  switch (q.kind) {
+    case "today": {
+      icon = "📅";
+      title =
+        locale === "tr"
+          ? `${icon} Bugün — ${matchCount} item`
+          : `${icon} Today — ${matchCount} items`;
+      description =
+        locale === "tr"
+          ? "Mini App'te bugünün görünümünü aç"
+          : "Open today's view in the Mini App";
+      messageText = `https://t.me/${botUsername}?startapp=view_today`;
+      break;
+    }
+    case "week": {
+      icon = "🗓";
+      title =
+        locale === "tr"
+          ? `${icon} Bu hafta — ${matchCount} item`
+          : `${icon} This week — ${matchCount} items`;
+      description =
+        locale === "tr"
+          ? "Mini App'te haftanın görünümünü aç"
+          : "Open this week's view in the Mini App";
+      messageText = `https://t.me/${botUsername}?startapp=view_week`;
+      break;
+    }
+    case "assignee": {
+      icon = "👤";
+      title =
+        locale === "tr"
+          ? `${icon} @${q.username} — ${matchCount} açık item`
+          : `${icon} @${q.username} — ${matchCount} open items`;
+      description =
+        locale === "tr"
+          ? "Bu kullanıcıya atanmış işler"
+          : "Items assigned to this user";
+      messageText =
+        locale === "tr"
+          ? `@${q.username} — ${matchCount} açık item (listbull)`
+          : `@${q.username} — ${matchCount} open items (listbull)`;
+      break;
+    }
+    case "tag": {
+      icon = "🏷";
+      title =
+        locale === "tr"
+          ? `${icon} #${q.tag} — ${matchCount} açık item`
+          : `${icon} #${q.tag} — ${matchCount} open items`;
+      description =
+        locale === "tr"
+          ? "Bu etiketli açık işler"
+          : "Open items with this tag";
+      messageText =
+        locale === "tr"
+          ? `#${q.tag} — ${matchCount} açık item (listbull)`
+          : `#${q.tag} — ${matchCount} open items (listbull)`;
+      break;
+    }
+  }
+
+  return {
+    type: "article",
+    id: `smart:${q.kind}:${matchCount}`,
+    title,
+    description,
+    input_message_content: {
+      message_text: messageText,
+      link_preview_options: { is_disabled: q.kind === "assignee" || q.kind === "tag" },
+    },
   };
 }
 
