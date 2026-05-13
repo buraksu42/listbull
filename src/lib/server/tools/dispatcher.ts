@@ -151,8 +151,94 @@ async function routeCall(
         ok: false,
         error: {
           code: ERR.bad_input,
-          message: `Unknown tool: ${name}`,
+          message: buildUnknownToolMessage(name as string),
         },
       };
   }
+}
+
+/**
+ * Known tool registry — kept in sync with the `case` arms above. Used
+ * to surface a Levenshtein-suggested correction when the LLM
+ * hallucinates a tool name (rare but happens during dense batches).
+ * The model reads the hint on the next turn and self-corrects.
+ */
+const KNOWN_TOOLS = [
+  "create_item",
+  "search_items",
+  "update_item",
+  "complete_item",
+  "delete_item",
+  "list_lists",
+  "create_list",
+  "update_list",
+  "delete_list",
+  "restore_list",
+  "share_list",
+  "create_snapshot",
+  "cancel_invite",
+  "list_members",
+  "remove_member",
+  "update_member_role",
+  "update_settings",
+  "set_deadline",
+  "add_reminder",
+  "remove_reminder",
+  "attach_file_to_item",
+  "start_checklist_run",
+  "complete_checklist_run",
+  "assign_item",
+  "create_workspace",
+  "switch_workspace",
+  "list_workspaces",
+  "update_workspace",
+  "invite_to_workspace",
+  "remove_workspace_member",
+  "list_workspace_invites",
+  "cancel_workspace_invite",
+  "set_item_attributes",
+] as const;
+
+function buildUnknownToolMessage(badName: string): string {
+  const suggestion = closestTool(badName);
+  if (suggestion) {
+    return `Unknown tool: ${badName}. Did you mean: ${suggestion}? Retry with the correct name.`;
+  }
+  return `Unknown tool: ${badName}. Valid tools include create_item, create_list, update_item — see the schema.`;
+}
+
+function closestTool(name: string): string | null {
+  let best: { tool: string; dist: number } | null = null;
+  for (const tool of KNOWN_TOOLS) {
+    const dist = levenshtein(name.toLowerCase(), tool);
+    if (!best || dist < best.dist) {
+      best = { tool, dist };
+    }
+  }
+  // Only suggest when the typo is "close enough" — beyond ~4 edits the
+  // model probably picked the wrong tool family entirely; suggesting
+  // would be misleading.
+  if (!best || best.dist > 4) return null;
+  return best.tool;
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const prev: number[] = new Array(b.length + 1).fill(0).map((_, i) => i);
+  const curr: number[] = new Array(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(
+        (curr[j - 1] ?? 0) + 1,
+        (prev[j] ?? 0) + 1,
+        (prev[j - 1] ?? 0) + cost,
+      );
+    }
+    for (let j = 0; j <= b.length; j++) prev[j] = curr[j] ?? 0;
+  }
+  return prev[b.length] ?? 0;
 }
