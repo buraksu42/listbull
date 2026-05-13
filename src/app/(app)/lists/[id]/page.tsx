@@ -109,6 +109,9 @@ async function ListDetail({
           listId={listId}
           initialItems={items}
           initialMembers={members}
+          canAdd={
+            currentUserRole === "owner" || currentUserRole === "editor"
+          }
         />
       )}
     </>

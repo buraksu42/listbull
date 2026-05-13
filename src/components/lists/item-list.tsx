@@ -7,6 +7,7 @@ import * as React from "react";
 import { ChecklistBanner } from "@/components/lists/checklist-banner";
 import { DraggableItemList } from "@/components/lists/draggable-item-list";
 import { ItemDeleteConfirm } from "@/components/lists/item-delete-confirm";
+import { QuickAddItem } from "@/components/lists/quick-add-item";
 import {
   ItemEditSheet,
   type ItemEditPatch,
@@ -61,6 +62,7 @@ export function ItemList({
   initialItems,
   initialMembers = [],
   isChecklist = false,
+  canAdd = false,
 }: {
   listId: string;
   initialItems: Item[];
@@ -74,6 +76,11 @@ export function ItemList({
    * "Yeni run başlat" CTA) above the item list.
    */
   isChecklist?: boolean;
+  /**
+   * Phase 16/#30: when true, render the inline quick-add input above
+   * the items. Hidden for viewers / non-members.
+   */
+  canAdd?: boolean;
 }) {
   const queryClient = useQueryClient();
 
@@ -314,16 +321,24 @@ export function ItemList({
 
   if (items.length === 0) {
     return (
-      <EmptyState
-        icon={<Inbox className="h-6 w-6" aria-hidden />}
-        title="Empty list"
-        description="Send a message to the bot to add an item."
-      />
+      <>
+        <QuickAddItem listId={listId} canAdd={canAdd} />
+        <EmptyState
+          icon={<Inbox className="h-6 w-6" aria-hidden />}
+          title="Empty list"
+          description={
+            canAdd
+              ? "Yukarıdaki kutuya ilk item'ı yaz veya bot'a mesaj at."
+              : "Send a message to the bot to add an item."
+          }
+        />
+      </>
     );
   }
 
   return (
     <>
+      <QuickAddItem listId={listId} canAdd={canAdd} />
       {isChecklist && <ChecklistBanner listId={listId} />}
       {!isChecklist && (
         <ItemFilters
