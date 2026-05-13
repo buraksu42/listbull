@@ -27,6 +27,7 @@ import { env } from "@/lib/env";
 import { getRecentMessages, insertMessages } from "@/lib/db/queries/messages";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import {
+  getWorkspaceByChatId,
   getWorkspaceLlmModel,
   getWorkspaceMembership,
   getWorkspaceOrgKeyEncrypted,
@@ -77,6 +78,10 @@ const COPY = {
     audioTooLong:
       "Ses kaydı çok uzun (15 MB üstü). Daha kısa bir kayıt gönder.",
     audioEmpty: "Ses kaydında konuşma duyamadım, tekrar dener misin?",
+    groupNotBound:
+      "Bu grup henüz bir workspace'e bağlı değil. Sahibi olduğun bir workspace varsa /bindgroup ile bağla; yoksa Mini App'ten yarat.",
+    groupNotMember:
+      "Bu workspace'in üyesi değilsin. Sahibinden seni davet etmesini iste (DM'den /share veya Mini App → Workspace settings).",
   },
   en: {
     noKey:
@@ -91,6 +96,10 @@ const COPY = {
     transcribeFailed: "I couldn't transcribe that audio — try again?",
     audioTooLong: "That audio is too large (over 15 MB). Send a shorter clip.",
     audioEmpty: "I didn't hear any speech in that audio — try again?",
+    groupNotBound:
+      "This group isn't bound to any workspace yet. If you own a workspace, run /bindgroup to bind it; otherwise create one in the Mini App.",
+    groupNotMember:
+      "You're not a member of this workspace. Ask the owner to invite you (DM /share or Mini App → Workspace settings).",
   },
 } as const;
 
@@ -381,6 +390,29 @@ export async function handleMessage(ctx: Context): Promise<void> {
   const locale = pickLocale(user.locale);
   const copy = COPY[locale];
   const chatId = message.chat.id;
+  const isGroupContext =
+    message.chat.type === "group" || message.chat.type === "supergroup";
+
+  // Group-context safety filter: even though Telegram's privacy mode
+  // ON delivers only @-mentions + commands + replies-to-bot, an
+  // operator who flips privacy OFF would otherwise pipe every group
+  // message into the LLM. Skip messages that don't address us.
+  if (isGroupContext && !forward && !attachment) {
+    const botUsername = ctx.me.username;
+    const mentionsBot =
+      effectiveText.includes(`@${botUsername}`) ||
+      (message.reply_to_message?.from?.id === ctx.me.id);
+    if (!mentionsBot) {
+      return;
+    }
+    // Strip the @-mention so the LLM sees the user's intent only.
+    effectiveText = effectiveText
+      .replace(new RegExp(`@${botUsername}\\b`, "gi"), "")
+      .trim();
+    if (effectiveText.length === 0 && !message.reply_to_message?.text) {
+      return;
+    }
+  }
 
   // Phase 10 per-user hourly rate limit. Activated when
   // LISTBULL_PER_USER_HOURLY_MSG_LIMIT > 0; disabled at 0 (default).
@@ -399,12 +431,49 @@ export async function handleMessage(ctx: Context): Promise<void> {
     }
   }
 
-  // OpenRouter API key resolution: workspace org-key is the ONLY path.
-  // The workspace owner sets it in Mini App → Workspace settings →
-  // Workspace API key. Every member of the workspace uses it. Per-user
-  // BYOK and env-key operator fallback were both removed to collapse
-  // the key model to one decision: "whose key funds this workspace?"
-  const workspaceId = await resolveActiveWorkspaceId(user.id);
+  // Workspace resolution branches on chat type:
+  //   - Private DM:   user's active workspace (existing behavior).
+  //   - Group/super:  the workspace bound to this chat_id (via
+  //                   /bindgroup). Sender must be a workspace member;
+  //                   otherwise the bot replies with an "ask the owner
+  //                   to invite you" hint and exits.
+  // OpenRouter API key resolution is the same downstream — workspace
+  // org-key is the ONLY path.
+  let workspaceId: string;
+  if (isGroupContext) {
+    const bound = await getWorkspaceByChatId(chatId);
+    if (!bound) {
+      await ctx.reply(copy.groupNotBound);
+      return;
+    }
+    const membership = await getWorkspaceMembership(user.id, bound.id);
+    if (!membership) {
+      await ctx.reply(copy.groupNotMember);
+      return;
+    }
+    workspaceId = bound.id;
+
+    // Inject reply-to context: if the user is responding to ANOTHER
+    // user's message (not the bot), prepend that text so the LLM acts
+    // on it ("@bot bunu listeye ekle" replying to "Thanksgiving" →
+    // creates item with the Thanksgiving text). For replies to the
+    // bot's own message we skip (it's just continuing a thread).
+    const replyTo = message.reply_to_message;
+    if (
+      replyTo &&
+      replyTo.from?.id !== ctx.me.id &&
+      typeof replyTo.text === "string" &&
+      replyTo.text.length > 0
+    ) {
+      const sender =
+        replyTo.from?.username ??
+        replyTo.from?.first_name ??
+        "user";
+      effectiveText = `[Replying to @${sender}: ${replyTo.text}]\n${effectiveText}`.trim();
+    }
+  } else {
+    workspaceId = await resolveActiveWorkspaceId(user.id);
+  }
 
   let apiKey: string | null = null;
   const orgKeyEnc = await getWorkspaceOrgKeyEncrypted(workspaceId);

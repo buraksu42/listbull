@@ -70,6 +70,7 @@ async function main(): Promise<void> {
       "inline_query",
       "chosen_inline_result",
       "callback_query",
+      "my_chat_member",
     ],
   });
   console.log(`  ok: ${webhookUrl}`);
@@ -82,6 +83,8 @@ async function main(): Promise<void> {
       { command: "lists", description: "Show your lists" },
       { command: "share", description: "Share a list with someone" },
       { command: "snapshot", description: "Send a list snapshot to chat" },
+      { command: "bindgroup", description: "Bind a workspace to a group" },
+      { command: "unbindgroup", description: "Unbind a workspace from this group" },
       { command: "reset", description: "Clear conversation context" },
     ],
   });
@@ -120,21 +123,27 @@ async function main(): Promise<void> {
   console.log("");
   console.log(`  1. Open https://t.me/BotFather`);
   console.log(`  2. /setdomain          @${botUsername} → ${hostnameOf(APP_BASE_URL)}`);
-  console.log(`  3. /setjoingroups      @${botUsername} → Disable`);
-  console.log(`  4. /setinline          @${botUsername} → Enable`);
+  console.log(`  3. /setjoingroups      @${botUsername} → Enable`);
+  console.log(`                          (lets users add the bot to`);
+  console.log(`                           groups for /bindgroup support)`);
+  console.log(`  4. /setprivacy         @${botUsername} → Enable`);
+  console.log(`                          (bot only sees @mentions +`);
+  console.log(`                           commands + replies-to-bot —`);
+  console.log(`                           never the whole group convo)`);
+  console.log(`  5. /setinline          @${botUsername} → Enable`);
   console.log(`                          placeholder: Search items…`);
-  console.log(`  5. /setinlinefeedback  @${botUsername} → Enabled`);
+  console.log(`  6. /setinlinefeedback  @${botUsername} → Enabled`);
   console.log(`                          (required for Quick Create)`);
   console.log("");
   console.log("  Chat-list \"Open\" affordance (direct-link Mini App):");
-  console.log(`  6. /newapp             @${botUsername}`);
+  console.log(`  7. /newapp             @${botUsername}`);
   console.log(`                          Title:       listbull`);
   console.log(`                          Description: AI list assistant`);
   console.log(`                          Photo:       640x360 PNG (or skip)`);
   console.log(`                          URL:         ${miniAppUrl}`);
   console.log(`                          Short name:  app`);
   console.log(`                          → link: t.me/${botUsername}/app`);
-  console.log(`  7. /setmainminiapp     @${botUsername} → app → Enabled`);
+  console.log(`  8. /setmainminiapp     @${botUsername} → app → Enabled`);
   console.log(`                          (then RESTART your Telegram client`);
   console.log(`                           — chat-list affordance is cached)`);
   console.log("");

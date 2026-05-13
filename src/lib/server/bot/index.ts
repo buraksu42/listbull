@@ -1,15 +1,19 @@
 import { Bot } from "grammy";
 import { eq } from "drizzle-orm";
 
+import { handleBindGroup } from "@/lib/server/bot/commands/bind-group";
 import { handleHelp } from "@/lib/server/bot/commands/help";
 import { handleLists } from "@/lib/server/bot/commands/lists";
 import { handleReset } from "@/lib/server/bot/commands/reset";
 import { handleShare } from "@/lib/server/bot/commands/share";
 import { handleSnapshot } from "@/lib/server/bot/commands/snapshot";
 import { handleStart } from "@/lib/server/bot/commands/start";
+import { handleUnbindGroup } from "@/lib/server/bot/commands/unbind-group";
 import { handleMessage } from "@/lib/server/bot/handle-message";
+import { handleBindCallback } from "@/lib/server/bot/handlers/bind-callback";
 import { handleChosenInlineResult } from "@/lib/server/bot/handlers/chosen-inline-result";
 import { handleInlineQuery } from "@/lib/server/bot/handlers/inline-query";
+import { handleMyChatMember } from "@/lib/server/bot/handlers/my-chat-member";
 import { db } from "@/lib/db/client";
 import { bots } from "@/lib/db/schema";
 import { decrypt } from "@/lib/server/encryption";
@@ -129,8 +133,17 @@ function registerHandlers(bot: Bot): void {
   bot.command("share", handleShare);
   bot.command("reset", handleReset);
   bot.command("snapshot", handleSnapshot);
+  bot.command("bindgroup", handleBindGroup);
+  bot.command("unbindgroup", handleUnbindGroup);
   bot.on("inline_query", handleInlineQuery);
   bot.on("chosen_inline_result", handleChosenInlineResult);
+  // /bindgroup picker callbacks ride on callback_query updates. The
+  // handler ignores anything that doesn't start with `bind:` so other
+  // callback flows can be added later without colliding.
+  bot.on("callback_query:data", handleBindCallback);
+  // Bot was added to / removed from a chat. We auto-unbind on
+  // remove and DM the inviter on add.
+  bot.on("my_chat_member", handleMyChatMember);
   // Phase 14b: register on `message` (not `message:text`) so photos /
   // videos / documents / audio / voice / video_note also flow into
   // handleMessage. Slash commands stay routed via `bot.command()`
