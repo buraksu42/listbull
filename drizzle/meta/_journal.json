@@ -169,6 +169,13 @@
       "when": 1778890800000,
       "tag": "0023_workspace_join_link",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1778890900000,
+      "tag": "0024_workspace_daily_push",
+      "breakpoints": true
     }
   ]
 }

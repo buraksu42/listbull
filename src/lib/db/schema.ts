@@ -571,6 +571,13 @@ export const workspaces = pgTable(
      * the binding is removed.
      */
     joinLinkToken: text("join_link_token"),
+    /**
+     * Owner-local date of the last daily digest push to this
+     * workspace's bound group. The 09:00-local cron predicate
+     * excludes workspaces whose marker matches today in owner's TZ
+     * (idempotency, analogous to users.daily_digest_sent_on).
+     */
+    lastDailyPushOn: date("last_daily_push_on"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },

@@ -487,6 +487,21 @@ async function main(): Promise<void> {
     } catch (error) {
       console.error("[cron/daily-digest] threw", error);
     }
+
+    // Phase 16/#27: workspace-level daily push (group-bound only).
+    // Same hour-top gate as user digest; cron loop runs every 60 s
+    // and dispatch picks workspaces where owner-local hour == 9.
+    try {
+      const { dispatchWorkspaceDailyPush } = await import(
+        "./workspace-daily-push"
+      );
+      const result = await dispatchWorkspaceDailyPush();
+      if (result.picked > 0) {
+        console.log("[cron/workspace-daily-push]", result);
+      }
+    } catch (error) {
+      console.error("[cron/workspace-daily-push] threw", error);
+    }
   }
 
   await maybePingHeartbeat();
