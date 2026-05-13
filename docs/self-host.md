@@ -234,7 +234,12 @@ Script bittikten sonra basacağı adımlar (referans için burada da var):
 [@BotFather](https://t.me/BotFather) → botunu seç → **Bot Settings**:
 
 - **`/setdomain`** → `myapp.com`
-- **`/setjoingroups`** → **Disable**
+- **`/setjoingroups`** → **Enable** (kullanıcılar bot'u gruplara
+  ekleyip `/bindgroup` ile workspace bağlayabilsin)
+- **`/setprivacy`** → **Enable** (privacy mode AÇIK — bot grup'ta
+  yalnız @-mention'ları, /komutları ve bot'un mesajlarına gelen
+  yanıtları görür; tüm grup sohbetini DEĞİL. OpenRouter parası
+  patlamaz.)
 - **`/setinline`** → **Enable**, placeholder: `Search items…`
 - **`/setinlinefeedback`** → **Enabled** (Quick Create'in zorunlu
   ayağı — Telegram aksi takdirde `chosen_inline_result` update'ini
@@ -452,6 +457,46 @@ Workspace owner'sın (sen). Mini App `Workspace ayarları → Üyeler`'e
 git, `@username` veya Telegram username gir → davet linki çıkacak.
 O kullanıcı linki tıklayınca senin workspace'inin üyesi olur, senin
 operator-mode key'inle (varsa) bot kullanabilir.
+
+---
+
+## Telegram grup'larında kullan
+
+listbull bot'unu bir Telegram grubuna ekleyip "konuşulan bir şeyi
+to-do açma" akışını grup içinden kullanabilirsin. Şartlar:
+
+1. **Bot ayarlarında**: `/setjoingroups Enable` ve `/setprivacy
+   Enable` BotFather'dan yapılmış olmalı (Adım 9b).
+2. **Workspace bağlanmış olmalı**: grup'a giren bir workspace owner
+   `/bindgroup` çalıştırır → bot kullanıcıyı DM'de yönlendirir,
+   sahip olduğu workspace'lerden birini seçer. Bir grup ↔ bir
+   workspace; bir workspace ↔ bir grup.
+3. **Üyelik gerekir**: grup'ta bot'a mention atan kullanıcı O
+   workspace'in **üyesi** olmalı. Sadece grup üyesi olmak yetmez —
+   davet ayrıca yapılır (Mini App → Workspace settings → Üyeler veya
+   DM'den `/share`).
+
+Kullanım pattern'leri (grup içinde):
+
+```
+@listbull_bot süt yumurta peynir
+  → invoker'ın bağlı workspace'inin Inbox'ına 3 item
+
+(Ali'nin "Thanksgiving düzenleyelim" mesajına reply atarak)
+@listbull_bot bunu listeye ekle
+  → "Thanksgiving düzenleyelim" Inbox'a düşer
+```
+
+Bot grup'ta yalnız @-mention + komut + bot mesajlarına gelen
+reply'leri görür (privacy mode AÇIK); diğer mesajlar LLM'e
+gitmez.
+
+OpenRouter maliyetini **workspace sahibi karşılar** — bağlanan
+workspace'in org-key'i her LLM call için kullanılır.
+
+Bot'u grup'tan çıkarırsan binding **otomatik temizlenir**
+(`my_chat_member` handler). Yeniden eklersen `/bindgroup` ile
+yeniden bağlamak gerekir.
 
 ---
 

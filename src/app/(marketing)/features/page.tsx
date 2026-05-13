@@ -174,6 +174,35 @@ export default function FeaturesPage() {
           </ul>
         </FeatureCard>
 
+        <FeatureCard title="Use in your Telegram group">
+          <p style={pStyle}>
+            Add the bot to a group, run{" "}
+            <code style={inlineCodeStyle}>/bindgroup</code> as the
+            workspace owner — the group is now wired to that workspace.
+            Group members invited to the workspace can capture to-dos
+            from the conversation itself:
+          </p>
+          <ul style={listStyle}>
+            <li>
+              <strong>Mention</strong>:{" "}
+              <code style={inlineCodeStyle}>@listbull_bot süt yumurta peynir</code>{" "}
+              → 3 items in the workspace Inbox.
+            </li>
+            <li>
+              <strong>Reply + mention</strong>: reply to someone&apos;s
+              message with{" "}
+              <code style={inlineCodeStyle}>@listbull_bot bunu listeye ekle</code>{" "}
+              → that quoted text becomes the item.
+            </li>
+          </ul>
+          <p style={pStyle}>
+            Privacy mode stays ON: the bot only sees @-mentions,
+            commands, and replies to its own messages — never the
+            whole group conversation. Non-invited group members get a
+            polite &ldquo;ask the owner to invite you&rdquo; nudge.
+          </p>
+        </FeatureCard>
+
         <FeatureCard title="Sharing with real roles">
           <p style={pStyle}>
             Two sharing layers, both via 7-day Telegram-DM invite links:
