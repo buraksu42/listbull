@@ -479,12 +479,122 @@ export async function bindWorkspaceToChat(
  * Unbind whatever workspace owns this chat. No-op if nothing is bound.
  * Called by the operator's `/unbindgroup` command AND by the
  * `my_chat_member` handler when the bot is kicked from the group.
+ *
+ * Also clears `join_link_token` — the link becomes useless without
+ * the binding anyway, and re-binding regenerates a fresh token.
  */
 export async function unbindChat(chatId: number): Promise<void> {
   await db
     .update(workspaces)
-    .set({ linkedTelegramChatId: null })
+    .set({ linkedTelegramChatId: null, joinLinkToken: null })
     .where(eq(workspaces.linkedTelegramChatId, chatId));
+}
+
+/**
+ * Ensure the workspace has a join-link token. Idempotent — returns
+ * the existing token if one is already set, otherwise generates a
+ * 32-byte base64url token, stores it, and returns the new value.
+ *
+ * Called by the /bindgroup success path right after
+ * `bindWorkspaceToChat` so the bot can post the join URL in the group.
+ */
+export async function ensureWorkspaceJoinToken(
+  workspaceId: string,
+): Promise<string> {
+  const [row] = await db
+    .select({ token: workspaces.joinLinkToken })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+  if (row?.token) return row.token;
+
+  // crypto.randomBytes(32).toString("base64url") = 43 char URL-safe.
+  // Use globalThis.crypto for edge/runtime compatibility.
+  const bytes = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(bytes);
+  const token = Buffer.from(bytes).toString("base64url");
+
+  await db
+    .update(workspaces)
+    .set({ joinLinkToken: token })
+    .where(eq(workspaces.id, workspaceId));
+  return token;
+}
+
+/**
+ * Lookup the workspace owning this join-link token. Returns id + name
+ * for the accept flow. Null if token isn't recognized or the
+ * workspace was archived.
+ */
+export async function getWorkspaceByJoinToken(
+  token: string,
+): Promise<{ id: string; name: string } | null> {
+  const [row] = await db
+    .select({ id: workspaces.id, name: workspaces.name })
+    .from(workspaces)
+    .where(
+      and(
+        eq(workspaces.joinLinkToken, token),
+        sql`${workspaces.archivedAt} IS NULL`,
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Accept a join-link token: insert/return workspace membership for
+ * the caller as `editor`. Idempotent — already-members get a no-op
+ * with `alreadyMember: true`.
+ */
+export type JoinLinkAcceptResult =
+  | { ok: true; workspaceId: string; workspaceName: string; alreadyMember: boolean }
+  | { ok: false; code: "not_found"; message: string };
+
+export async function acceptWorkspaceJoinLink(
+  token: string,
+  callerId: string,
+): Promise<JoinLinkAcceptResult> {
+  const ws = await getWorkspaceByJoinToken(token);
+  if (!ws) {
+    return {
+      ok: false,
+      code: "not_found",
+      message: "Bu davet linki geçersiz veya iptal edilmiş.",
+    };
+  }
+
+  return db.transaction(async (tx) => {
+    const existing = await tx.query.workspaceMembers.findFirst({
+      where: and(
+        eq(workspaceMembers.workspaceId, ws.id),
+        eq(workspaceMembers.userId, callerId),
+      ),
+    });
+    if (existing) {
+      return {
+        ok: true,
+        workspaceId: ws.id,
+        workspaceName: ws.name,
+        alreadyMember: true,
+      };
+    }
+    await tx.insert(workspaceMembers).values({
+      workspaceId: ws.id,
+      userId: callerId,
+      role: "editor",
+      // invitedBy is non-null FK to users; track who created the
+      // binding so audit makes sense. We don't have that handy here
+      // without an extra lookup — leave null.
+      invitedBy: null,
+    });
+    return {
+      ok: true,
+      workspaceId: ws.id,
+      workspaceName: ws.name,
+      alreadyMember: false,
+    };
+  });
 }
 
 // Order export, no-op consumer for asc — keeps the import live so

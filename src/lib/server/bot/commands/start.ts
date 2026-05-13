@@ -4,7 +4,10 @@ import { env } from "@/lib/env";
 import { ensureInbox } from "@/lib/db/queries/lists";
 import { upsertUserFromTelegram } from "@/lib/db/queries/users";
 import { acceptWorkspaceInvite } from "@/lib/db/queries/workspace-invites";
-import { setActiveWorkspace } from "@/lib/db/queries/workspaces";
+import {
+  acceptWorkspaceJoinLink,
+  setActiveWorkspace,
+} from "@/lib/db/queries/workspaces";
 import { pickLocale, t } from "@/lib/server/bot/i18n";
 
 /**
@@ -48,6 +51,34 @@ export async function handleStart(ctx: Context): Promise<void> {
     typeof (ctx as unknown as { match?: unknown }).match === "string"
       ? ((ctx as unknown as { match: string }).match || "").trim()
       : "";
+
+  // Group join-link payload: anyone with the link taps to join the
+  // workspace as editor. Multi-use; the token persists for the
+  // lifetime of the group binding.
+  if (payload.startsWith("joinws_")) {
+    const token = payload.slice("joinws_".length);
+    const result = await acceptWorkspaceJoinLink(token, user.id);
+    if (result.ok) {
+      await setActiveWorkspace(user.id, result.workspaceId);
+      const miniAppUrl = `https://t.me/${env.TELEGRAM_BOT_USERNAME}?startapp=`;
+      const msg =
+        locale === "tr"
+          ? result.alreadyMember
+            ? `Zaten "${result.workspaceName}" workspace'inin üyesisin. Mini App: ${miniAppUrl}`
+            : `Hoş geldin! "${result.workspaceName}" workspace'ine editor olarak katıldın. Mini App: ${miniAppUrl}`
+          : result.alreadyMember
+            ? `You're already a member of "${result.workspaceName}". Mini App: ${miniAppUrl}`
+            : `Welcome! You joined "${result.workspaceName}" as an editor. Mini App: ${miniAppUrl}`;
+      await ctx.reply(msg);
+      return;
+    }
+    await ctx.reply(
+      locale === "tr"
+        ? "Bu davet linki geçersiz veya iptal edilmiş."
+        : "This invite link is invalid or revoked.",
+    );
+    return;
+  }
 
   if (payload.startsWith("joined_")) {
     const listId = payload.slice("joined_".length);

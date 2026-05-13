@@ -17,11 +17,30 @@ import { InlineKeyboard } from "grammy";
 
 import {
   bindWorkspaceToChat,
+  ensureWorkspaceJoinToken,
   getWorkspaceByChatId,
   listOwnedWorkspaces,
 } from "@/lib/db/queries/workspaces";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
+import { env } from "@/lib/env";
+
+/**
+ * Build the "tap to join workspace" copy posted in the group after
+ * a successful bind. Used by both the auto-bind path (single owned
+ * workspace) and the callback handler (picker selection).
+ */
+export async function buildBindSuccessGroupMessage(
+  workspaceId: string,
+  workspaceName: string,
+  locale: "tr" | "en",
+): Promise<string> {
+  const token = await ensureWorkspaceJoinToken(workspaceId);
+  const joinUrl = `https://t.me/${env.TELEGRAM_BOT_USERNAME}?start=joinws_${token}`;
+  return locale === "tr"
+    ? `✓ "${workspaceName}" bu grupla bağlandı.\n\n📌 Üye olmak için tıkla:\n${joinUrl}\n\nLink'e tıklayan herkes editor olarak workspace'e katılır.`
+    : `✓ "${workspaceName}" is bound to this group.\n\n📌 Tap to join:\n${joinUrl}\n\nAnyone who taps this link joins the workspace as an editor.`;
+}
 
 export async function handleBindGroup(ctx: Context): Promise<void> {
   const from = ctx.from;
@@ -76,11 +95,8 @@ export async function handleBindGroup(ctx: Context): Promise<void> {
     if (!ws) return;
     const result = await bindWorkspaceToChat(ws.id, chat.id);
     if (result.ok) {
-      await ctx.reply(
-        locale === "tr"
-          ? `✓ "${ws.name}" bu grup'a bağlandı. Davet edilmiş üyeler grup'tan @-mention atarak veya bir mesaja reply atıp @${ctx.me.username} <komut> yazarak kullanabilir.`
-          : `✓ "${ws.name}" is bound to this group. Invited members can use it by @-mentioning ${ctx.me.username} or replying to a message with @${ctx.me.username} <command>.`,
-      );
+      const msg = await buildBindSuccessGroupMessage(ws.id, ws.name, locale);
+      await ctx.reply(msg, { link_preview_options: { is_disabled: true } });
       return;
     }
     await replyBindError(ctx, result, locale);

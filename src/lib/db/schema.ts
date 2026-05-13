@@ -563,6 +563,14 @@ export const workspaces = pgTable(
     linkedTelegramChatId: bigint("linked_telegram_chat_id", {
       mode: "number",
     }),
+    /**
+     * Public join token for the workspace's bound group. After
+     * /bindgroup succeeds, the bot generates a base64url token here
+     * and posts a `t.me/<bot>?start=joinws_<token>` link in the
+     * group. Anyone with the link joins as an editor. Cleared when
+     * the binding is removed.
+     */
+    joinLinkToken: text("join_link_token"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },
@@ -575,6 +583,9 @@ export const workspaces = pgTable(
     uniqueIndex("workspaces_linked_chat_id_uq")
       .on(t.linkedTelegramChatId)
       .where(sql`${t.linkedTelegramChatId} IS NOT NULL`),
+    uniqueIndex("workspaces_join_link_token_uq")
+      .on(t.joinLinkToken)
+      .where(sql`${t.joinLinkToken} IS NOT NULL`),
   ],
 );
 

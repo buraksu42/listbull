@@ -12,6 +12,7 @@
  */
 import type { Context } from "grammy";
 
+import { buildBindSuccessGroupMessage } from "@/lib/server/bot/commands/bind-group";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import {
   bindWorkspaceToChat,
@@ -96,13 +97,13 @@ export async function handleBindCallback(ctx: Context): Promise<void> {
   );
 
   // Also confirm in-group so non-invokers see the binding happened.
+  // The group message includes the join link so anyone in the chat
+  // can tap to join the workspace as editor.
   try {
-    await ctx.api.sendMessage(
-      chatId,
-      locale === "tr"
-        ? `✓ "${ws.name}" bu grupla bağlandı. Davet edilmiş üyeler kullanabilir.`
-        : `✓ "${ws.name}" is now bound to this group. Invited members can use it.`,
-    );
+    const msg = await buildBindSuccessGroupMessage(ws.id, ws.name, locale);
+    await ctx.api.sendMessage(chatId, msg, {
+      link_preview_options: { is_disabled: true },
+    });
   } catch {
     // Bot may have been kicked from the group between the picker and
     // the callback. The bind is still recorded; the in-group ping is
