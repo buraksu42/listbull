@@ -186,6 +186,161 @@ export async function getList(listId: string): Promise<List | undefined> {
   });
 }
 
+// ─── List join link (Phase 16/#29) ─────────────────────────────────
+
+/**
+ * Lazily generate a join token for the list. Idempotent — returns
+ * existing token when present, otherwise creates one + persists.
+ */
+export async function ensureListJoinToken(listId: string): Promise<string> {
+  const [existing] = await db
+    .select({ token: lists.joinLinkToken })
+    .from(lists)
+    .where(eq(lists.id, listId))
+    .limit(1);
+  if (existing?.token) return existing.token;
+
+  const bytes = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(bytes);
+  const token = Buffer.from(bytes).toString("base64url");
+
+  await db
+    .update(lists)
+    .set({ joinLinkToken: token })
+    .where(eq(lists.id, listId));
+  return token;
+}
+
+/**
+ * Resolve a join token to the parent list. Returns the workspace_id
+ * + list metadata so the accept flow can verify the caller is a
+ * workspace member (or auto-add).
+ */
+export async function getListByJoinToken(token: string): Promise<
+  | {
+      id: string;
+      name: string;
+      workspaceId: string;
+    }
+  | null
+> {
+  const [row] = await db
+    .select({
+      id: lists.id,
+      name: lists.name,
+      workspaceId: lists.workspaceId,
+    })
+    .from(lists)
+    .where(and(eq(lists.joinLinkToken, token), isNull(lists.archivedAt)))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Accept a list join token: caller becomes a list_members editor
+ * row. Idempotent — already-members get a no-op with alreadyMember=true.
+ * Caller MUST be a workspace_member already; otherwise the accept is
+ * rejected (we don't auto-grant workspace access from a list link).
+ */
+export type ListJoinAcceptResult =
+  | {
+      ok: true;
+      listId: string;
+      listName: string;
+      workspaceId: string;
+      alreadyMember: boolean;
+    }
+  | { ok: false; code: "not_found" | "not_workspace_member"; message: string };
+
+export async function acceptListJoinLink(
+  token: string,
+  callerId: string,
+): Promise<ListJoinAcceptResult> {
+  const list = await getListByJoinToken(token);
+  if (!list) {
+    return {
+      ok: false,
+      code: "not_found",
+      message: "Bu davet linki geçersiz veya kaldırılmış.",
+    };
+  }
+
+  // Workspace membership pre-check. A list-only invite to a non-
+  // workspace-member would create a half-state where the user can
+  // see the list but not the workspace's other context.
+  const wsMember = await db
+    .select({ id: lists.id })
+    .from(workspaceMembers)
+    .where(
+      and(
+        eq(workspaceMembers.workspaceId, list.workspaceId),
+        eq(workspaceMembers.userId, callerId),
+      ),
+    )
+    .limit(1);
+  if (wsMember.length === 0) {
+    return {
+      ok: false,
+      code: "not_workspace_member",
+      message:
+        "Önce workspace üyesi olman gerek. Workspace sahibinden davet iste.",
+    };
+  }
+
+  return db.transaction(async (tx) => {
+    const existing = await tx.query.listMembers.findFirst({
+      where: and(
+        eq(listMembers.listId, list.id),
+        eq(listMembers.userId, callerId),
+      ),
+    });
+    if (existing) {
+      return {
+        ok: true,
+        listId: list.id,
+        listName: list.name,
+        workspaceId: list.workspaceId,
+        alreadyMember: true,
+      };
+    }
+    await tx.insert(listMembers).values({
+      listId: list.id,
+      userId: callerId,
+      role: "editor",
+      invitedBy: null,
+    });
+    return {
+      ok: true,
+      listId: list.id,
+      listName: list.name,
+      workspaceId: list.workspaceId,
+      alreadyMember: false,
+    };
+  });
+}
+
+/**
+ * Phase 16/#29: when a list is created (or flipped to) public,
+ * batch-insert list_members rows for every workspace member that
+ * doesn't already have one. Role defaults to 'editor' — matches the
+ * join-link role default. Idempotent (ON CONFLICT DO NOTHING).
+ *
+ * Called from create-list (after the row is committed) and from the
+ * visibility PATCH endpoint when private → public flip.
+ */
+export async function autoPopulatePublicListMembers(
+  listId: string,
+  workspaceId: string,
+): Promise<void> {
+  await db.execute(sql`
+    INSERT INTO list_members (list_id, user_id, role, invited_by)
+    SELECT ${listId}, wm.user_id, 'editor', NULL
+    FROM workspace_members wm
+    WHERE wm.workspace_id = ${workspaceId}
+    ON CONFLICT (list_id, user_id) DO NOTHING
+  `);
+}
+
 /** Items in a list, ordered for display (active first, then position). */
 export async function listItemsInList(listId: string): Promise<Item[]> {
   return db

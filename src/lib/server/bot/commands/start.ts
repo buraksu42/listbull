@@ -1,7 +1,7 @@
 import type { Context } from "grammy";
 
 import { env } from "@/lib/env";
-import { ensureInbox } from "@/lib/db/queries/lists";
+import { acceptListJoinLink, ensureInbox } from "@/lib/db/queries/lists";
 import { upsertUserFromTelegram } from "@/lib/db/queries/users";
 import { acceptWorkspaceInvite } from "@/lib/db/queries/workspace-invites";
 import {
@@ -51,6 +51,38 @@ export async function handleStart(ctx: Context): Promise<void> {
     typeof (ctx as unknown as { match?: unknown }).match === "string"
       ? ((ctx as unknown as { match: string }).match || "").trim()
       : "";
+
+  // List join-link payload (Phase 16/#29): username-less invite to a
+  // specific list. Caller must already be a workspace member; if not,
+  // we surface a "ask the workspace owner first" hint.
+  if (payload.startsWith("joinlist_")) {
+    const token = payload.slice("joinlist_".length);
+    const result = await acceptListJoinLink(token, user.id);
+    if (result.ok) {
+      await setActiveWorkspace(user.id, result.workspaceId);
+      const miniAppUrl = `https://t.me/${env.TELEGRAM_BOT_USERNAME}?startapp=list_${result.listId}`;
+      const msg =
+        locale === "tr"
+          ? result.alreadyMember
+            ? `"${result.listName}" listesinin zaten üyesisin. Mini App: ${miniAppUrl}`
+            : `Hoş geldin! "${result.listName}" listesine editor olarak katıldın. Mini App: ${miniAppUrl}`
+          : result.alreadyMember
+            ? `You're already a member of "${result.listName}". Mini App: ${miniAppUrl}`
+            : `Welcome! You joined "${result.listName}" as an editor. Mini App: ${miniAppUrl}`;
+      await ctx.reply(msg);
+      return;
+    }
+    await ctx.reply(
+      locale === "tr"
+        ? result.code === "not_workspace_member"
+          ? "Önce workspace üyesi olman gerek. Workspace sahibinden davet iste."
+          : "Bu davet linki geçersiz veya kaldırılmış."
+        : result.code === "not_workspace_member"
+          ? "You need to join the workspace first. Ask the workspace owner for an invite."
+          : "This invite link is invalid or removed.",
+    );
+    return;
+  }
 
   // Group join-link payload: anyone with the link taps to join the
   // workspace as editor. Multi-use; the token persists for the

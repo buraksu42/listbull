@@ -8,7 +8,7 @@
  *
  * Writes an activity_log row so the change shows up in audit/feed.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -98,6 +98,24 @@ export async function PATCH(
     if (!updated) {
       throw new Error("visibility PATCH: update returned no row");
     }
+
+    // Private → public flip: auto-populate workspace members as editors.
+    // (Public → private doesn't tear list_members down — members may
+    // have done work on the list already; cutting their access without
+    // operator intent would be surprising.)
+    if (
+      current.visibility !== "public" &&
+      parsed.data.visibility === "public"
+    ) {
+      await tx.execute(sql`
+        INSERT INTO list_members (list_id, user_id, role, invited_by)
+        SELECT ${listId}, wm.user_id, 'editor', NULL
+        FROM workspace_members wm
+        WHERE wm.workspace_id = ${current.workspaceId}
+        ON CONFLICT (list_id, user_id) DO NOTHING
+      `);
+    }
+
     await tx.insert(activityLog).values({
       listId: listId,
       entityType: "list",

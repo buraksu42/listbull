@@ -8,7 +8,7 @@
  */
 import "server-only";
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
@@ -79,6 +79,20 @@ export async function executeCreateList(
       userId: ctx.userId,
       role: "owner",
     });
+
+    // Phase 16/#29: when public, batch-insert list_members for the
+    // rest of the workspace as 'editor'. ON CONFLICT skips the
+    // creator's just-inserted 'owner' row.
+    if (finalVisibility === "public") {
+      await tx.execute(sql`
+        INSERT INTO list_members (list_id, user_id, role, invited_by)
+        SELECT ${created.id}, wm.user_id, 'editor', NULL
+        FROM workspace_members wm
+        WHERE wm.workspace_id = ${ctx.workspaceId}
+          AND wm.user_id <> ${ctx.userId}
+        ON CONFLICT (list_id, user_id) DO NOTHING
+      `);
+    }
 
     await tx.insert(activityLog).values({
       listId: created.id,

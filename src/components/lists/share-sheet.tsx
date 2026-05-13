@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, Send } from "lucide-react";
+import { Check, Copy, Link as LinkIcon, Send } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
@@ -177,18 +177,123 @@ export function ShareSheet({
             onDone={() => onOpenChange(false)}
           />
         ) : (
-          <ShareFormBody
-            username={username}
-            role={role}
-            submitting={submitting}
-            onUsernameChange={setUsername}
-            onRoleChange={setRole}
-            onSubmit={submit}
-            onCancel={() => onOpenChange(false)}
-          />
+          <>
+            <JoinLinkSection listId={listId} />
+            <ShareFormBody
+              username={username}
+              role={role}
+              submitting={submitting}
+              onUsernameChange={setUsername}
+              onRoleChange={setRole}
+              onSubmit={submit}
+              onCancel={() => onOpenChange(false)}
+            />
+          </>
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+/**
+ * Username-less share link section. Tap "Generate" → fetch
+ * /api/lists/[id]/join-link → reveal copyable URL. Anyone in the
+ * workspace can use the URL to join the list as editor.
+ */
+function JoinLinkSection({ listId }: { listId: string }) {
+  const [url, setUrl] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+
+  async function generate() {
+    if (busy || url) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/lists/${listId}/join-link`);
+      const json = (await res.json().catch(() => null)) as
+        | { ok: true; data: { url: string } }
+        | { ok: false; error: { message: string } }
+        | null;
+      if (res.ok && json && json.ok) {
+        setUrl(json.data.url);
+      } else {
+        toast.error(
+          json && "error" in json ? json.error.message : "Link oluşturulamadı.",
+        );
+      }
+    } catch {
+      toast.error("Bağlantı sorunu.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy() {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+      toast.success("Link kopyalandı.");
+    } catch {
+      toast.error("Kopyalanamadı.");
+    }
+  }
+
+  return (
+    <div
+      className="mx-4 mb-4 rounded-[var(--lb-r-md)] border border-[var(--lb-border)] bg-[var(--lb-card)] p-3"
+      style={{ display: "flex", flexDirection: "column", gap: 8 }}
+    >
+      <div className="flex items-center gap-2">
+        <LinkIcon
+          className="h-4 w-4"
+          aria-hidden
+          style={{ color: "var(--lb-muted-fg)" }}
+        />
+        <p
+          className="text-sm font-medium"
+          style={{ color: "var(--lb-fg)" }}
+        >
+          Kullanıcı adı olmadan paylaş
+        </p>
+      </div>
+      <p
+        className="text-xs"
+        style={{ color: "var(--lb-muted-fg)", lineHeight: 1.5 }}
+      >
+        Workspace üyesi olan herkes link&apos;e tıklayınca listeye editor
+        olarak eklenir.
+      </p>
+      {url ? (
+        <div className="flex gap-2">
+          <code
+            className="flex-1 truncate rounded-[var(--lb-r-sm)] bg-[var(--lb-paper)] px-2 py-1 text-xs"
+            style={{ color: "var(--lb-fg)" }}
+          >
+            {url}
+          </code>
+          <Button type="button" size="sm" variant="outline" onClick={copy}>
+            {copied ? (
+              <Check className="h-3 w-3" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+          </Button>
+        </div>
+      ) : (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={generate}
+          disabled={busy}
+          className="self-start"
+        >
+          {busy ? "Hazırlanıyor…" : "Link oluştur"}
+        </Button>
+      )}
+    </div>
   );
 }
 

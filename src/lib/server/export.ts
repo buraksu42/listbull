@@ -62,6 +62,7 @@ export async function generateExportBundle(
       isInbox: lists.isInbox,
       isChecklist: lists.isChecklist,
       visibility: lists.visibility,
+      joinLinkToken: lists.joinLinkToken,
       archivedAt: lists.archivedAt,
       createdAt: lists.createdAt,
       updatedAt: lists.updatedAt,

@@ -120,6 +120,12 @@ export const lists = pgTable(
      * time; the app layer fills this in.
      */
     visibility: text("visibility").notNull().default("private"),
+    /**
+     * Phase 16/#29: per-list join token (base64url, 32-byte) that
+     * lets anyone with the link join the list as editor — username-
+     * less. Generated lazily on first "Copy share link" tap.
+     */
+    joinLinkToken: text("join_link_token"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },
@@ -132,6 +138,9 @@ export const lists = pgTable(
     index("lists_workspace_visibility_idx")
       .on(t.workspaceId, t.visibility)
       .where(sql`${t.archivedAt} IS NULL`),
+    uniqueIndex("lists_join_link_token_uq")
+      .on(t.joinLinkToken)
+      .where(sql`${t.joinLinkToken} IS NOT NULL`),
   ],
 );
 
