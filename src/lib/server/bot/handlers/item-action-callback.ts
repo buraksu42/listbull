@@ -37,7 +37,17 @@ export async function handleItemActionCallback(
   const cb = ctx.callbackQuery;
   if (!cb || typeof cb.data !== "string") return;
   const data = cb.data;
-  if (!data.startsWith("item:") && !data.startsWith("list:")) return;
+  // Prefixes we own: `item:*` (per-item actions) and `items:*`
+  // (collection-level actions like `items:add`). The old `list:`
+  // prefix is kept as a tolerant alias for any legacy keyboards
+  // still floating in user chats from before the chat-only pivot.
+  if (
+    !data.startsWith("item:") &&
+    !data.startsWith("items:") &&
+    !data.startsWith("list:")
+  ) {
+    return;
+  }
 
   const chatId = ctx.chat?.id;
   if (!chatId) {
