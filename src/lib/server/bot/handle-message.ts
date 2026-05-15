@@ -59,26 +59,25 @@ const TG_MAX_MESSAGE_LEN = 4096;
 const COPY = {
   tr: {
     noKey:
-      "Bu chat'in OpenRouter API key'i tanımlı değil. Onsuz AI cevap veremem.\n\n🔑 Nasıl alırım: openrouter.ai/keys → Sign in → $5+ credit yükle → key oluştur (sk-or-v1-… ile başlar)\n\n📥 Direkt buraya yapıştır — kaydederim ve mesajını silerim (güvenlik). Sadece chat sahibi koyabilir.",
+      "🔑 Bu chat'in OpenRouter API key'i tanımlı değil. Onsuz cevap veremem.\n\n📋 Adımlar (~2 dk):\n  1. openrouter.ai/keys → Sign in\n  2. $5+ credit yükle (default model ile binlerce mesaj yetiyor)\n  3. \"Create Key\" → kopyala (sk-or-v1-… ile başlar)\n\n📥 Key'i direkt buraya yapıştır → otomatik kaydederim + mesajını güvenlik için silerim. Sadece chat sahibi koyabilir.",
     keyDecryptError:
-      "Chat API key'i okunamadı. Sahibi key'i tekrar koymalı.",
-    transientError: "Bir şeyler ters gitti, tekrar dener misin?",
+      "❗️ Chat API key'i okunamadı. Sahibi key'i tekrar koymalı.",
+    transientError: "❗️ Bir şeyler ters gitti, tekrar dener misin?",
     rateLimited:
-      "Çok fazla mesaj — biraz yavaşla. Saatlik limitin doldu, biraz sonra tekrar dene.",
-    transcribeFailed: "Sesini yazıya çeviremedim, tekrar dener misin?",
-    audioTooLong: "Ses kaydı çok uzun (15 MB üstü).",
-    audioEmpty: "Ses kaydında konuşma duyamadım.",
+      "⏳ Saatlik mesaj limitin doldu — biraz dinlen, sonra tekrar yaz.",
+    voiceUnsupported:
+      "🎤 Sesli mesaj şu an desteklenmiyor — yazılı mesaj at.",
   },
   en: {
     noKey:
-      "This chat's OpenRouter API key isn't set. I can't reply without one.\n\n🔑 How to get one: openrouter.ai/keys → Sign in → add $5+ credit → create a key (starts with sk-or-v1-…)\n\n📥 Paste it here directly — I save it and delete your message for safety. Only the chat owner can set it.",
+      "🔑 This chat's OpenRouter API key isn't set. I can't reply without one.\n\n📋 Steps (~2 min):\n  1. openrouter.ai/keys → Sign in\n  2. Add $5+ credit (covers thousands of messages on the default model)\n  3. \"Create Key\" → copy (starts with sk-or-v1-…)\n\n📥 Paste the key here → I save it automatically and delete your message for safety. Only the chat owner can set it.",
     keyDecryptError:
-      "Couldn't read this chat's API key. The owner needs to set it again.",
-    transientError: "Something went wrong — try again?",
-    rateLimited: "Too many messages — slow down. Try again shortly.",
-    transcribeFailed: "I couldn't transcribe that audio.",
-    audioTooLong: "That audio is too large (over 15 MB).",
-    audioEmpty: "I didn't hear any speech in that audio.",
+      "❗️ Couldn't read this chat's API key. The owner needs to set it again.",
+    transientError: "❗️ Something went wrong — try again?",
+    rateLimited:
+      "⏳ Hourly message limit hit — take a breather, then try again.",
+    voiceUnsupported:
+      "🎤 Voice messages aren't supported right now — type a message.",
   },
 } as const;
 
@@ -273,14 +272,14 @@ export async function handleMessage(ctx: Context): Promise<void> {
       const suffix = result.data.key_suffix;
       await ctx.reply(
         locale === "tr"
-          ? `✓ Key kaydedildi (…${suffix}). Pasted mesajını sildim.`
-          : `✓ Key saved (…${suffix}). Deleted your pasted message.`,
+          ? `🔑 Key kaydedildi (…${suffix}). Pasted mesajını güvenlik için sildim. ✨ Artık hazırım — yaz, başlayalım.`
+          : `🔑 Key saved (…${suffix}). Deleted your pasted message for safety. ✨ I'm ready — message away.`,
       );
     } else {
       await ctx.reply(
         locale === "tr"
-          ? `Key kaydedilemedi: ${result.error.message}`
-          : `Couldn't save key: ${result.error.message}`,
+          ? `❗️ Key kaydedilemedi: ${result.error.message}`
+          : `❗️ Couldn't save key: ${result.error.message}`,
       );
     }
     return;
@@ -317,11 +316,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // as a no-op for now (no transcription path). Re-introduce in a
   // future phase if needed.
   if (isVoiceInput) {
-    await ctx.reply(
-      locale === "tr"
-        ? "Sesli mesaj şu an desteklenmiyor — yazılı mesaj at."
-        : "Voice messages aren't supported right now — type a message.",
-    );
+    await ctx.reply(copy.voiceUnsupported);
     return;
   }
 

@@ -71,8 +71,8 @@ export async function handleMyChatMember(ctx: Context): Promise<void> {
     const locale = pickLocale(owner.locale ?? inviter.language_code ?? null);
     const msg =
       locale === "tr"
-        ? `Beni "${groupLabel}" grubuna eklediğin için sağol. Grup'ta çalışabilmem için bir OpenRouter API key gerek (chat sahibisin → sen ekleyeceksin):\n\n1. openrouter.ai/keys → Sign in → Create Key\n2. Key'i (sk-or-v1-… ile başlar) bu DM'e yapıştır — kaydederim, mesajını silerim.\n\nSonra grupta @${ctx.me.username} ile mesaj atan herkes liste kullanabilir.`
-        : `Thanks for adding me to "${groupLabel}"! I need an OpenRouter API key for this chat (you're the owner → you set it):\n\n1. openrouter.ai/keys → Sign in → Create Key\n2. Paste the key (sk-or-v1-…) into THIS DM — I save it and delete your message.\n\nThen anyone who mentions @${ctx.me.username} in the group can use the list.`;
+        ? `👥 Beni "${groupLabel}" grubuna eklediğin için sağol! Bu chat'i kullanabilmem için bir OpenRouter API key gerek (chat sahibi sensin):\n\n🔑 Adımlar:\n  1. openrouter.ai/keys → Sign in → Create Key\n  2. Key'i (sk-or-v1-… ile başlar) bu DM'e yapıştır → otomatik kaydederim + mesajını silerim.\n\n✨ Sonra grup'ta @${ctx.me.username} ile mesaj atan herkes liste kullanabilir.`
+        : `👥 Thanks for adding me to "${groupLabel}"! I need an OpenRouter API key for this chat (you're the owner):\n\n🔑 Steps:\n  1. openrouter.ai/keys → Sign in → Create Key\n  2. Paste the key (sk-or-v1-…) into THIS DM → I save it and delete your message.\n\n✨ Then anyone who mentions @${ctx.me.username} in the group can use the list.`;
 
     try {
       await ctx.api.sendMessage(inviter.id, msg);

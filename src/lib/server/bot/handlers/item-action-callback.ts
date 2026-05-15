@@ -44,7 +44,7 @@ export async function handleItemActionCallback(
     await ctx.answerCallbackQuery();
     await ctx.api.sendMessage(
       chatId,
-      locale === "tr" ? "Yeni item ne?" : "What's the new item?",
+      locale === "tr" ? "✨ Yeni item ne yazayım?" : "✨ What's the new item?",
       {
         reply_markup: {
           force_reply: true,
@@ -134,7 +134,7 @@ export async function handleItemActionCallback(
       });
     });
     await ctx.answerCallbackQuery(
-      locale === "tr" ? "Silindi" : "Deleted",
+      locale === "tr" ? "🗑️ Silindi" : "🗑️ Deleted",
     );
     const view = await buildItemsView(chatId, locale, 0);
     await ctx.editMessageText(view.text, {
@@ -151,8 +151,8 @@ export async function handleItemActionCallback(
     await ctx.api.sendMessage(
       chatId,
       locale === "tr"
-        ? `Yeni metni yaz (item id: ${itemId}):`
-        : `New text? (item id: ${itemId}):`,
+        ? `✏️ Yeni metni yaz (item id: ${itemId}):`
+        : `✏️ New text? (item id: ${itemId}):`,
       {
         reply_markup: {
           force_reply: true,

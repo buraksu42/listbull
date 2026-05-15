@@ -28,7 +28,7 @@ export async function handleReset(ctx: Context): Promise<void> {
 
   await ctx.reply(
     locale === "tr"
-      ? "✓ Konuşma geçmişi silindi."
-      : "✓ Conversation history cleared.",
+      ? "🧹 Konuşma geçmişi silindi. Temiz sayfa, devam edelim."
+      : "🧹 Conversation history cleared. Fresh slate.",
   );
 }

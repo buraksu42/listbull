@@ -85,16 +85,42 @@ export async function buildItemsView(
 
   const lines: string[] = [header, ""];
   const keyboard = new InlineKeyboard();
+  const nowMs = Date.now();
   for (let i = 0; i < visible.length; i++) {
     const it = visible[i]!;
     const num = offset + i + 1;
-    const icon = it.isDone ? "✅" : "☐";
-    const tag = it.priority === "high" ? " 🔥" : "";
+    const checkbox = it.isDone ? "✅" : "☐";
+    const priorityIcon =
+      it.priority === "high" ? "🔥 " : it.priority === "low" ? "💤 " : "";
+    const statusIcon =
+      it.status === "in_progress" && !it.isDone
+        ? "📌 "
+        : it.status === "blocked"
+          ? "⏸️ "
+          : "";
+    const tags = (it.tags ?? []).slice(0, 3).map((t) => `#${t}`).join(" ");
+    const tagSuffix = tags ? ` ${tags}` : "";
+    // Deadline indicator: ⚠️ overdue, ⏰ today/soon, 📅 future
+    let deadlineSuffix = "";
+    if (it.deadlineAt) {
+      const due = it.deadlineAt.getTime();
+      const diffMs = due - nowMs;
+      const oneDay = 24 * 60 * 60 * 1000;
+      if (diffMs < 0) {
+        deadlineSuffix = " ⚠️";
+      } else if (diffMs < oneDay) {
+        deadlineSuffix = " ⏰";
+      } else {
+        deadlineSuffix = " 📅";
+      }
+    }
     const text =
-      it.text.length > 60 ? `${it.text.slice(0, 60)}…` : it.text;
-    lines.push(`${num}. ${icon} ${text}${tag}`);
+      it.text.length > 50 ? `${it.text.slice(0, 50)}…` : it.text;
+    lines.push(
+      `${num}. ${checkbox} ${priorityIcon}${statusIcon}${text}${deadlineSuffix}${tagSuffix}`,
+    );
     keyboard
-      .text(icon, `item:toggle:${it.id}`)
+      .text(checkbox, `item:toggle:${it.id}`)
       .text("✏️", `item:edit:${it.id}`)
       .text("🗑️", `item:delete:${it.id}`)
       .row();
