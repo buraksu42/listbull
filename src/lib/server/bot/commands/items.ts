@@ -1,5 +1,5 @@
 /**
- * /list — render the current chat's items as inline-keyboard cards
+ * /items — render the current chat's items as inline-keyboard cards
  * (Phase 17, chat-rich UX MVP).
  *
  * Per item row: [☐/✅ toggle]  [✏️ edit]  [🗑️ delete]
@@ -10,7 +10,7 @@
  *   item:edit:<itemId>
  *   item:delete:<itemId>
  *   item:page:<offset>
- *   list:add
+ *   items:add
  */
 import type { Context } from "grammy";
 import { InlineKeyboard } from "grammy";
@@ -23,7 +23,7 @@ import { pickLocale } from "@/lib/server/bot/i18n";
 
 const PAGE_SIZE = 10;
 
-export async function handleList(ctx: Context): Promise<void> {
+export async function handleItems(ctx: Context): Promise<void> {
   const from = ctx.from;
   const message = ctx.message;
   if (!from || !message) return;
@@ -36,7 +36,7 @@ export async function handleList(ctx: Context): Promise<void> {
   const locale = pickLocale(user.locale);
   const chatId = message.chat.id;
 
-  const { text, keyboard } = await buildListView(chatId, locale, 0);
+  const { text, keyboard } = await buildItemsView(chatId, locale, 0);
   await ctx.reply(text, { reply_markup: keyboard });
 }
 
@@ -44,7 +44,7 @@ export async function handleList(ctx: Context): Promise<void> {
  * Build the body text + inline keyboard for the /list view. Exported
  * so the item-action-callback can re-render after toggle/delete/page.
  */
-export async function buildListView(
+export async function buildItemsView(
   chatId: number,
   locale: "tr" | "en",
   offset: number,
@@ -78,7 +78,7 @@ export async function buildListView(
         : "Nothing here yet. Drop a message, I'll add it.";
     const keyboard = new InlineKeyboard().text(
       locale === "tr" ? "+ Ekle" : "+ Add",
-      "list:add",
+      "items:add",
     );
     return { text: `${header}\n\n${empty}`, keyboard };
   }
@@ -110,7 +110,7 @@ export async function buildListView(
   }
   bottom.push({
     label: locale === "tr" ? "+ Ekle" : "+ Add",
-    data: "list:add",
+    data: "items:add",
   });
   if (hasNext) {
     bottom.push({

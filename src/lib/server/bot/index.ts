@@ -7,7 +7,7 @@
 import { Bot } from "grammy";
 
 import { handleHelp } from "@/lib/server/bot/commands/help";
-import { handleList } from "@/lib/server/bot/commands/list";
+import { handleItems } from "@/lib/server/bot/commands/items";
 import { handleReset } from "@/lib/server/bot/commands/reset";
 import { handleStart } from "@/lib/server/bot/commands/start";
 import { handleMessage } from "@/lib/server/bot/handle-message";
@@ -40,12 +40,12 @@ function registerHandlers(bot: Bot): void {
   bot.command("start", handleStart);
   bot.command("help", handleHelp);
   bot.command("reset", handleReset);
-  bot.command("list", handleList);
+  bot.command("items", handleItems);
 
-  // Inline-keyboard callbacks for /list view.
+  // Inline-keyboard callbacks for /items view.
   bot.on("callback_query:data", async (ctx, next) => {
     const data = ctx.callbackQuery.data ?? "";
-    if (data.startsWith("item:") || data.startsWith("list:")) {
+    if (data.startsWith("item:") || data.startsWith("items:")) {
       await handleItemActionCallback(ctx);
       return;
     }

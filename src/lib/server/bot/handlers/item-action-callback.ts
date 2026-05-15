@@ -6,14 +6,14 @@
  *   item:edit:<itemId>     → force-reply prompt; LLM handles the reply
  *   item:delete:<itemId>   → soft-delete + edit message
  *   item:page:<offset>     → re-render with new offset
- *   list:add               → force-reply prompt for new item text
+ *   items:add              → force-reply prompt for new item text
  */
 import type { Context } from "grammy";
 import { and, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { activityLog, items } from "@/lib/db/schema";
-import { buildListView } from "@/lib/server/bot/commands/list";
+import { buildItemsView } from "@/lib/server/bot/commands/items";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
 import { toItemSnapshot } from "@/lib/db/snapshots";
@@ -40,7 +40,7 @@ export async function handleItemActionCallback(
   const locale = pickLocale(user.locale);
 
   // list:add — force-reply prompt for new item text.
-  if (data === "list:add") {
+  if (data === "items:add") {
     await ctx.answerCallbackQuery();
     await ctx.api.sendMessage(
       chatId,
@@ -59,7 +59,7 @@ export async function handleItemActionCallback(
   if (data.startsWith("item:page:")) {
     const offset = Number.parseInt(data.slice("item:page:".length), 10) || 0;
     await ctx.answerCallbackQuery();
-    const view = await buildListView(chatId, locale, offset);
+    const view = await buildItemsView(chatId, locale, offset);
     await ctx.editMessageText(view.text, {
       reply_markup: view.keyboard,
     });
@@ -99,7 +99,7 @@ export async function handleItemActionCallback(
       });
     });
     await ctx.answerCallbackQuery();
-    const view = await buildListView(chatId, locale, 0);
+    const view = await buildItemsView(chatId, locale, 0);
     await ctx.editMessageText(view.text, {
       reply_markup: view.keyboard,
     });
@@ -136,7 +136,7 @@ export async function handleItemActionCallback(
     await ctx.answerCallbackQuery(
       locale === "tr" ? "Silindi" : "Deleted",
     );
-    const view = await buildListView(chatId, locale, 0);
+    const view = await buildItemsView(chatId, locale, 0);
     await ctx.editMessageText(view.text, {
       reply_markup: view.keyboard,
     });
