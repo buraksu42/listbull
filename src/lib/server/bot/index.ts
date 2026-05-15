@@ -10,11 +10,13 @@ import { handleSnapshot } from "@/lib/server/bot/commands/snapshot";
 import { handleStart } from "@/lib/server/bot/commands/start";
 import { handleToday } from "@/lib/server/bot/commands/today";
 import { handleUnbindGroup } from "@/lib/server/bot/commands/unbind-group";
+import { handleWorkspace } from "@/lib/server/bot/commands/workspace";
 import { handleMessage } from "@/lib/server/bot/handle-message";
 import { handleBindCallback } from "@/lib/server/bot/handlers/bind-callback";
 import { handleChosenInlineResult } from "@/lib/server/bot/handlers/chosen-inline-result";
 import { handleInlineQuery } from "@/lib/server/bot/handlers/inline-query";
 import { handleMyChatMember } from "@/lib/server/bot/handlers/my-chat-member";
+import { handleWorkspaceSwitchCallback } from "@/lib/server/bot/handlers/workspace-switch-callback";
 import { db } from "@/lib/db/client";
 import { bots } from "@/lib/db/schema";
 import { decrypt } from "@/lib/server/encryption";
@@ -135,14 +137,25 @@ function registerHandlers(bot: Bot): void {
   bot.command("reset", handleReset);
   bot.command("snapshot", handleSnapshot);
   bot.command("today", handleToday);
+  bot.command("workspace", handleWorkspace);
   bot.command("bindgroup", handleBindGroup);
   bot.command("unbindgroup", handleUnbindGroup);
   bot.on("inline_query", handleInlineQuery);
   bot.on("chosen_inline_result", handleChosenInlineResult);
-  // /bindgroup picker callbacks ride on callback_query updates. The
-  // handler ignores anything that doesn't start with `bind:` so other
-  // callback flows can be added later without colliding.
-  bot.on("callback_query:data", handleBindCallback);
+  // Callback router: each handler early-returns on prefix mismatch.
+  // Add new prefixes here without colliding.
+  bot.on("callback_query:data", async (ctx, next) => {
+    const data = ctx.callbackQuery.data ?? "";
+    if (data.startsWith("bind:")) {
+      await handleBindCallback(ctx);
+      return;
+    }
+    if (data.startsWith("wsswitch:")) {
+      await handleWorkspaceSwitchCallback(ctx);
+      return;
+    }
+    await next();
+  });
   // Bot was added to / removed from a chat. We auto-unbind on
   // remove and DM the inviter on add.
   bot.on("my_chat_member", handleMyChatMember);
