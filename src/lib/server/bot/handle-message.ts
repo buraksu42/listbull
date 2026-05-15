@@ -27,6 +27,7 @@ import "server-only";
 import type { Context } from "grammy";
 
 import { env } from "@/lib/env";
+import { getBotActionContext } from "@/lib/db/queries/bot-action-contexts";
 import { ensureChat } from "@/lib/db/queries/chats";
 import { getRecentMessages, insertMessages } from "@/lib/db/queries/messages";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
@@ -266,15 +267,17 @@ export async function handleMessage(ctx: Context): Promise<void> {
   const keyMatch = effectiveText.match(KEY_RE);
   if (keyMatch) {
     let targetChatId = chatId;
-    const replyText = message.reply_to_message?.text;
-    if (
-      message.reply_to_message?.from?.id === ctx.me.id &&
-      typeof replyText === "string"
-    ) {
-      const m = replyText.match(/\[ctx:set_key:(-?\d+)\]/);
-      if (m) {
-        const parsed = Number.parseInt(m[1]!, 10);
-        if (Number.isFinite(parsed)) targetChatId = parsed;
+    if (message.reply_to_message?.from?.id === ctx.me.id) {
+      const ctxRow = await getBotActionContext(
+        chatId,
+        message.reply_to_message.message_id,
+      );
+      if (
+        ctxRow &&
+        ctxRow.action === "set_key" &&
+        ctxRow.targetChatId !== null
+      ) {
+        targetChatId = ctxRow.targetChatId;
       }
     }
     const result = await executeSetChatApiKey(
@@ -349,21 +352,27 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // ─── Reply-to context ─────────────────────────────────────────────
   // Group: forward who the user was replying to so the LLM has the
   // mention context. DM + group both: if the reply is to a bot
-  // force-reply prompt carrying a [ctx:<action>:<itemId>] marker, hand
+  // force-reply prompt that we stored an action context for, hand
   // that to the LLM so it knows which item + action the message
   // pertains to (edit / deadline / reminder / attach).
   const replyTo = message.reply_to_message;
   let actionMarker: { action: string; itemId: string } | null = null;
   if (replyTo) {
-    if (
-      replyTo.from?.id === ctx.me.id &&
-      typeof replyTo.text === "string"
-    ) {
-      const m = replyTo.text.match(
-        /\[ctx:(edit|deadline|reminder|attach):([0-9a-f-]{36})\]/i,
-      );
-      if (m) {
-        actionMarker = { action: m[1]!.toLowerCase(), itemId: m[2]! };
+    if (replyTo.from?.id === ctx.me.id) {
+      // DB-backed lookup replaces the old inline `[ctx:...]` marker.
+      const persisted = await getBotActionContext(chatId, replyTo.message_id);
+      console.log("[bot-reply]", {
+        chatId,
+        replyMsgId: replyTo.message_id,
+        contextFound: persisted !== null,
+        action: persisted?.action ?? null,
+        itemId: persisted?.itemId ?? null,
+      });
+      if (persisted && persisted.itemId && persisted.action !== "set_key") {
+        actionMarker = {
+          action: persisted.action,
+          itemId: persisted.itemId,
+        };
       }
     } else if (
       isGroupContext &&

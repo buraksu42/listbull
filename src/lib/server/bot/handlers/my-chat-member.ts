@@ -10,6 +10,7 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { chats } from "@/lib/db/schema";
+import { insertBotActionContext } from "@/lib/db/queries/bot-action-contexts";
 import { ensureChat } from "@/lib/db/queries/chats";
 import { getUserByTelegramId, upsertUserFromTelegram } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
@@ -69,24 +70,30 @@ export async function handleMyChatMember(ctx: Context): Promise<void> {
     });
 
     const locale = pickLocale(owner.locale ?? inviter.language_code ?? null);
-    // The [ctx:set_key:<groupChatId>] marker is read by the
-    // key-paste intercept in handle-message — when the inviter
-    // replies to THIS DM with their key, we route it to the
-    // group's chats row, not the DM's. Without the marker, a key
-    // pasted in DM saves to the DM chat only and the group stays
-    // unauthed (silent-broken until the user re-pastes inside the
-    // group, which is a security smell).
+    // No inline marker — the action context (action=set_key,
+    // target_chat_id=group) is persisted by message_id so the
+    // key-paste intercept in handle-message can resolve it from
+    // reply_to_message.message_id alone.
     const msg =
       locale === "tr"
-        ? `👥 Beni "${groupLabel}" grubuna eklediğin için sağol! Bu grubu çalıştırmam için bir OpenRouter API key gerek (chat sahibi sensin):\n\n🔑 Adımlar:\n  1. openrouter.ai/keys → Sign in → Create Key\n  2. Key'i (sk-or-v1-… ile başlar) BU MESAJI YANITLAYARAK gönder → grup'a özel kaydederim + DM mesajını güvenlik için silerim.\n\n✨ Sonra grup'ta @${ctx.me.username} ile mesaj atan herkes liste kullanabilir.\n\n[ctx:set_key:${chat.id}]`
-        : `👥 Thanks for adding me to "${groupLabel}"! I need an OpenRouter API key to run this group (you're the owner):\n\n🔑 Steps:\n  1. openrouter.ai/keys → Sign in → Create Key\n  2. REPLY to this message with the key (sk-or-v1-…) → I save it for the group and delete your DM for safety.\n\n✨ Then anyone who mentions @${ctx.me.username} in the group can use the list.\n\n[ctx:set_key:${chat.id}]`;
+        ? `👥 Beni "${groupLabel}" grubuna eklediğin için sağol! Bu grubu çalıştırmam için bir OpenRouter API key gerek (chat sahibi sensin):\n\n🔑 Adımlar:\n  1. openrouter.ai/keys → Sign in → Create Key\n  2. Key'i (sk-or-v1-… ile başlar) BU MESAJI YANITLAYARAK gönder → grup'a özel kaydederim + DM mesajını güvenlik için silerim.\n\n✨ Sonra grup'ta @${ctx.me.username} ile mesaj atan herkes liste kullanabilir.`
+        : `👥 Thanks for adding me to "${groupLabel}"! I need an OpenRouter API key to run this group (you're the owner):\n\n🔑 Steps:\n  1. openrouter.ai/keys → Sign in → Create Key\n  2. REPLY to this message with the key (sk-or-v1-…) → I save it for the group and delete your DM for safety.\n\n✨ Then anyone who mentions @${ctx.me.username} in the group can use the list.`;
 
     try {
-      await ctx.api.sendMessage(inviter.id, msg, {
+      const sent = await ctx.api.sendMessage(inviter.id, msg, {
         reply_markup: {
           force_reply: true,
           selective: true,
         },
+      });
+      // Persist the action context against the DM message_id so
+      // handle-message can route the reply's key to this group.
+      await insertBotActionContext({
+        chatId: inviter.id, // DM chat = the inviter's user_id in Telegram
+        messageId: sent.message_id,
+        action: "set_key",
+        itemId: null,
+        targetChatId: chat.id,
       });
     } catch {
       // Inviter hasn't started bot DM yet — they'll see prompts in-group.

@@ -41,7 +41,22 @@ export type ExecutorCtx = {
 export function createToolDispatcher(ctx: ExecutorCtx): ToolDispatcher {
   return async function dispatch(call: ToolCall): Promise<ToolResult> {
     const { id, name, input } = call;
+    // Log every tool call attempt: lets us see what the LLM actually
+    // tried (name + arg keys) and the result code from the executor.
+    // Arg VALUES not logged so user-content stays out of logs.
+    const argKeys =
+      input && typeof input === "object" && !Array.isArray(input)
+        ? Object.keys(input as Record<string, unknown>)
+        : [];
     const output = await routeCall(name as ToolName, input, ctx);
+    const result = output as { ok?: boolean; error?: { code?: string } };
+    console.log("[tool]", {
+      name,
+      args: argKeys,
+      chatId: ctx.chatId,
+      ok: result?.ok ?? null,
+      errCode: result?.error?.code ?? null,
+    });
     return { toolCallId: id, output };
   };
 }

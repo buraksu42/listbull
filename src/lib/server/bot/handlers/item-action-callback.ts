@@ -14,9 +14,10 @@
  *   item:page:<offset>      → re-render with new offset
  *   items:add               → force-reply prompt for new item text
  *
- * Force-reply prompts embed a `[ctx:<action>:<itemId>]` marker so the
- * LLM call in handle-message knows which item + action the user's
- * reply pertains to.
+ * Force-reply prompts persist their action context in
+ * `bot_action_contexts` keyed by the sent message_id. The reply path
+ * in handle-message looks the context up by reply_to_message.message_id
+ * — no user-visible `[ctx:...]` marker needed in the prompt text.
  */
 import type { Context } from "grammy";
 import { and, eq } from "drizzle-orm";
@@ -24,6 +25,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { activityLog, items } from "@/lib/db/schema";
 import { buildItemsView } from "@/lib/server/bot/commands/items";
+import { insertBotActionContext } from "@/lib/db/queries/bot-action-contexts";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
 import { toItemSnapshot } from "@/lib/db/snapshots";
@@ -153,57 +155,76 @@ export async function handleItemActionCallback(
     return;
   }
 
-  // Force-reply action prompts. Each carries a [ctx:<action>:<itemId>]
-  // marker that handle-message scans to give the LLM the missing
-  // context (which item, what kind of update).
+  // Force-reply action prompts. The action context (item id + kind)
+  // is persisted in `bot_action_contexts` keyed by the sent message
+  // id — no inline marker, the prompt body shows the item title so
+  // the user knows which item they're acting on.
   const forceReplyActions: Array<{
     prefix: string;
     action: "edit" | "deadline" | "reminder" | "attach";
-    prompt: { tr: string; en: string };
+    promptFor: (itemText: string) => { tr: string; en: string };
   }> = [
     {
       prefix: "item:edit:",
       action: "edit",
-      prompt: {
-        tr: "✏️ Yeni metni yaz:",
-        en: "✏️ New text?",
-      },
+      promptFor: (title) => ({
+        tr: `✏️ "${title}" — yeni metni yaz.`,
+        en: `✏️ "${title}" — what's the new text?`,
+      }),
     },
     {
       prefix: "item:deadline:",
       action: "deadline",
-      prompt: {
-        tr: "📅 Bitiş tarihi ne olsun? (örn. \"yarın 18:00\", \"cuma\", \"3 gün sonra\")",
-        en: "📅 What's the deadline? (e.g. \"tomorrow 6pm\", \"Friday\", \"in 3 days\")",
-      },
+      promptFor: (title) => ({
+        tr: `📅 "${title}" — bitiş tarihi ne olsun? (örn. "yarın 18:00", "cuma", "3 gün sonra")`,
+        en: `📅 "${title}" — what's the deadline? (e.g. "tomorrow 6pm", "Friday", "in 3 days")`,
+      }),
     },
     {
       prefix: "item:reminder:",
       action: "reminder",
-      prompt: {
-        tr: "⏰ Ne zaman hatırlatayım? (örn. \"30 dakika sonra\", \"yarın 09:00\", \"bitiş tarihinden 1 gün önce\")",
-        en: "⏰ When should I remind you? (e.g. \"in 30 minutes\", \"tomorrow 9am\", \"1 day before deadline\")",
-      },
+      promptFor: (title) => ({
+        tr: `⏰ "${title}" — ne zaman hatırlatayım? (örn. "30 dakika sonra", "yarın 09:00", "bitiş tarihinden 1 gün önce")`,
+        en: `⏰ "${title}" — when should I remind you? (e.g. "in 30 minutes", "tomorrow 9am", "1 day before deadline")`,
+      }),
     },
     {
       prefix: "item:attach:",
       action: "attach",
-      prompt: {
-        tr: "📎 Bu mesaja fotoğraf, dosya veya ses göndererek item'a ekle.",
-        en: "📎 Reply to this message with a photo, file, or voice note to attach it.",
-      },
+      promptFor: (title) => ({
+        tr: `📎 "${title}" — bu mesaja fotoğraf, dosya veya ses göndererek ekle.`,
+        en: `📎 "${title}" — reply to this message with a photo, file, or voice note to attach.`,
+      }),
     },
   ];
   for (const a of forceReplyActions) {
     if (data.startsWith(a.prefix)) {
       const itemId = data.slice(a.prefix.length);
+      // Look up item title for a friendly prompt.
+      const [item] = await db
+        .select({ text: items.text })
+        .from(items)
+        .where(and(eq(items.id, itemId), eq(items.chatId, chatId)))
+        .limit(1);
+      const title = item?.text ?? itemId;
+      const truncated = title.length > 60 ? `${title.slice(0, 60)}…` : title;
+      const prompts = a.promptFor(truncated);
+      const body = locale === "tr" ? prompts.tr : prompts.en;
       await ctx.answerCallbackQuery();
-      const head = locale === "tr" ? a.prompt.tr : a.prompt.en;
-      await ctx.api.sendMessage(chatId, `${head}\n\n[ctx:${a.action}:${itemId}]`, {
+      const sent = await ctx.api.sendMessage(chatId, body, {
         reply_markup: {
           force_reply: true,
           selective: true,
         },
+      });
+      // Persist the action context keyed by the sent message_id so
+      // handle-message can resolve the reply without a visible marker.
+      await insertBotActionContext({
+        chatId,
+        messageId: sent.message_id,
+        action: a.action,
+        itemId,
+        targetChatId: null,
       });
       return;
     }

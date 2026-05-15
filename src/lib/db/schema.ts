@@ -345,3 +345,34 @@ export const activityLog = pgTable(
     ),
   ],
 );
+
+// ─── bot_action_contexts (Phase 17b) ───────────────────────────────
+//
+// Maps a bot-sent force_reply prompt's (chat_id, message_id) → the
+// action it represents. Replaces the user-visible `[ctx:action:<id>]`
+// marker so prompts can carry a clean natural-language body and still
+// be unambiguously interpretable when the user replies.
+//
+// Lifetime: short — `cleanup-stale.ts` cron deletes rows older than
+// 24h. No need to persist longer; if a user replies to a day-old
+// force-reply prompt the flow has already lapsed.
+export const botActionContexts = pgTable(
+  "bot_action_contexts",
+  {
+    chatId: bigint("chat_id", { mode: "number" }).notNull(),
+    messageId: bigint("message_id", { mode: "number" }).notNull(),
+    /** 'edit' | 'deadline' | 'reminder' | 'attach' | 'set_key' */
+    action: text("action").notNull(),
+    /** item UUID for item:* actions; null for set_key (target lives in target_chat_id). */
+    itemId: uuid("item_id"),
+    /** target chat for set_key (group routing); null for item:* actions. */
+    targetChatId: bigint("target_chat_id", { mode: "number" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("bot_action_contexts_pk").on(t.chatId, t.messageId),
+    index("bot_action_contexts_created_idx").on(t.createdAt),
+  ],
+);
