@@ -560,23 +560,38 @@ export type ListWorkspacesOutput = z.infer<typeof listWorkspacesOutputSchema>;
 
 // ─── 6h. update_workspace (Phase 4.5) ─────────────────────────────────
 //
-// Owner-only rename. The slug auto-regenerates from the new name.
+// Owner-only. Supports renaming the workspace AND (Phase 16/#28)
+// changing `default_list_visibility` — the default visibility for
+// newly-created lists in this workspace ('public' = workspace-wide,
+// 'private' = list_members-gated).
 
 export const updateWorkspaceInputSchema = z
   .object({
     workspace_id: z.string().uuid().optional(),
-    name: z.string().trim().min(1).max(120),
+    name: z.string().trim().min(1).max(120).optional(),
+    /**
+     * Phase 16/#28: when set, flips the workspace's default visibility
+     * for new lists. Existing lists are NOT mass-flipped — only future
+     * `create_list` calls inherit this value when the caller omits
+     * `visibility`.
+     */
+    default_list_visibility: z.enum(["public", "private"]).optional(),
   })
-  .refine((v) => v.name !== undefined, {
-    message: "name is required",
-  });
+  .refine(
+    (v) => v.name !== undefined || v.default_list_visibility !== undefined,
+    {
+      message: "At least one of `name` or `default_list_visibility` is required",
+    },
+  );
 
 export const updateWorkspaceOutputSchema = z.object({
   workspace: z.object({
     id: z.string().uuid(),
     name: z.string(),
     slug: z.string(),
+    default_list_visibility: z.enum(["public", "private"]),
   }),
+  changes: z.array(z.enum(["name", "default_list_visibility"])),
 });
 
 export type UpdateWorkspaceInput = z.infer<typeof updateWorkspaceInputSchema>;
@@ -1502,7 +1517,10 @@ export const tools: readonly ToolDefinition[] = [
     description:
       "Create a new list owned by the calling user. Pass `name` (1-120 chars; " +
       "deduplication is the user's responsibility — multiple lists with the " +
-      "same name are allowed). `emoji` is optional (single emoji char). The " +
+      "same name are allowed). `emoji` is optional (single emoji char). " +
+      "Optional `visibility` ('public' | 'private') overrides the workspace's " +
+      "default_list_visibility — Phase 16/#28; public lists are visible to " +
+      "every workspace member without needing list_members invites. The " +
       "Inbox list is auto-created on /start; do NOT call this for Inbox. " +
       "Use when the user asks 'yeni alışveriş listesi yap' / 'create a " +
       "shopping list' / similar net-new list intent. After success, items " +
@@ -1513,13 +1531,19 @@ export const tools: readonly ToolDefinition[] = [
   {
     name: "update_list",
     description:
-      "Rename a list and/or change its emoji. OWNER-ONLY: editors and " +
-      "viewers can't mutate the list shell. Pass `list_id` (preferred) " +
-      "or `list_name` to identify the target. Provide `name` (1-120) " +
-      "and/or `emoji` (1-8 chars; pass null to remove). At least one " +
-      "must be supplied. Inbox can be renamed and re-emoji'd freely. " +
-      "Output `changes` enumerates the fields that actually changed — " +
-      "use it for a precise confirmation reply.",
+      "Mutate a list's shell. OWNER-ONLY (editors and viewers can't " +
+      "change the list shell). Pass `list_id` (preferred) or " +
+      "`list_name` to identify the target. Mutable fields:\n" +
+      "- `name` (1-120 chars)\n" +
+      "- `emoji` (1-8 chars; null removes)\n" +
+      "- `is_checklist` (boolean — toggle repeatable-run mode)\n" +
+      "- `visibility` ('public' | 'private') — Phase 16/#28. 'public' " +
+      "opens the list to every workspace member; 'private' keeps the " +
+      "list_members gate.\n\n" +
+      "At least one must be supplied. Use `visibility` when the user " +
+      "says 'bu listeyi public yap' / 'make this list private' / " +
+      "'herkes görebilsin'. Inbox can be renamed and re-emoji'd freely " +
+      "but its visibility stays implicit.",
     inputSchema: updateListInputSchema,
     outputSchema: updateListOutputSchema,
   },
@@ -1885,10 +1909,19 @@ export const tools: readonly ToolDefinition[] = [
   {
     name: "update_workspace",
     description:
-      "Rename the active workspace. OWNER-ONLY. Pass `name` (1-120). " +
-      "The slug auto-regenerates. Use when the user says 'workspace " +
-      "adını <X> yap' / 'rename my workspace to <X>'. Personal " +
-      "Workspace can be renamed freely; the `is_personal` flag stays.",
+      "Mutate the active workspace. OWNER-ONLY. Two independent fields:\n" +
+      "- `name` (1-120 chars): renames the workspace; slug auto-regenerates.\n" +
+      "- `default_list_visibility` ('public' | 'private'): sets the default " +
+      "visibility that new lists in this workspace inherit when " +
+      "create_list omits `visibility`. 'public' → workspace members " +
+      "see/edit by default; 'private' → list_members gate (legacy).\n\n" +
+      "Use when the user says 'workspace adını <X> yap', 'rename my " +
+      "workspace to <X>', 'yeni listeler default public olsun', 'home " +
+      "alanındaki tüm yeni listeler public olsun', 'make new lists " +
+      "public by default'. Pass at least one field.\n\n" +
+      "Does NOT mass-flip existing lists — only future create_list " +
+      "calls inherit the new default. To flip an existing list, call " +
+      "update_list with `visibility`.",
     inputSchema: updateWorkspaceInputSchema,
     outputSchema: updateWorkspaceOutputSchema,
   },

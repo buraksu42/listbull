@@ -32,10 +32,10 @@ export async function executeUpdateWorkspace(
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
-  const { workspace_id, name } = parsed.data;
+  const { workspace_id, name, default_list_visibility } = parsed.data;
   const targetId = workspace_id ?? ctx.workspaceId;
 
-  // Owner gate: only the workspace's owner can rename it.
+  // Owner gate: only the workspace's owner can mutate it.
   const member = await db.query.workspaceMembers.findFirst({
     where: and(
       eq(workspaceMembers.workspaceId, targetId),
@@ -46,7 +46,7 @@ export async function executeUpdateWorkspace(
     return err(ERR.not_found, "Workspace not found.");
   }
   if (member.role !== "owner") {
-    return err(ERR.forbidden, "Only the workspace owner can rename it.");
+    return err(ERR.forbidden, "Only the workspace owner can update it.");
   }
 
   return await db.transaction(async (tx) => {
@@ -57,35 +57,51 @@ export async function executeUpdateWorkspace(
       .limit(1);
     if (!current) return err(ERR.not_found, "Workspace not found.");
 
-    const trimmed = name.trim();
-    if (trimmed === current.name) {
-      // Idempotent no-op.
+    const trimmedName = name?.trim();
+    const changes: Array<"name" | "default_list_visibility"> = [];
+    const patch: Partial<typeof workspaces.$inferInsert> = {
+      updatedAt: new Date(),
+    };
+
+    if (trimmedName !== undefined && trimmedName !== current.name) {
+      patch.name = trimmedName;
+      patch.slug = current.isPersonal
+        ? current.slug
+        : await ensureUniqueSlug(slugify(trimmedName), current.id);
+      changes.push("name");
+    }
+    if (
+      default_list_visibility !== undefined &&
+      default_list_visibility !== current.defaultListVisibility
+    ) {
+      patch.defaultListVisibility = default_list_visibility;
+      changes.push("default_list_visibility");
+    }
+
+    if (changes.length === 0) {
       return ok({
         workspace: {
           id: current.id,
           name: current.name,
           slug: current.slug,
+          default_list_visibility: current.defaultListVisibility as
+            | "public"
+            | "private",
         },
+        changes: [],
       });
     }
 
-    // Auto-regenerate slug. Personal Workspaces keep their `<userId>-personal`
-    // slug regardless of name (it's structural, not user-facing).
-    const newSlug = current.isPersonal
-      ? current.slug
-      : await ensureUniqueSlug(slugify(trimmed), current.id);
-
     const [updated] = await tx
       .update(workspaces)
-      .set({ name: trimmed, slug: newSlug, updatedAt: new Date() })
+      .set(patch)
       .where(eq(workspaces.id, targetId))
       .returning();
     if (!updated) throw new Error("update-workspace: update returned no row");
 
+    // Activity log row. We re-use 'workspace_renamed' for any
+    // workspace-shell mutation — the audit feed picks it up regardless.
     await tx.insert(activityLog).values({
-      // Workspace events have a null list_id; the entity_id is the
-      // workspace_id and entity_type='workspace' lets the activity-feed
-      // query filter by entity.
       listId: null,
       entityType: "workspace",
       entityId: updated.id,
@@ -95,11 +111,13 @@ export async function executeUpdateWorkspace(
         id: current.id,
         name: current.name,
         slug: current.slug,
+        default_list_visibility: current.defaultListVisibility,
       },
       payloadAfter: {
         id: updated.id,
         name: updated.name,
         slug: updated.slug,
+        default_list_visibility: updated.defaultListVisibility,
       },
     });
 
@@ -108,7 +126,11 @@ export async function executeUpdateWorkspace(
         id: updated.id,
         name: updated.name,
         slug: updated.slug,
+        default_list_visibility: updated.defaultListVisibility as
+          | "public"
+          | "private",
       },
+      changes,
     });
   });
 }
