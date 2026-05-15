@@ -20,7 +20,7 @@ export function HomeFab() {
     <Link
       href="/lists"
       aria-label="Listelere dön"
-      className="fixed bottom-4 right-4 z-50 flex h-11 w-11 items-center justify-center rounded-full shadow-md transition-transform active:scale-95"
+      className="fixed bottom-4 right-4 z-40 flex h-11 w-11 items-center justify-center rounded-full shadow-md transition-transform active:scale-95"
       style={{
         background: "var(--lb-accent)",
         color: "var(--lb-accent-fg, white)",
