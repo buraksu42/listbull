@@ -14,10 +14,10 @@
  */
 import type { Context } from "grammy";
 import { InlineKeyboard } from "grammy";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { items } from "@/lib/db/schema";
+import { itemAttachments, items } from "@/lib/db/schema";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
 
@@ -69,6 +69,25 @@ export async function buildItemsView(
     .where(and(eq(items.chatId, chatId), isNull(items.archivedAt)));
   const total = totalRow.length;
 
+  // One-shot attachment count for the visible page so we can render
+  // 📎N indicator + know whether to label the action as "attach" or
+  // "view" without N round-trips.
+  const visibleIds = (hasNext ? rows.slice(0, PAGE_SIZE) : rows).map(
+    (r) => r.id,
+  );
+  const attachmentCounts = new Map<string, number>();
+  if (visibleIds.length > 0) {
+    const counts = await db
+      .select({
+        itemId: itemAttachments.itemId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(itemAttachments)
+      .where(inArray(itemAttachments.itemId, visibleIds))
+      .groupBy(itemAttachments.itemId);
+    for (const row of counts) attachmentCounts.set(row.itemId, row.count);
+  }
+
   const header =
     locale === "tr"
       ? `📋 Yapılacaklar (${total})`
@@ -119,8 +138,10 @@ export async function buildItemsView(
     }
     const text =
       it.text.length > 50 ? `${it.text.slice(0, 50)}…` : it.text;
+    const attachCount = attachmentCounts.get(it.id) ?? 0;
+    const attachSuffix = attachCount > 0 ? ` 📎${attachCount}` : "";
     lines.push(
-      `${num}. ${checkbox} ${priorityIcon}${statusIcon}${text}${deadlineSuffix}${tagSuffix}`,
+      `${num}. ${checkbox} ${priorityIcon}${statusIcon}${text}${deadlineSuffix}${attachSuffix}${tagSuffix}`,
     );
     // Row A — wide numbered label, taps to toggle. Number prevents the
     // "which item does this button belong to?" ambiguity when the
@@ -135,11 +156,14 @@ export async function buildItemsView(
       .row();
     // Row B — 5 narrow action buttons. Order tuned for frequency:
     // edit (most common), deadline, reminder, attach, delete (least).
+    // 📎 button shows count when files exist, so tapping it is also
+    // a hint that there's something to download.
+    const attachLabel = attachCount > 0 ? `📎${attachCount}` : "📎";
     keyboard
       .text("✏️", `item:edit:${it.id}`)
       .text("📅", `item:deadline:${it.id}`)
       .text("⏰", `item:reminder:${it.id}`)
-      .text("📎", `item:attach:${it.id}`)
+      .text(attachLabel, `item:attach:${it.id}`)
       .text("🗑️", `item:delete:${it.id}`)
       .row();
   }

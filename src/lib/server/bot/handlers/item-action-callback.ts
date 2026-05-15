@@ -20,10 +20,11 @@
  * — no user-visible `[ctx:...]` marker needed in the prompt text.
  */
 import type { Context } from "grammy";
-import { and, eq } from "drizzle-orm";
+import { InlineKeyboard } from "grammy";
+import { and, asc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { activityLog, items } from "@/lib/db/schema";
+import { activityLog, itemAttachments, items } from "@/lib/db/schema";
 import { buildItemsView } from "@/lib/server/bot/commands/items";
 import { insertBotActionContext } from "@/lib/db/queries/bot-action-contexts";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
@@ -155,6 +156,166 @@ export async function handleItemActionCallback(
     return;
   }
 
+  // 📎 button — context-aware:
+  //   - 0 attachments → force-reply prompt to attach new file
+  //   - ≥1 attachments → list each as a download button + add a
+  //     "📥 İndir" + "+ Ekle" row.
+  if (data.startsWith("item:attach:")) {
+    const itemId = data.slice("item:attach:".length);
+    const [item] = await db
+      .select({ text: items.text })
+      .from(items)
+      .where(and(eq(items.id, itemId), eq(items.chatId, chatId)))
+      .limit(1);
+    if (!item) {
+      await ctx.answerCallbackQuery();
+      return;
+    }
+    const existing = await db
+      .select()
+      .from(itemAttachments)
+      .where(eq(itemAttachments.itemId, itemId))
+      .orderBy(asc(itemAttachments.createdAt));
+
+    const title = item.text.length > 60 ? `${item.text.slice(0, 60)}…` : item.text;
+    await ctx.answerCallbackQuery();
+
+    if (existing.length === 0) {
+      // No files yet → force-reply attach prompt (legacy behavior).
+      const body =
+        locale === "tr"
+          ? `📎 "${title}" — bu mesaja fotoğraf, dosya veya ses göndererek ekle.`
+          : `📎 "${title}" — reply to this message with a photo, file, or voice note to attach.`;
+      const sent = await ctx.api.sendMessage(chatId, body, {
+        reply_markup: { force_reply: true, selective: true },
+      });
+      await insertBotActionContext({
+        chatId,
+        messageId: sent.message_id,
+        action: "attach",
+        itemId,
+        targetChatId: null,
+      });
+      return;
+    }
+
+    // Render the existing attachments + a "Yeni ekle" option.
+    const lines: string[] = [
+      locale === "tr"
+        ? `📎 "${title}" — ${existing.length} ek dosya`
+        : `📎 "${title}" — ${existing.length} attached file(s)`,
+      "",
+    ];
+    const kb = new InlineKeyboard();
+    for (let i = 0; i < existing.length; i++) {
+      const a = existing[i]!;
+      const label =
+        a.originalFilename ??
+        a.mimeType ??
+        `${a.kind} ${i + 1}`;
+      const trimmed = label.length > 40 ? `${label.slice(0, 40)}…` : label;
+      lines.push(`${i + 1}. ${attachmentIcon(a.kind)} ${trimmed}`);
+      kb.text(
+        `📥 ${i + 1}`,
+        `item:attach_dl:${a.id}`,
+      );
+    }
+    kb.row();
+    kb.text(
+      locale === "tr" ? "+ Yeni dosya ekle" : "+ Add new file",
+      `item:attach_new:${itemId}`,
+    );
+    await ctx.api.sendMessage(chatId, lines.join("\n"), {
+      reply_markup: kb,
+    });
+    return;
+  }
+
+  // item:attach_new:<id> — force-reply prompt explicitly for "add
+  // more files" path so we don't accidentally re-list existing ones.
+  if (data.startsWith("item:attach_new:")) {
+    const itemId = data.slice("item:attach_new:".length);
+    const [item] = await db
+      .select({ text: items.text })
+      .from(items)
+      .where(and(eq(items.id, itemId), eq(items.chatId, chatId)))
+      .limit(1);
+    if (!item) {
+      await ctx.answerCallbackQuery();
+      return;
+    }
+    const title = item.text.length > 60 ? `${item.text.slice(0, 60)}…` : item.text;
+    const body =
+      locale === "tr"
+        ? `📎 "${title}" — bu mesaja fotoğraf, dosya veya ses göndererek ekle.`
+        : `📎 "${title}" — reply to this message with a photo, file, or voice note to attach.`;
+    await ctx.answerCallbackQuery();
+    const sent = await ctx.api.sendMessage(chatId, body, {
+      reply_markup: { force_reply: true, selective: true },
+    });
+    await insertBotActionContext({
+      chatId,
+      messageId: sent.message_id,
+      action: "attach",
+      itemId,
+      targetChatId: null,
+    });
+    return;
+  }
+
+  // item:attach_dl:<attachmentId> — resend the stored file_id.
+  if (data.startsWith("item:attach_dl:")) {
+    const attId = data.slice("item:attach_dl:".length);
+    const [a] = await db
+      .select()
+      .from(itemAttachments)
+      .where(eq(itemAttachments.id, attId))
+      .limit(1);
+    if (!a || a.chatId !== chatId) {
+      await ctx.answerCallbackQuery(
+        locale === "tr" ? "Dosya bulunamadı." : "File not found.",
+      );
+      return;
+    }
+    await ctx.answerCallbackQuery();
+    try {
+      switch (a.kind) {
+        case "photo":
+          await ctx.api.sendPhoto(chatId, a.telegramFileId);
+          break;
+        case "video":
+          await ctx.api.sendVideo(chatId, a.telegramFileId);
+          break;
+        case "audio":
+          await ctx.api.sendAudio(chatId, a.telegramFileId);
+          break;
+        case "voice":
+          await ctx.api.sendVoice(chatId, a.telegramFileId);
+          break;
+        case "video_note":
+          await ctx.api.sendVideoNote(chatId, a.telegramFileId);
+          break;
+        case "document":
+        default:
+          await ctx.api.sendDocument(chatId, a.telegramFileId);
+          break;
+      }
+    } catch (err) {
+      console.error("[item:attach_dl] resend failed", {
+        attId,
+        kind: a.kind,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await ctx.api.sendMessage(
+        chatId,
+        locale === "tr"
+          ? "❗️ Dosya gönderilemedi (file_id geçersiz olabilir)."
+          : "❗️ Couldn't send file (file_id may have expired).",
+      );
+    }
+    return;
+  }
+
   // Force-reply action prompts. The action context (item id + kind)
   // is persisted in `bot_action_contexts` keyed by the sent message
   // id — no inline marker, the prompt body shows the item title so
@@ -197,7 +358,10 @@ export async function handleItemActionCallback(
       }),
     },
   ];
-  for (const a of forceReplyActions) {
+  // Note: item:attach is handled above with its own context-aware
+  // branch (list existing files OR force-reply prompt). Skip the
+  // duplicate generic-attach entry here to avoid double-handling.
+  for (const a of forceReplyActions.filter((x) => x.prefix !== "item:attach:")) {
     if (data.startsWith(a.prefix)) {
       const itemId = data.slice(a.prefix.length);
       // Look up item title for a friendly prompt.
@@ -228,5 +392,24 @@ export async function handleItemActionCallback(
       });
       return;
     }
+  }
+}
+
+/** Map an attachment.kind to a recognizable icon for the list view. */
+function attachmentIcon(kind: string): string {
+  switch (kind) {
+    case "photo":
+      return "🖼️";
+    case "video":
+      return "🎥";
+    case "audio":
+      return "🎵";
+    case "voice":
+      return "🎤";
+    case "video_note":
+      return "📹";
+    case "document":
+    default:
+      return "📄";
   }
 }
