@@ -82,11 +82,12 @@ export async function recomputeOffsetReminders(
     return;
   }
   const deadlineIso = newDeadline.toISOString();
+  // item_reminders.updated_at was dropped in migration 0030 — the
+  // table now tracks creation only.
   await tx.execute(sql`
     UPDATE item_reminders
        SET remind_at = ${deadlineIso}::timestamptz - (offset_minutes * interval '1 minute'),
-           sent = false,
-           updated_at = NOW()
+           sent = false
      WHERE item_id = ${itemId}
        AND kind = 'before_deadline'
   `);

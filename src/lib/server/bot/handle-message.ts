@@ -509,6 +509,18 @@ export async function handleMessage(ctx: Context): Promise<void> {
     await sendChunked(ctx, response.assistantText);
   } catch (err) {
     console.error("[handle-message] LLM error", err);
+    // OpenRouter 402 → user's own funds problem, not infra — surface
+    // it so the chat owner can top up instead of staring at a
+    // generic error.
+    const status = (err as { status?: number } | null)?.status;
+    if (status === 402) {
+      await ctx.reply(
+        locale === "tr"
+          ? "💳 OpenRouter credit'iniz tükendi — openrouter.ai/settings/credits sayfasından yükleyin, sonra tekrar deneyin."
+          : "💳 Your OpenRouter credits ran out — top up at openrouter.ai/settings/credits and try again.",
+      );
+      return;
+    }
     try {
       await ctx.reply(copy.transientError);
     } catch {

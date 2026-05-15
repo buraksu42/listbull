@@ -24,6 +24,22 @@ import type {
 } from "@/lib/types";
 
 /**
+ * Drizzle's postgres-js driver normally returns timestamptz values
+ * as Date objects, but in some build/runtime combos (notably the
+ * Next.js standalone server we ship to Dokploy) we've observed
+ * strings sneaking through. This helper accepts either and always
+ * returns a canonical ISO 8601 string — keeps the snapshot
+ * serializers crash-free.
+ */
+function toIso(value: Date | string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value.toISOString();
+  // Cast: postgres returns "2026-05-15 13:29:23.726+00" or ISO.
+  // new Date(...) accepts both forms.
+  return new Date(value).toISOString();
+}
+
+/**
  * Convert an `Item` row into the JSON-safe `ItemSnapshot` shape that
  * `activity_log.payload_*` columns store. Per Inv-5, every Date becomes
  * an ISO 8601 string for round-trip stability.
@@ -40,15 +56,15 @@ export function toItemSnapshot(row: Item): ItemSnapshot {
     priority: row.priority,
     tags: row.tags ?? [],
     assigneeId: row.assigneeId,
-    deadlineAt: row.deadlineAt ? row.deadlineAt.toISOString() : null,
-    pinnedAt: row.pinnedAt ? row.pinnedAt.toISOString() : null,
+    deadlineAt: toIso(row.deadlineAt),
+    pinnedAt: toIso(row.pinnedAt),
     taskRecurrenceRule: row.taskRecurrenceRule ?? null,
     position: row.position,
     createdBy: row.createdBy,
-    completedAt: row.completedAt ? row.completedAt.toISOString() : null,
-    archivedAt: row.archivedAt ? row.archivedAt.toISOString() : null,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    completedAt: toIso(row.completedAt),
+    archivedAt: toIso(row.archivedAt),
+    createdAt: toIso(row.createdAt)!,
+    updatedAt: toIso(row.updatedAt)!,
   };
 }
 
@@ -69,7 +85,7 @@ export function toAttachmentSnapshot(row: ItemAttachment): AttachmentSnapshot {
     height: row.height,
     originalFilename: row.originalFilename,
     uploadedByUserId: row.uploadedByUserId,
-    createdAt: row.createdAt.toISOString(),
+    createdAt: toIso(row.createdAt)!,
   };
 }
 
@@ -78,13 +94,15 @@ export function toItemReminderSnapshot(row: ItemReminder): ItemReminderSnapshot 
   return {
     id: row.id,
     itemId: row.itemId,
-    remindAt: row.remindAt.toISOString(),
+    remindAt: toIso(row.remindAt)!,
     kind: row.kind as ItemReminderKind,
     offsetMinutes: row.offsetMinutes,
     recurrenceRule: row.recurrenceRule,
     sent: row.sent,
-    lastSentAt: row.sentAt ? row.sentAt.toISOString() : null,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.createdAt.toISOString(),
+    lastSentAt: toIso(row.sentAt),
+    createdAt: toIso(row.createdAt)!,
+    // item_reminders no longer has updated_at (migration 0030). Mirror
+    // createdAt here so the snapshot shape stays stable.
+    updatedAt: toIso(row.createdAt)!,
   };
 }

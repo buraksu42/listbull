@@ -52,8 +52,15 @@ export const MAX_TOOL_ROUNDTRIPS = 5;
 // Wrong: "https://openrouter.ai/api/v1" → request hits /api/v1/v1/messages (404, empty body).
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api";
 
-/** Default `max_tokens` for the assistant message. */
-const DEFAULT_MAX_TOKENS = 2048;
+/**
+ * Default `max_tokens` for the assistant message. Tightened from 2048
+ * → 1024 because (a) chat-bot replies in this product top out at
+ * ~300 tokens; the headroom was wasted, (b) OpenRouter credit
+ * budgeting blocks the *requested* ceiling, not actual usage, so
+ * shorter ceilings let small balances keep working, and (c) tool
+ * round-trips are bounded by `MAX_TOOL_ROUNDTRIPS` already.
+ */
+const DEFAULT_MAX_TOKENS = 1024;
 
 /**
  * Run a single user turn through the LLM, executing any tool calls the
