@@ -1,121 +1,87 @@
 /**
- * Bot LLM router. Wired in `src/lib/server/bot/index.ts` after slash
- * command handlers (commands take priority — grammY routes them first
- * because `bot.command()` filters on the leading `/foo` and we register
- * `bot.on("message:text", handleMessage)` AFTER all `bot.command(...)`
- * calls).
+ * Bot LLM router (Phase 17 chat-only).
+ *
+ * Replaces the workspace + list resolution path with a simple chat
+ * lookup: `ensureChat` lazily creates the chat row + auto-adds the
+ * sender to chat_members. Items, activity, reminders all scope on
+ * chat_id.
  *
  * Flow:
- *   1. Resolve the calling user; require BYOK key configured.
- *   2. Persist the inbound user message.
- *   3. Load last 30 messages for (user, chat); slice via AI's
- *      sliceForContext.
- *   4. Append the new user message to the sliced history; call respond().
- *   5. Persist the assistant + tool messages produced this turn.
- *   6. Send the final assistant text back to Telegram. Chunk on word
- *      boundaries when >4096 chars.
+ *   1. Resolve user (upsertUserFromTelegram).
+ *   2. Determine chat type (private | group | supergroup) + ensure chat row.
+ *   3. Privacy filter for groups: skip messages that don't mention the bot.
+ *   4. API-key paste intercept (sk-or-v1-...) → set_chat_api_key directly,
+ *      delete user's Telegram message, return.
+ *   5. Resolve OpenRouter key from chat. None → reply with paste hint.
+ *   6. Voice STT, forwarded, attachment paths (each transforms the user
+ *      text into the LLM-visible content).
+ *   7. Persist user message (redacted), call LLM, persist assistant
+ *      messages, send replies.
  *
- * Phase 2 awaits the LLM inline (test scale; webhook still ack-200s
- * within Telegram's 60s budget). Phase 4 will defer via setImmediate
- * for production scale.
+ * Webhook ack happens upstream in `/api/telegram/webhook/route.ts`;
+ * this handler runs on the same request but never throws for tool
+ * errors (those travel back as envelopes).
  */
 import "server-only";
 
 import type { Context } from "grammy";
 
 import { env } from "@/lib/env";
+import { ensureChat } from "@/lib/db/queries/chats";
 import { getRecentMessages, insertMessages } from "@/lib/db/queries/messages";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
-import {
-  getWorkspaceByChatId,
-  getWorkspaceLlmModel,
-  getWorkspaceMembership,
-  getWorkspaceOrgKeyEncrypted,
-  listUserWorkspacesWithKey,
-  listWorkspacesForUser,
-  resolveActiveWorkspaceId,
-} from "@/lib/db/queries/workspaces";
 import { enforceRateLimit } from "@/lib/server/middleware/rate-limit";
 import { sliceForContext } from "@/lib/ai/conversation";
-import { forwardedMessagePrompt } from "@/lib/ai/prompts/forwarded";
 import {
   NO_KEY_SENTINEL,
   ROUNDTRIP_CAP_SENTINEL,
   respond,
 } from "@/lib/ai/respond";
 import { decrypt } from "@/lib/server/encryption";
+import { db } from "@/lib/db/client";
+import { chats } from "@/lib/db/schema";
+import { and, eq } from "drizzle-orm";
 import { createToolDispatcher } from "@/lib/server/tools/dispatcher";
 import { pickLocale } from "@/lib/server/bot/i18n";
-import { transcribeAudioFromTelegram } from "@/lib/server/bot/stt";
+import { executeSetChatApiKey } from "@/lib/server/tools/set-chat-api-key";
+import { upsertChatMember } from "@/lib/db/queries/chats";
 
 import type {
+  ChatType,
   ConversationMessage,
   NewMessage,
   ToolCall,
   User,
 } from "@/lib/types";
 
-/** Telegram caps outgoing messages at 4096 chars. */
 const TG_MAX_MESSAGE_LEN = 4096;
 
-/**
- * Hardcoded UI copy. Bot-side i18n.ts has a small dict; we extend
- * inline here rather than mutate that file (frontend conventions —
- * shared dict gets larger in Phase 4 with E1+E3 work).
- */
 const COPY = {
   tr: {
     noKey:
-      "Bu workspace'in sahibinin OpenRouter API key tanımlaması gerek. Mini App → Workspace ayarları → Workspace API key.",
+      "Bu chat'in OpenRouter API key'i tanımlı değil. Onsuz AI cevap veremem.\n\n🔑 Nasıl alırım: openrouter.ai/keys → Sign in → $5+ credit yükle → key oluştur (sk-or-v1-… ile başlar)\n\n📥 Direkt buraya yapıştır — kaydederim ve mesajını silerim (güvenlik). Sadece chat sahibi koyabilir.",
     keyDecryptError:
-      "Workspace API key'i okunamadı. Workspace sahibi key'i tekrar tanımlamalı.",
+      "Chat API key'i okunamadı. Sahibi key'i tekrar koymalı.",
     transientError: "Bir şeyler ters gitti, tekrar dener misin?",
-    forwardedNoText:
-      "İletilen mesajda metin bulamadım — sadece metinli mesajlardan madde çıkarabilirim.",
     rateLimited:
       "Çok fazla mesaj — biraz yavaşla. Saatlik limitin doldu, biraz sonra tekrar dene.",
     transcribeFailed: "Sesini yazıya çeviremedim, tekrar dener misin?",
-    audioTooLong:
-      "Ses kaydı çok uzun (15 MB üstü). Daha kısa bir kayıt gönder.",
-    audioEmpty: "Ses kaydında konuşma duyamadım, tekrar dener misin?",
-    groupNotBound:
-      "Bu grup henüz bir workspace'e bağlı değil. Sahibi olduğun bir workspace varsa /bindgroup ile bağla; yoksa Mini App'ten yarat.",
-    groupNotMember:
-      "Bu workspace'in üyesi değilsin. Sahibinden seni davet etmesini iste (DM'den /share veya Mini App → Workspace settings).",
+    audioTooLong: "Ses kaydı çok uzun (15 MB üstü).",
+    audioEmpty: "Ses kaydında konuşma duyamadım.",
   },
   en: {
     noKey:
-      "Your workspace owner needs to set the OpenRouter API key. Open the Mini App → Workspace settings → Workspace API key.",
+      "This chat's OpenRouter API key isn't set. I can't reply without one.\n\n🔑 How to get one: openrouter.ai/keys → Sign in → add $5+ credit → create a key (starts with sk-or-v1-…)\n\n📥 Paste it here directly — I save it and delete your message for safety. Only the chat owner can set it.",
     keyDecryptError:
-      "Couldn't read the workspace API key. The workspace owner needs to set it again.",
+      "Couldn't read this chat's API key. The owner needs to set it again.",
     transientError: "Something went wrong — try again?",
-    forwardedNoText:
-      "I didn't find any text in the forwarded message — I can only extract items from messages with text.",
-    rateLimited:
-      "Too many messages — slow down. Your hourly limit is exhausted; try again shortly.",
-    transcribeFailed: "I couldn't transcribe that audio — try again?",
-    audioTooLong: "That audio is too large (over 15 MB). Send a shorter clip.",
-    audioEmpty: "I didn't hear any speech in that audio — try again?",
-    groupNotBound:
-      "This group isn't bound to any workspace yet. If you own a workspace, run /bindgroup to bind it; otherwise create one in the Mini App.",
-    groupNotMember:
-      "You're not a member of this workspace. Ask the owner to invite you (DM /share or Mini App → Workspace settings).",
+    rateLimited: "Too many messages — slow down. Try again shortly.",
+    transcribeFailed: "I couldn't transcribe that audio.",
+    audioTooLong: "That audio is too large (over 15 MB).",
+    audioEmpty: "I didn't hear any speech in that audio.",
   },
 } as const;
 
-/**
- * Phase 14b: extract attachment metadata from a Telegram message.
- *
- * Returns `null` for messages without any attachment, otherwise the
- * shape the LLM consumes via the `[ATTACHMENT_CONTEXT: ...]` overlay
- * AND the `attach_file_to_item` tool consumes verbatim.
- *
- * Photos: largest size variant wins (Telegram returns an array of
- * progressively larger thumbnails; the last entry is the original).
- * Videos / documents / audio: the single object on `message.<kind>`.
- * Voice / video_note: same shape; treated as audio for transcription
- * downstream (Phase 13).
- */
 export type AttachmentExtract = {
   kind:
     | "photo"
@@ -135,197 +101,73 @@ export type AttachmentExtract = {
   filename?: string;
 };
 
-export function extractAttachmentFromMessage(
-  message: unknown,
+function extractAttachmentFromMessage(
+  message: Context["message"] & object,
 ): AttachmentExtract | null {
-  if (!message || typeof message !== "object") return null;
-  const m = message as Record<string, unknown>;
-
-  // Photos: pick the largest variant (last in the array per Telegram).
+  const m = message as unknown as Record<string, unknown>;
+  // Photo: array of progressive sizes; the last is the largest.
   if (Array.isArray(m.photo) && m.photo.length > 0) {
-    const largest = m.photo[m.photo.length - 1] as Record<string, unknown>;
-    if (typeof largest.file_id === "string") {
+    const arr = m.photo as Array<{
+      file_id: string;
+      file_unique_id: string;
+      file_size?: number;
+      width?: number;
+      height?: number;
+    }>;
+    const largest = arr[arr.length - 1];
+    if (largest) {
       return {
         kind: "photo",
         fileId: largest.file_id,
-        fileUniqueId:
-          typeof largest.file_unique_id === "string"
-            ? largest.file_unique_id
-            : "",
-        fileSize:
-          typeof largest.file_size === "number" ? largest.file_size : undefined,
-        width: typeof largest.width === "number" ? largest.width : undefined,
-        height: typeof largest.height === "number" ? largest.height : undefined,
+        fileUniqueId: largest.file_unique_id,
+        fileSize: largest.file_size,
+        width: largest.width,
+        height: largest.height,
       };
     }
   }
-
-  const oneOf = (key: string): Record<string, unknown> | null => {
-    const v = m[key];
-    return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
-  };
-
-  const video = oneOf("video");
-  if (video && typeof video.file_id === "string") {
-    const thumb = oneOf("video.thumb") ?? (video.thumb as Record<string, unknown> | undefined);
-    return {
-      kind: "video",
-      fileId: video.file_id,
-      fileUniqueId:
-        typeof video.file_unique_id === "string" ? video.file_unique_id : "",
-      mimeType: typeof video.mime_type === "string" ? video.mime_type : undefined,
-      fileSize: typeof video.file_size === "number" ? video.file_size : undefined,
-      duration:
-        typeof video.duration === "number" ? video.duration : undefined,
-      width: typeof video.width === "number" ? video.width : undefined,
-      height: typeof video.height === "number" ? video.height : undefined,
-      thumbnailFileId:
-        thumb && typeof thumb.file_id === "string" ? thumb.file_id : undefined,
-      filename:
-        typeof video.file_name === "string" ? video.file_name : undefined,
-    };
+  for (const kind of ["video", "document", "audio", "voice", "video_note"] as const) {
+    const f = m[kind] as
+      | {
+          file_id?: string;
+          file_unique_id?: string;
+          mime_type?: string;
+          file_size?: number;
+          duration?: number;
+          width?: number;
+          height?: number;
+          thumb?: { file_id?: string };
+          file_name?: string;
+        }
+      | undefined;
+    if (f && typeof f === "object" && typeof f.file_id === "string") {
+      return {
+        kind,
+        fileId: f.file_id,
+        fileUniqueId: f.file_unique_id ?? "",
+        mimeType: f.mime_type,
+        fileSize: f.file_size,
+        duration: f.duration,
+        width: f.width,
+        height: f.height,
+        thumbnailFileId: f.thumb?.file_id,
+        filename: f.file_name,
+      };
+    }
   }
-
-  const doc = oneOf("document");
-  if (doc && typeof doc.file_id === "string") {
-    const thumb = doc.thumb as Record<string, unknown> | undefined;
-    return {
-      kind: "document",
-      fileId: doc.file_id,
-      fileUniqueId:
-        typeof doc.file_unique_id === "string" ? doc.file_unique_id : "",
-      mimeType: typeof doc.mime_type === "string" ? doc.mime_type : undefined,
-      fileSize: typeof doc.file_size === "number" ? doc.file_size : undefined,
-      thumbnailFileId:
-        thumb && typeof thumb.file_id === "string" ? thumb.file_id : undefined,
-      filename: typeof doc.file_name === "string" ? doc.file_name : undefined,
-    };
-  }
-
-  const audio = oneOf("audio");
-  if (audio && typeof audio.file_id === "string") {
-    return {
-      kind: "audio",
-      fileId: audio.file_id,
-      fileUniqueId:
-        typeof audio.file_unique_id === "string" ? audio.file_unique_id : "",
-      mimeType: typeof audio.mime_type === "string" ? audio.mime_type : undefined,
-      fileSize: typeof audio.file_size === "number" ? audio.file_size : undefined,
-      duration:
-        typeof audio.duration === "number" ? audio.duration : undefined,
-      filename: typeof audio.file_name === "string" ? audio.file_name : undefined,
-    };
-  }
-
-  const voice = oneOf("voice");
-  if (voice && typeof voice.file_id === "string") {
-    return {
-      kind: "voice",
-      fileId: voice.file_id,
-      fileUniqueId:
-        typeof voice.file_unique_id === "string" ? voice.file_unique_id : "",
-      mimeType: typeof voice.mime_type === "string" ? voice.mime_type : undefined,
-      fileSize: typeof voice.file_size === "number" ? voice.file_size : undefined,
-      duration:
-        typeof voice.duration === "number" ? voice.duration : undefined,
-    };
-  }
-
-  const note = oneOf("video_note");
-  if (note && typeof note.file_id === "string") {
-    return {
-      kind: "video_note",
-      fileId: note.file_id,
-      fileUniqueId:
-        typeof note.file_unique_id === "string" ? note.file_unique_id : "",
-      fileSize: typeof note.file_size === "number" ? note.file_size : undefined,
-      duration:
-        typeof note.duration === "number" ? note.duration : undefined,
-    };
-  }
-
   return null;
 }
 
-/** Localized fallback when an attachment came in without text/caption. */
-function labelKindTr(kind: AttachmentExtract["kind"]): string {
-  switch (kind) {
-    case "photo":
-      return "Fotoğraf";
-    case "video":
-      return "Video";
-    case "document":
-      return "Belge";
-    case "audio":
-      return "Ses dosyası";
-    case "voice":
-      return "Sesli mesaj";
-    case "video_note":
-      return "Video notu";
-  }
-}
-
-/**
- * Format an `AttachmentExtract` into the system overlay tag the LLM
- * sees on the same user turn. The LLM is instructed (tool description)
- * to pull `file_id` and metadata from this tag verbatim before
- * invoking `attach_file_to_item` — never fabricated.
- */
-export function formatAttachmentContext(att: AttachmentExtract): string {
-  const parts: string[] = [
-    `kind=${att.kind}`,
-    `file_id=${att.fileId}`,
-  ];
+function formatAttachmentContext(att: AttachmentExtract): string {
+  const parts = [`kind=${att.kind}`, `file_id=${att.fileId}`];
   if (att.fileUniqueId) parts.push(`file_unique_id=${att.fileUniqueId}`);
   if (att.mimeType) parts.push(`mime_type=${att.mimeType}`);
   if (att.fileSize !== undefined) parts.push(`file_size=${att.fileSize}`);
   if (att.duration !== undefined) parts.push(`duration=${att.duration}`);
   if (att.width !== undefined) parts.push(`width=${att.width}`);
   if (att.height !== undefined) parts.push(`height=${att.height}`);
-  if (att.thumbnailFileId)
-    parts.push(`thumbnail_file_id=${att.thumbnailFileId}`);
   if (att.filename) parts.push(`filename=${att.filename}`);
   return `[ATTACHMENT_CONTEXT: ${parts.join(" ")}]`;
-}
-
-/**
- * Phase 4 / A3: pull a human-readable sender label out of the grammY
- * `forward_origin` union. The four documented variants are
- *   - user (real Telegram user)        → first_name
- *   - hidden_user (privacy-protected)  → sender_user_name
- *   - chat (group)                     → chat title
- *   - channel                          → chat title
- * We only need a display label; nothing is persisted to `items.text`.
- */
-function readForwardOrigin(message: unknown): {
-  forwardedFrom: string;
-} | null {
-  if (!message || typeof message !== "object") return null;
-  const fo = (message as { forward_origin?: unknown }).forward_origin;
-  if (!fo || typeof fo !== "object") return null;
-  const origin = fo as Record<string, unknown>;
-  switch (origin.type) {
-    case "user": {
-      const u = origin.sender_user as { first_name?: string } | undefined;
-      return { forwardedFrom: u?.first_name ?? "Unknown sender" };
-    }
-    case "hidden_user": {
-      const name = origin.sender_user_name;
-      return {
-        forwardedFrom: typeof name === "string" ? name : "Unknown sender",
-      };
-    }
-    case "chat": {
-      const c = origin.sender_chat as { title?: string } | undefined;
-      return { forwardedFrom: c?.title ?? "Unknown chat" };
-    }
-    case "channel": {
-      const c = origin.chat as { title?: string } | undefined;
-      return { forwardedFrom: c?.title ?? "Unknown channel" };
-    }
-    default:
-      return null;
-  }
 }
 
 export async function handleMessage(ctx: Context): Promise<void> {
@@ -338,41 +180,19 @@ export async function handleMessage(ctx: Context): Promise<void> {
     typeof (message as { caption?: unknown }).caption === "string"
       ? ((message as { caption: string }).caption as string)
       : "";
-  // Phase 14b: photos / videos / documents / audio / voice / video_note
-  // arrive without `.text`. Caption (if any) is the user's intent.
+
   const rawAttachment = extractAttachmentFromMessage(message);
-  // Phase 13: voice / audio / video_note are INPUT mode (the user
-  // speaking instead of typing) — we transcribe and feed the text
-  // through the existing LLM pipeline. They DO NOT create attachment
-  // rows. Photo / video / document keep the Phase 14b attachment path.
   const isVoiceInput =
     rawAttachment !== null &&
     (rawAttachment.kind === "voice" ||
       rawAttachment.kind === "audio" ||
       rawAttachment.kind === "video_note");
-  // `let` so the voice branch below can override after STT.
-  let attachment = isVoiceInput ? null : rawAttachment;
-  // Forwarded messages take a different path: the LLM sees a single-purpose
-  // extraction system prompt + bounded round-trip cap (Inv-16). We branch
-  // BEFORE the slash-command guard so a forwarded `/something` body is
-  // still treated as forwarded text (slash commands are the message
-  // sender's authored text only, never a forward).
-  const forward = readForwardOrigin(message);
-
-  // Effective user text: prefer `text`, then `caption` for media-only
-  // messages. When neither is present BUT an attachment exists, the
-  // LLM gets a stand-in placeholder so it can ask "hangi maddeye?".
-  // Voice input replaces this after STT lands below.
+  const attachment = isVoiceInput ? null : rawAttachment;
   let effectiveText = text || caption;
 
-  // Slash commands are handled by `bot.command()` registrations; defensive
-  // guard for empty input. Skip this guard for: (a) forwards, (b) any
-  // message carrying a photo/video/document attachment (we want to
-  // route to the LLM with the attachment context overlay even if the
-  // caption is empty), (c) voice/audio/video_note (Phase 13 — STT path
-  // produces text from the audio).
+  // Skip slash commands (bot.command() handles them) when there's
+  // no forward/attachment payload to override.
   if (
-    !forward &&
     !attachment &&
     !isVoiceInput &&
     (!effectiveText || effectiveText.startsWith("/"))
@@ -382,30 +202,35 @@ export async function handleMessage(ctx: Context): Promise<void> {
 
   const user = await getUserByTelegramId(from.id);
   if (!user) {
-    // No /start has been run yet.
     await ctx.reply("Run /start first.");
     return;
   }
 
   const locale = pickLocale(user.locale);
   const copy = COPY[locale];
+  const chatType = message.chat.type as ChatType;
   const chatId = message.chat.id;
-  const isGroupContext =
-    message.chat.type === "group" || message.chat.type === "supergroup";
+  const isGroupContext = chatType === "group" || chatType === "supergroup";
 
-  // Group-context safety filter: even though Telegram's privacy mode
-  // ON delivers only @-mentions + commands + replies-to-bot, an
-  // operator who flips privacy OFF would otherwise pipe every group
-  // message into the LLM. Skip messages that don't address us.
-  if (isGroupContext && !forward && !attachment) {
+  // Ensure the chat row exists + the sender is a chat member.
+  await ensureChat({
+    chatId,
+    type: chatType,
+    title:
+      message.chat.type === "private"
+        ? null
+        : (message.chat as { title?: string }).title ?? null,
+    ownerUserId: user.id,
+  });
+  await upsertChatMember(chatId, user.id);
+
+  // Group privacy filter: only act on @-mentions or replies to bot.
+  if (isGroupContext && !attachment) {
     const botUsername = ctx.me.username;
     const mentionsBot =
       effectiveText.includes(`@${botUsername}`) ||
-      (message.reply_to_message?.from?.id === ctx.me.id);
-    if (!mentionsBot) {
-      return;
-    }
-    // Strip the @-mention so the LLM sees the user's intent only.
+      message.reply_to_message?.from?.id === ctx.me.id;
+    if (!mentionsBot) return;
     effectiveText = effectiveText
       .replace(new RegExp(`@${botUsername}\\b`, "gi"), "")
       .trim();
@@ -414,9 +239,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
     }
   }
 
-  // Phase 10 per-user hourly rate limit. Activated when
-  // LISTBULL_PER_USER_HOURLY_MSG_LIMIT > 0; disabled at 0 (default).
-  // Backed by Upstash when configured; in-memory fallback otherwise.
+  // Per-user hourly rate limit.
   const hourlyLimit = env.LISTBULL_PER_USER_HOURLY_MSG_LIMIT;
   if (hourlyLimit > 0) {
     const rl = await enforceRateLimit({
@@ -431,33 +254,79 @@ export async function handleMessage(ctx: Context): Promise<void> {
     }
   }
 
-  // Workspace resolution branches on chat type:
-  //   - Private DM:   user's active workspace (existing behavior).
-  //   - Group/super:  the workspace bound to this chat_id (via
-  //                   /bindgroup). Sender must be a workspace member;
-  //                   otherwise the bot replies with an "ask the owner
-  //                   to invite you" hint and exits.
-  // OpenRouter API key resolution is the same downstream — workspace
-  // org-key is the ONLY path.
-  let workspaceId: string;
-  if (isGroupContext) {
-    const bound = await getWorkspaceByChatId(chatId);
-    if (!bound) {
-      await ctx.reply(copy.groupNotBound);
-      return;
+  // ─── Pre-LLM API key paste intercept ──────────────────────────────
+  const KEY_RE = /sk-or-v1-[A-Za-z0-9_-]{20,}/;
+  const keyMatch = effectiveText.match(KEY_RE);
+  if (keyMatch) {
+    const result = await executeSetChatApiKey(
+      { api_key: keyMatch[0] },
+      { userId: user.id, chatId },
+    );
+    if (message.chat.type === "private") {
+      try {
+        await ctx.api.deleteMessage(message.chat.id, message.message_id);
+      } catch {
+        // ignore permission/age errors
+      }
     }
-    const membership = await getWorkspaceMembership(user.id, bound.id);
-    if (!membership) {
-      await ctx.reply(copy.groupNotMember);
-      return;
+    if (result.ok) {
+      const suffix = result.data.key_suffix;
+      await ctx.reply(
+        locale === "tr"
+          ? `✓ Key kaydedildi (…${suffix}). Pasted mesajını sildim.`
+          : `✓ Key saved (…${suffix}). Deleted your pasted message.`,
+      );
+    } else {
+      await ctx.reply(
+        locale === "tr"
+          ? `Key kaydedilemedi: ${result.error.message}`
+          : `Couldn't save key: ${result.error.message}`,
+      );
     }
-    workspaceId = bound.id;
+    return;
+  }
 
-    // Inject reply-to context: if the user is responding to ANOTHER
-    // user's message (not the bot), prepend that text so the LLM acts
-    // on it ("@bot bunu listeye ekle" replying to "Thanksgiving" →
-    // creates item with the Thanksgiving text). For replies to the
-    // bot's own message we skip (it's just continuing a thread).
+  // ─── Resolve OpenRouter key from chats table ──────────────────────
+  let apiKey: string | null = null;
+  const [chatRow] = await db
+    .select({
+      openrouterApiKeyEncrypted: chats.openrouterApiKeyEncrypted,
+      ownerUserId: chats.ownerUserId,
+      llmModel: chats.llmModel,
+    })
+    .from(chats)
+    .where(eq(chats.chatId, chatId))
+    .limit(1);
+  if (chatRow?.openrouterApiKeyEncrypted) {
+    try {
+      apiKey = decrypt(chatRow.openrouterApiKeyEncrypted);
+    } catch {
+      await ctx.reply(copy.keyDecryptError);
+      return;
+    }
+  }
+
+  if (apiKey === null) {
+    await ctx.reply(copy.noKey, {
+      link_preview_options: { is_disabled: true },
+    });
+    return;
+  }
+
+  // Voice STT removed in Phase 17. Voice/audio messages are treated
+  // as a no-op for now (no transcription path). Re-introduce in a
+  // future phase if needed.
+  if (isVoiceInput) {
+    await ctx.reply(
+      locale === "tr"
+        ? "Sesli mesaj şu an desteklenmiyor — yazılı mesaj at."
+        : "Voice messages aren't supported right now — type a message.",
+    );
+    return;
+  }
+
+  // ─── Reply-to context (group only) ────────────────────────────────
+  if (isGroupContext) {
     const replyTo = message.reply_to_message;
     if (
       replyTo &&
@@ -466,275 +335,21 @@ export async function handleMessage(ctx: Context): Promise<void> {
       replyTo.text.length > 0
     ) {
       const sender =
-        replyTo.from?.username ??
-        replyTo.from?.first_name ??
-        "user";
+        replyTo.from?.username ?? replyTo.from?.first_name ?? "user";
       effectiveText = `[Replying to @${sender}: ${replyTo.text}]\n${effectiveText}`.trim();
     }
-  } else {
-    workspaceId = await resolveActiveWorkspaceId(user.id);
   }
 
-  // Phase 16: pre-LLM intercept for pasted OpenRouter keys. Required
-  // because the noKey gate below would otherwise short-circuit a key-
-  // setting paste — chicken-and-egg: the bot says "no key, paste it",
-  // user pastes, but without an existing key we never reach the LLM
-  // to call set_workspace_api_key. So we detect the pattern here and
-  // call the executor directly, skipping LLM entirely. Best-effort
-  // deleteMessage runs even on owner-check failure so the leaked
-  // secret doesn't sit in Telegram scrollback.
-  const KEY_RE_INTERCEPT = /sk-or-v1-[A-Za-z0-9_-]{20,}/;
-  const keyMatch = effectiveText.match(KEY_RE_INTERCEPT);
-  if (keyMatch) {
-    const { executeSetWorkspaceApiKey } = await import(
-      "@/lib/server/tools/set-workspace-api-key"
-    );
-    const result = await executeSetWorkspaceApiKey(
-      { api_key: keyMatch[0] },
-      { userId: user.id, workspaceId },
-    );
-
-    // Best-effort: delete the message in DM so the raw key doesn't
-    // linger in scrollback. Skipped in groups (bot needs admin).
-    if (message.chat.type === "private") {
-      try {
-        await ctx.api.deleteMessage(message.chat.id, message.message_id);
-      } catch {
-        // Permissions / age — ignore.
-      }
-    }
-
-    if (result.ok) {
-      const suffix = result.data.key_suffix;
-      const wsName = result.data.workspace.name;
-      await ctx.reply(
-        locale === "tr"
-          ? `✓ Key kaydedildi (…${suffix}) — "${wsName}" workspace'i için aktif. Şifrelenmiş olarak saklanır, plaintext bir daha gözükmez. Pasted mesajını da hijyen için sildim.`
-          : `✓ Key saved (…${suffix}) — active for workspace "${wsName}". Stored encrypted; you won't see it plaintext again. I also deleted your pasted message for hygiene.`,
-      );
-    } else {
-      await ctx.reply(
-        locale === "tr"
-          ? `Key kaydedilemedi: ${result.error.message}\n\n(Sadece workspace owner key koyabilir. Mesajını yine de güvenlik için sildim.)`
-          : `Couldn't save key: ${result.error.message}\n\n(Only the workspace owner can set the key. I deleted your pasted message for safety anyway.)`,
-      );
-    }
-    return;
-  }
-
-  let apiKey: string | null = null;
-  const orgKeyEnc = await getWorkspaceOrgKeyEncrypted(workspaceId);
-  if (orgKeyEnc) {
-    try {
-      apiKey = decrypt(orgKeyEnc);
-    } catch {
-      // Encrypted blob unreadable — most likely ENV_KEY rotated.
-      // Surface a distinct copy so the workspace admin knows to rotate
-      // rather than thinking they never set the key.
-      console.warn(
-        "[handle-message] workspace org-key decrypt failed",
-        { workspaceId },
-      );
-      await ctx.reply(copy.keyDecryptError);
-      return;
-    }
-  }
-
-  if (apiKey === null) {
-    // Context-aware noKey copy: owners get a "set it yourself" CTA;
-    // members get a "your owner needs to set it" hint, plus a
-    // "or switch to <X>" suggestion when another workspace they
-    // belong to does have a key set.
-    const membership = await getWorkspaceMembership(user.id, workspaceId);
-    const otherWithKey = await listUserWorkspacesWithKey(user.id, workspaceId);
-    const isOwner = membership?.role === "owner";
-
-    const lines: string[] = [];
-    if (isOwner) {
-      lines.push(
-        locale === "tr"
-          ? "Bu workspace'in sahibisin ama OpenRouter API key tanımlı değil. Onsuz AI cevap veremem."
-          : "You own this workspace but no OpenRouter API key is set. I can't reply without one.",
-      );
-      lines.push("");
-      lines.push(
-        locale === "tr"
-          ? "🔑 OpenRouter ne?"
-          : "🔑 What's OpenRouter?",
-      );
-      lines.push(
-        locale === "tr"
-          ? "listbull, Claude / GPT / Gemini gibi modellere OpenRouter üzerinden ulaşır. Sen kendi key'ini koyarsın, sadece kendi kullandığın kadar ödersin — listbull seninle model sağlayıcı arasında durmaz, kullanım datası bize gelmez."
-          : "listbull reaches Claude / GPT / Gemini through OpenRouter. You set your own key, you pay only for what you use — listbull doesn't sit between you and the model provider, no usage telemetry comes to us.",
-      );
-      lines.push("");
-      lines.push(
-        locale === "tr"
-          ? "📋 Key nasıl alınır (~3 dk)"
-          : "📋 How to get a key (~3 min)",
-      );
-      lines.push(
-        locale === "tr"
-          ? "  1. openrouter.ai/keys → Sign in (Google / GitHub yeter)"
-          : "  1. openrouter.ai/keys → Sign in (Google / GitHub work)",
-      );
-      lines.push(
-        locale === "tr"
-          ? "  2. Settings → Credits → min $5 yükle (default model claude-haiku-4.5 ile ~5000 mesaj)"
-          : "  2. Settings → Credits → add at least $5 (≈5,000 messages on the default claude-haiku-4.5 model)",
-      );
-      lines.push(
-        locale === "tr"
-          ? "  3. Keys → 'Create Key' → kopyala (sk-or-v1-… ile başlar)"
-          : "  3. Keys → 'Create Key' → copy (starts with sk-or-v1-…)",
-      );
-      lines.push("");
-      lines.push(
-        locale === "tr"
-          ? "📥 İki seçenek:"
-          : "📥 Two options:",
-      );
-      lines.push(
-        locale === "tr"
-          ? "  • Buraya direkt yapıştır — ben kaydederim, sonra pasted mesajını silerim (güvenlik). En hızlı yol."
-          : "  • Paste it here directly — I save it and delete your pasted message for safety. Fastest.",
-      );
-      lines.push(
-        locale === "tr"
-          ? "  • Mini App → Workspace ayarları → Workspace API key. Key sunucuda AES-256-GCM ile şifrelenir; plaintext bir daha gözükmez."
-          : "  • Mini App → Workspace settings → Workspace API key. The key is AES-256-GCM encrypted at rest.",
-      );
-      lines.push("");
-      lines.push(
-        locale === "tr"
-          ? "💡 İpucu: Settings → Models'tan farklı bir default model seçebilirsin (Claude Sonnet 4 daha akıllı, biraz pahalı; Haiku 4.5 ucuz + hızlı; Gemini 2.5 Flash en ucuz)."
-          : "💡 Tip: Settings → Models lets you pick a different default (Claude Sonnet 4 smarter but pricier; Haiku 4.5 cheap + fast; Gemini 2.5 Flash cheapest).",
-      );
-    } else {
-      lines.push(
-        locale === "tr"
-          ? "Bu workspace'in sahibinin OpenRouter API key tanımlaması gerek. Sen üyesin, key'i sen koyamazsın."
-          : "This workspace's owner needs to set the OpenRouter API key. You're a member, you can't set it.",
-      );
-      lines.push("");
-      lines.push(
-        locale === "tr"
-          ? "Owner'a şu adımları ilet: openrouter.ai/keys → key al ($5+ credit) → Mini App → Workspace ayarları → Workspace API key → yapıştır."
-          : "Pass these steps to the owner: openrouter.ai/keys → get a key ($5+ credit) → Mini App → Workspace settings → Workspace API key → paste.",
-      );
-    }
-
-    if (otherWithKey.length > 0) {
-      lines.push("");
-      lines.push(
-        locale === "tr"
-          ? "🔄 Veya key'i tanımlı başka bir workspace'ine geç:"
-          : "🔄 Or switch to a workspace where a key is already set:",
-      );
-      for (const w of otherWithKey) {
-        lines.push(
-          locale === "tr"
-            ? `  • "${w.name}" workspace'ine geç`
-            : `  • switch to "${w.name}"`,
-        );
-      }
-    }
-
-    await ctx.reply(lines.join("\n"), {
-      link_preview_options: { is_disabled: true },
-    });
-    return;
-  }
-
-  // Phase 13: voice / audio / video_note → STT, then continue through
-  // the regular text path with the transcript as the user message.
-  // We drop the file_id from `attachment` so the Phase 14b attachment
-  // overlay path doesn't fire — voice is INPUT, not file storage.
-  if (isVoiceInput && rawAttachment) {
-    try {
-      await ctx.replyWithChatAction("typing");
-    } catch {
-      // Best-effort UI affordance; never blocks STT.
-    }
-    const stt = await transcribeAudioFromTelegram({
-      ctx,
-      fileId: rawAttachment.fileId,
-      kind: rawAttachment.kind as "voice" | "audio" | "video_note",
-      mimeType: rawAttachment.mimeType ?? null,
-      apiKey,
-      locale,
-      appTitle: "listbull",
-    });
-    if ("error" in stt) {
-      const errCopy =
-        stt.error === "too_long"
-          ? copy.audioTooLong
-          : stt.error === "empty"
-            ? copy.audioEmpty
-            : copy.transcribeFailed;
-      await ctx.reply(errCopy);
-      return;
-    }
-    // Transcribed text becomes the user turn. The 🎤 marker is
-    // persisted to messages.content so /reset history makes the
-    // voice origin recognizable without a new column.
-    effectiveText = `🎤 ${stt.text}`;
-    attachment = null;
-  }
-
-  if (forward) {
-    if (!text) {
-      // Photo / sticker forwards have no `.text`. Phase 4 only handles
-      // text forwards; reply with a clarifier.
-      await ctx.reply(copy.forwardedNoText);
-      return;
-    }
-    await handleForwardedMessage({
-      ctx,
-      user,
-      apiKey,
-      forwardedFrom: forward.forwardedFrom,
-      forwardedText: text,
-      copy,
-      chatId,
-    });
-    return;
-  }
-
-  // Phase 14b: when an attachment came in, the user-visible text we
-  // persist is the caption (or a generic placeholder) — clean for
-  // history. The LLM input gets an extra system-overlay tag so the
-  // model has the file_id to call `attach_file_to_item` with.
+  // ─── Persist user message + LLM call ──────────────────────────────
   let llmContent = effectiveText;
   let persistedContent = effectiveText;
 
-  // Phase 16: OpenRouter API key paste hygiene. If the user message
-  // contains `sk-or-v1-...`, redact it from the persisted content +
-  // schedule a deleteMessage call on the Telegram side AFTER the LLM
-  // round-trip completes (so the executor has a chance to consume the
-  // raw value first). The redaction happens BEFORE persist; the LLM
-  // still sees the full key via `llmContent` and `effectiveText`.
-  const OPENROUTER_KEY_RE = /sk-or-v1-[A-Za-z0-9_-]{20,}/g;
-  let containsApiKey = false;
-  if (OPENROUTER_KEY_RE.test(persistedContent)) {
-    containsApiKey = true;
-    persistedContent = persistedContent.replace(
-      OPENROUTER_KEY_RE,
-      (match) => `[REDACTED sk-or-v1-…${match.slice(-4)}]`,
-    );
-  }
   if (attachment) {
-    const placeholder =
-      locale === "tr"
-        ? `[${labelKindTr(attachment.kind)} gönderildi]`
-        : `[${attachment.kind} sent]`;
+    const placeholder = `[${attachment.kind} sent]`;
     if (!persistedContent) persistedContent = placeholder;
-    const overlay = formatAttachmentContext(attachment);
-    llmContent = `${effectiveText || placeholder}\n\n${overlay}`;
+    llmContent = `${effectiveText || placeholder}\n\n${formatAttachmentContext(attachment)}`;
   }
 
-  // Persist the inbound user message immediately. This way `/reset`
-  // and audit log have a stable record even if the LLM call fails.
   const userMessageRow: NewMessage = {
     userId: user.id,
     chatId,
@@ -744,330 +359,117 @@ export async function handleMessage(ctx: Context): Promise<void> {
     toolCallId: null,
   };
 
-  // Load history (newest first) and slice.
   const recent = await getRecentMessages(user.id, chatId, 30);
   const history = sliceForContext(recent);
 
-  // Append the new user turn to the sliced history before calling LLM.
   const messagesForLlm: ConversationMessage[] = [
     ...history,
     { role: "user", content: llmContent },
   ];
 
-  // Persist user message + invoke LLM.
   await insertMessages([userMessageRow]);
 
-  // Phase 16: delete the user's Telegram message if it pasted an API
-  // key, so the secret doesn't sit in the chat scrollback. Bot API
-  // permits deleting INCOMING messages in private chats. In group
-  // chats the bot needs admin rights — we skip there to avoid a
-  // permissions error; the persisted content is already redacted and
-  // the executor still sets the key. Best-effort: swallow errors.
-  if (containsApiKey && message.chat.type === "private") {
-    try {
-      await ctx.api.deleteMessage(message.chat.id, message.message_id);
-    } catch (err) {
-      console.warn(
-        "[handle-message] deleteMessage failed for api-key paste",
-        { err: String(err) },
-      );
-    }
-  }
-
-  // workspaceId already resolved above (BYOK chain); reuse it for
-  // executor ctx + workspace prompt. Phase 5 adds a bot-aware overlay
-  // (incoming bot ID overrides users.active_workspace_id when the bot
-  // is workspace-bound) — for default platform bot serves all
-  // workspaces, so users.active_workspace_id is the only signal.
-
-  // Workspace summary for the v4 system prompt — gives the LLM
-  // awareness of every workspace the user belongs to (so it can
-  // suggest \`switch_workspace\` when context implies another one).
-  const workspaceSummary = await listWorkspacesForUser(user.id);
-  // Active workspace's model — owner-controlled, every member uses
-  // the same one (per-user llm_model was retired in 0020).
-  const workspaceModel = await getWorkspaceLlmModel(workspaceId);
-
-  let assistantText = "";
-  let persisted: ConversationMessage[] = [];
-  let toolCalls: ToolCall[] = [];
+  const dispatcher = createToolDispatcher({ userId: user.id, chatId });
 
   try {
-    const result = await respond({
+    const response = await respond({
+      apiKey,
+      model: chatRow?.llmModel ?? user.llmModel,
       messages: messagesForLlm,
       user: {
         locale: user.locale,
         firstName: user.telegramFirstName,
         timezone: user.timezone,
       },
-      workspaces: workspaceSummary.map((w) => ({
-        id: w.id,
-        name: w.name,
-        role: w.role,
-        isPersonal: w.isPersonal,
-        isActive: w.isActive,
-      })),
-      apiKey,
-      model: workspaceModel,
-      toolDispatcher: createToolDispatcher({ userId: user.id, workspaceId }),
+      chat: {
+        chatId,
+        title: message.chat.type === "private" ? null : (message.chat as { title?: string }).title ?? null,
+        type: chatType,
+        isOwner: chatRow?.ownerUserId === user.id,
+      },
+      toolDispatcher: dispatcher,
     });
-    assistantText = result.assistantText;
-    persisted = result.persistedMessages;
-    toolCalls = result.toolCalls;
-  } catch (error) {
-    console.error("[bot/handle-message] respond() threw", error);
-    await ctx.reply(copy.transientError);
-    return;
-  }
 
-  // Sentinel handling — surface user-friendly copy in user's locale.
-  let userFacingText = assistantText;
-  if (assistantText === NO_KEY_SENTINEL) userFacingText = copy.noKey;
-  if (assistantText === ROUNDTRIP_CAP_SENTINEL)
-    userFacingText = copy.transientError;
-  // Empty-string guard. respond() can land here when the model returns
-  // no content blocks at all (defensive splitContent path) — Telegram
-  // 400s on empty sendMessage bodies, so substitute the transient copy.
-  if (!userFacingText.trim()) {
-    console.warn(
-      "[bot/handle-message] empty assistantText from respond()",
-      { toolCalls: toolCalls.length, persisted: persisted.length },
+    if (response.assistantText === NO_KEY_SENTINEL) {
+      await ctx.reply(copy.noKey, {
+        link_preview_options: { is_disabled: true },
+      });
+      return;
+    }
+    if (response.assistantText === ROUNDTRIP_CAP_SENTINEL) {
+      await ctx.reply(copy.transientError);
+      return;
+    }
+
+    const rowsToInsert: NewMessage[] = response.persistedMessages.map((m) =>
+      toMessageRow(user, chatId, m),
     );
-    userFacingText = copy.transientError;
+    if (rowsToInsert.length > 0) {
+      await insertMessages(rowsToInsert);
+    }
+
+    if (response.assistantText.trim().length === 0) return;
+    await sendChunked(ctx, response.assistantText);
+  } catch (err) {
+    console.error("[handle-message] LLM error", err);
+    try {
+      await ctx.reply(copy.transientError);
+    } catch {
+      // ignore
+    }
   }
-
-  // Persist assistant + tool messages produced this turn (batch insert
-  // via the shared helper — chronological order preserved by `persisted`).
-  if (persisted.length > 0) {
-    const rowsToInsert: NewMessage[] = persisted.map((m) =>
-      conversationMessageToRow(m, user.id, chatId),
-    );
-    await insertMessages(rowsToInsert);
-  }
-
-  // Reply via Telegram. Phase 2: plain text (no parse_mode) to avoid
-  // MarkdownV2 escape edge cases; the system prompt explicitly tells
-  // the model to avoid markdown.
-  await sendChunked(ctx, userFacingText);
-
-  // Telemetry hook (no-op for now): toolCalls is the per-turn dispatch
-  // log. Sentry breadcrumb in Phase 4.
-  void toolCalls;
 }
 
-function conversationMessageToRow(
-  msg: ConversationMessage,
-  userId: string,
+function toMessageRow(
+  user: User,
   chatId: number,
+  m: ConversationMessage,
 ): NewMessage {
-  switch (msg.role) {
-    case "user":
-      return {
-        userId,
-        chatId,
-        role: "user",
-        content: msg.content,
-        toolCalls: null,
-        toolCallId: null,
-      };
-    case "assistant":
-      return {
-        userId,
-        chatId,
-        role: "assistant",
-        content: msg.content,
-        toolCalls:
-          msg.toolCalls && msg.toolCalls.length > 0
-            ? (msg.toolCalls as unknown as object)
-            : null,
-        toolCallId: null,
-      };
-    case "tool":
-      return {
-        userId,
-        chatId,
-        role: "tool",
-        content: msg.content,
-        toolCalls: null,
-        toolCallId: msg.toolCallId,
-      };
+  if (m.role === "user") {
+    return {
+      userId: user.id,
+      chatId,
+      role: "user",
+      content: m.content,
+      toolCalls: null,
+      toolCallId: null,
+    };
   }
-}
-
-/**
- * Chunk on word boundaries when text exceeds Telegram's 4096-char cap.
- * Sends sequentially so messages arrive in order.
- */
-async function sendChunked(ctx: Context, text: string): Promise<void> {
-  const stripped = stripMarkdownForTelegram(text);
-  if (stripped.length <= TG_MAX_MESSAGE_LEN) {
-    await ctx.reply(stripped);
-    return;
+  if (m.role === "assistant") {
+    return {
+      userId: user.id,
+      chatId,
+      role: "assistant",
+      content: m.content,
+      toolCalls: m.toolCalls ? (m.toolCalls as unknown as ToolCall[]) : null,
+      toolCallId: null,
+    };
   }
-
-  const chunks = splitOnWordBoundary(stripped, TG_MAX_MESSAGE_LEN);
-  for (const chunk of chunks) {
-    await ctx.reply(chunk);
-  }
-}
-
-/**
- * LLM (Claude) habitually emits GitHub-flavored markdown (`**bold**`,
- * `*italic*`, `__under__`, `[link](url)`, etc.). Telegram has its own
- * markdown variants but each requires a `parse_mode` and strict
- * escaping of reserved chars (we send plain text intentionally). So
- * we strip the most common formatting markers before sending — keeps
- * the prose readable and avoids leaking `**` into chat.
- *
- * Strips:
- *   `**bold**`  → `bold`
- *   `__bold__`  → `bold`
- *   `*italic*`  → `italic`   (only when preceded by start/whitespace)
- *   `_italic_`  → `italic`   (only when preceded by start/whitespace)
- *   `[text](u)` → `text (u)` (preserves URL inline)
- *   `` `code` `` → `code`
- */
-function stripMarkdownForTelegram(text: string): string {
-  return text
-    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
-    .replace(/__([^_\n]+)__/g, "$1")
-    .replace(/(^|\s)\*([^*\n]+)\*/g, "$1$2")
-    .replace(/(^|\s)_([^_\n]+)_/g, "$1$2")
-    .replace(/`([^`\n]+)`/g, "$1")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)");
-}
-
-/**
- * A3 — forwarded-message extraction path. The forwarded prompt
- * (`src/lib/ai/prompts/forwarded.ts`) is single-purpose: extract action
- * items → emit one `create_item` per item → reply with a brief
- * confirmation. We embed the forwarded prompt's instruction body INSIDE
- * the synthesized user turn (rather than swapping `respond()`'s system
- * prompt — that's the AI-agent's contract surface and out of Backend
- * scope) and call `respond()` exactly once with NO conversation history.
- *
- * Inv-16:
- *   - The forwarded prompt instructs the model "Emit all create_item
- *     calls in a SINGLE turn (one round-trip)." The standard 5-round
- *     cap in respond.ts still applies as a defense-in-depth ceiling.
- *   - The prompt enforces ≤20 items per forward and head-truncates the
- *     forwarded text at 6_000 chars before injection.
- *
- * Persistence: a synthesized user message (`[forwarded from <X>] <text>`)
- * is written to `messages` so `/reset` and the audit log have a stable
- * record of the forward, even though the LLM call may not see history.
- */
-async function handleForwardedMessage(args: {
-  ctx: Context;
-  user: User;
-  apiKey: string;
-  forwardedFrom: string;
-  forwardedText: string;
-  copy: (typeof COPY)[keyof typeof COPY];
-  chatId: number;
-}): Promise<void> {
-  const {
-    ctx,
-    user,
-    apiKey,
-    forwardedFrom,
-    forwardedText,
-    copy,
-    chatId,
-  } = args;
-
-  // Persist the synthesized user message immediately. The LLM call below
-  // intentionally does NOT include history (forwarded messages are
-  // single-turn extraction tasks; conversational context would dilute
-  // the prompt's "extract → tool calls → reply" instructions).
-  const synthesizedContent = `[forwarded from ${forwardedFrom}] ${forwardedText}`;
-  const userMessageRow: NewMessage = {
+  return {
     userId: user.id,
     chatId,
-    role: "user",
-    content: synthesizedContent,
+    role: "tool",
+    content: m.content,
     toolCalls: null,
-    toolCallId: null,
+    toolCallId: m.toolCallId,
   };
-  await insertMessages([userMessageRow]);
-
-  // Build the forwarded-prompt body. The prompt template is system-
-  // prompt-shaped and includes the forwarded text inline. We pass it as
-  // the (only) user-turn content; respond.ts's system.v3 still applies
-  // but the user-turn instructions dominate this single-purpose task.
-  const promptBody = forwardedMessagePrompt({
-    userLocale: user.locale,
-    userFirstName: user.telegramFirstName,
-    userTimezone: user.timezone,
-    forwardedFrom,
-    forwardedText,
-  });
-
-  // Same workspace resolution as the regular text path — forwarded
-  // messages target the user's currently-active workspace.
-  const workspaceId = await resolveActiveWorkspaceId(user.id);
-  const workspaceSummary = await listWorkspacesForUser(user.id);
-  const workspaceModel = await getWorkspaceLlmModel(workspaceId);
-
-  let assistantText = "";
-  let persisted: ConversationMessage[] = [];
-
-  try {
-    const result = await respond({
-      messages: [{ role: "user", content: promptBody }],
-      user: {
-        locale: user.locale,
-        firstName: user.telegramFirstName,
-        timezone: user.timezone,
-      },
-      workspaces: workspaceSummary.map((w) => ({
-        id: w.id,
-        name: w.name,
-        role: w.role,
-        isPersonal: w.isPersonal,
-        isActive: w.isActive,
-      })),
-      apiKey,
-      model: workspaceModel,
-      toolDispatcher: createToolDispatcher({ userId: user.id, workspaceId }),
-    });
-    assistantText = result.assistantText;
-    persisted = result.persistedMessages;
-  } catch (error) {
-    console.error("[bot/handle-message] forwarded respond() threw", error);
-    await ctx.reply(copy.transientError);
-    return;
-  }
-
-  let userFacingText = assistantText;
-  if (assistantText === NO_KEY_SENTINEL) userFacingText = copy.noKey;
-  if (assistantText === ROUNDTRIP_CAP_SENTINEL)
-    userFacingText = copy.transientError;
-
-  if (persisted.length > 0) {
-    const rowsToInsert: NewMessage[] = persisted.map((m) =>
-      conversationMessageToRow(m, user.id, chatId),
-    );
-    await insertMessages(rowsToInsert);
-  }
-
-  await sendChunked(ctx, userFacingText);
 }
 
-export function splitOnWordBoundary(text: string, maxLen: number): string[] {
-  const out: string[] = [];
+async function sendChunked(ctx: Context, text: string): Promise<void> {
+  if (text.length <= TG_MAX_MESSAGE_LEN) {
+    await ctx.reply(text);
+    return;
+  }
+  const chunks: string[] = [];
   let remaining = text;
-  while (remaining.length > maxLen) {
-    // Look for the last whitespace within the cap window.
-    const slice = remaining.slice(0, maxLen);
-    const lastSpace = Math.max(
-      slice.lastIndexOf(" "),
-      slice.lastIndexOf("\n"),
-    );
-    const cut = lastSpace > Math.floor(maxLen * 0.5) ? lastSpace : maxLen;
-    out.push(remaining.slice(0, cut));
+  while (remaining.length > TG_MAX_MESSAGE_LEN) {
+    let cut = remaining.lastIndexOf(" ", TG_MAX_MESSAGE_LEN);
+    if (cut < 1000) cut = TG_MAX_MESSAGE_LEN;
+    chunks.push(remaining.slice(0, cut));
     remaining = remaining.slice(cut).trimStart();
   }
-  if (remaining.length > 0) out.push(remaining);
-  return out;
+  if (remaining.length > 0) chunks.push(remaining);
+  for (const c of chunks) {
+    await ctx.reply(c);
+  }
 }

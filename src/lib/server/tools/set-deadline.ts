@@ -1,22 +1,13 @@
 /**
- * Executor: `set_deadline` (Phase 14d).
+ * Executor: `set_deadline` (Phase 17 chat-only).
  *
- * Sets or clears the deadline on an existing item. Distinct from
- * reminders — see `add_reminder` / `remove_reminder` for those.
- *
- * Behavior:
- *   - Notes (`is_checkable=false`) cannot have a deadline →
- *     `cannot_schedule_note`.
- *   - Past `deadline_at` is silently dropped + warning surfaced; the
- *     executor returns `ok` with the unchanged snapshot.
- *   - When the deadline changes, every `before_deadline` reminder for
- *     the item is recomputed in lock-step (same transaction).
- *   - Clearing the deadline (`deadline_at: null`) drops every
- *     `before_deadline` reminder; absolute reminders survive.
+ * Sets / clears items.deadline_at. Auto-creates a single absolute
+ * reminder anchored at the new deadline if none exists. Clearing
+ * drops every before_deadline reminder; absolute reminders survive.
  */
 import "server-only";
 
-import { asc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { activityLog, itemReminders, items } from "@/lib/db/schema";
@@ -27,114 +18,73 @@ import {
 import {
   ERR,
   err,
-  isPast,
   ok,
   recomputeOffsetReminders,
   toItemReminderSnapshot,
   toItemSnapshot,
 } from "./_shared";
-import { userCanWriteList } from "@/lib/db/queries/items";
 
 import type { ExecResult } from "./_shared";
 
 export async function executeSetDeadline(
   input: unknown,
-  ctx: { userId: string; workspaceId: string },
+  ctx: { userId: string; chatId: number },
 ): Promise<ExecResult<SetDeadlineOutput>> {
   const parsed = setDeadlineInputSchema.safeParse(input);
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
   const { item_id, deadline_at } = parsed.data;
+  const newDeadline = deadline_at === null ? null : new Date(deadline_at);
 
   return await db.transaction(async (tx) => {
     const [current] = await tx
       .select()
       .from(items)
-      .where(eq(items.id, item_id))
+      .where(and(eq(items.id, item_id), eq(items.chatId, ctx.chatId)))
       .limit(1);
-    if (!current || current.archivedAt) {
-      return err(ERR.not_found, "Item not found.");
-    }
-    if (!current.isCheckable) {
-      return err("cannot_schedule_note", "Notes cannot have deadlines.");
-    }
-
-    const allowed = await userCanWriteList(
-      ctx.userId,
-      current.listId,
-      ctx.workspaceId,
-    );
-    if (!allowed) {
-      return err(ERR.forbidden, "You don't have access to that list.");
-    }
-
-    const warnings: string[] = [];
-    let cleared = false;
-
-    let nextDeadline: Date | null;
-    if (deadline_at === null) {
-      nextDeadline = null;
-      cleared = current.deadlineAt !== null;
-    } else {
-      if (isPast(deadline_at)) {
-        warnings.push("deadline_at_in_past");
-        const reminders = await tx
-          .select()
-          .from(itemReminders)
-          .where(eq(itemReminders.itemId, item_id))
-          .orderBy(asc(itemReminders.remindAt));
-        return ok({
-          item: toItemSnapshot(current),
-          reminders: reminders.map(toItemReminderSnapshot),
-          cleared: false,
-          warnings,
-        });
-      }
-      nextDeadline = new Date(deadline_at);
-    }
-
-    const oldIso = current.deadlineAt?.toISOString() ?? null;
-    const newIso = nextDeadline?.toISOString() ?? null;
-    if (oldIso === newIso) {
-      const reminders = await tx
-        .select()
-        .from(itemReminders)
-        .where(eq(itemReminders.itemId, item_id))
-        .orderBy(asc(itemReminders.remindAt));
-      return ok({
-        item: toItemSnapshot(current),
-        reminders: reminders.map(toItemReminderSnapshot),
-        cleared: false,
-        ...(warnings.length > 0 ? { warnings } : {}),
-      });
-    }
+    if (!current) return err(ERR.not_found, "Item not found.");
 
     const [updated] = await tx
       .update(items)
-      .set({ deadlineAt: nextDeadline, updatedAt: new Date() })
+      .set({ deadlineAt: newDeadline, updatedAt: new Date() })
       .where(eq(items.id, item_id))
       .returning();
-    if (!updated) {
-      throw new Error("set-deadline: update returned no row");
+    if (!updated) throw new Error("set-deadline: update returned no row");
+
+    await recomputeOffsetReminders(tx, item_id, newDeadline);
+
+    // Auto-create absolute reminder at the new deadline if none exists.
+    if (newDeadline) {
+      const existingAbsolute = await tx
+        .select({ id: itemReminders.id })
+        .from(itemReminders)
+        .where(
+          and(
+            eq(itemReminders.itemId, item_id),
+            eq(itemReminders.kind, "absolute"),
+          ),
+        )
+        .limit(1);
+      if (existingAbsolute.length === 0) {
+        await tx.insert(itemReminders).values({
+          itemId: item_id,
+          kind: "absolute",
+          remindAt: newDeadline,
+        });
+      }
     }
 
-    // Recompute every before_deadline reminder for this item.
-    await recomputeOffsetReminders(tx, item_id, nextDeadline);
-
-    const remindersAfter = await tx
+    const reminderRows = await tx
       .select()
       .from(itemReminders)
-      .where(eq(itemReminders.itemId, item_id))
-      .orderBy(asc(itemReminders.remindAt));
+      .where(eq(itemReminders.itemId, item_id));
 
-    const action =
-      nextDeadline === null ? "item_deadline_cleared" : "item_deadline_set";
     await tx.insert(activityLog).values({
-      listId: updated.listId,
+      chatId: ctx.chatId,
       entityType: "item",
       entityId: updated.id,
-      action,
+      action: newDeadline ? "item_deadline_set" : "item_deadline_cleared",
       actorId: ctx.userId,
       payloadBefore: toItemSnapshot(current),
       payloadAfter: toItemSnapshot(updated),
@@ -142,9 +92,7 @@ export async function executeSetDeadline(
 
     return ok({
       item: toItemSnapshot(updated),
-      reminders: remindersAfter.map(toItemReminderSnapshot),
-      cleared,
-      ...(warnings.length > 0 ? { warnings } : {}),
+      reminders: reminderRows.map(toItemReminderSnapshot),
     });
   });
 }

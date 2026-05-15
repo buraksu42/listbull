@@ -1,18 +1,11 @@
 /**
- * Executor: `set_item_attributes` — set status / priority / tags on
- * an existing item.
+ * Executor: `set_item_attributes` (Phase 17 chat-only).
  *
- * Status dual-writes is_done for backward compat (status='done' →
- * is_done=true; any other status → is_done=false). Tags REPLACE the
- * array; pass [] to clear. Workspace-wide tag vocabulary is capped
- * at 20 unique tags — the executor counts distinct tags in the
- * workspace before allowing a write that introduces a 21st new tag.
- *
- * Writes one `item_edited` activity_log row covering all 3 fields.
+ * Status / priority / tags. Tag limit: 20 unique tags per chat.
  */
 import "server-only";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { activityLog, items } from "@/lib/db/schema";
@@ -21,15 +14,14 @@ import {
   type SetItemAttributesOutput,
 } from "@/lib/ai/tools";
 import { ERR, err, ok, toItemSnapshot } from "./_shared";
-import { userCanWriteList } from "@/lib/db/queries/items";
 
 import type { ExecResult } from "./_shared";
 
-const MAX_WORKSPACE_TAGS = 20;
+const TAG_LIMIT_PER_CHAT = 20;
 
 export async function executeSetItemAttributes(
   input: unknown,
-  ctx: { userId: string; workspaceId: string },
+  ctx: { userId: string; chatId: number },
 ): Promise<ExecResult<SetItemAttributesOutput>> {
   const parsed = setItemAttributesInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -41,94 +33,58 @@ export async function executeSetItemAttributes(
     const [current] = await tx
       .select()
       .from(items)
-      .where(eq(items.id, item_id))
+      .where(and(eq(items.id, item_id), eq(items.chatId, ctx.chatId)))
       .limit(1);
-    if (!current || current.archivedAt) {
-      return err(ERR.not_found, "Item not found.");
-    }
-
-    const allowed = await userCanWriteList(
-      ctx.userId,
-      current.listId,
-      ctx.workspaceId,
-    );
-    if (!allowed) {
-      return err(ERR.forbidden, "You don't have access to that list.");
-    }
+    if (!current) return err(ERR.not_found, "Item not found.");
 
     const changes: Array<"status" | "priority" | "tags"> = [];
-    const warnings: string[] = [];
     const patch: Partial<typeof items.$inferInsert> = {
       updatedAt: new Date(),
     };
 
     if (status !== undefined && status !== current.status) {
       patch.status = status;
-      // Dual-write is_done for backward compat with the 17 existing
-      // executors that read is_done directly. Phase 5+ may drop the
-      // column once full audit confirms no remaining readers.
-      patch.isDone = status === "done";
-      patch.completedAt =
-        status === "done" && current.completedAt === null
-          ? new Date()
-          : current.completedAt;
+      if (status === "done") {
+        patch.isDone = true;
+        patch.completedAt = new Date();
+      } else if (current.status === "done") {
+        patch.isDone = false;
+        patch.completedAt = null;
+      }
       changes.push("status");
     }
-
     if (priority !== undefined && priority !== current.priority) {
       patch.priority = priority;
       changes.push("priority");
     }
-
     if (tags !== undefined) {
-      // Deduplicate + lowercase tags before comparison.
       const normalized = Array.from(
-        new Set(tags.map((t) => t.trim().toLowerCase()).filter((t) => t.length > 0)),
+        new Set(tags.map((t) => t.trim().toLowerCase()).filter((t) => t)),
       );
-      const currentSet = new Set(current.tags);
-      const sameLength = normalized.length === current.tags.length;
-      const sameContent =
-        sameLength && normalized.every((t) => currentSet.has(t));
-      if (!sameContent) {
-        // Tag-vocabulary cap check: count distinct tags currently in
-        // use across the workspace, plus the new tags this write
-        // introduces. Reject if the union > MAX_WORKSPACE_TAGS.
-        //
-        // Phase 4.5 audit: query is fully parameterized — workspace_id
-        // goes through Drizzle's bind layer via the inline join. No
-        // raw SQL splicing.
-        const newTags = normalized.filter((t) => !currentSet.has(t));
-        if (newTags.length > 0) {
-          const vocab = await tx.execute<{ tag: string }>(
-            sql`SELECT DISTINCT unnest(i.tags) AS tag
-                FROM items i
-                INNER JOIN lists l ON l.id = i.list_id
-                WHERE l.workspace_id = ${ctx.workspaceId}
-                  AND i.archived_at IS NULL`,
-          );
-          const existingVocab = new Set(vocab.map((r) => r.tag));
-          const wouldExist = new Set(existingVocab);
-          for (const t of newTags) wouldExist.add(t);
-          if (wouldExist.size > MAX_WORKSPACE_TAGS) {
-            return err(
-              "tag_limit_exceeded",
-              `Workspace tag vocabulary capped at ${MAX_WORKSPACE_TAGS}; this write would push it to ${wouldExist.size}.`,
-            );
-          }
-        }
-        patch.tags = normalized;
-        changes.push("tags");
+      // Per-chat tag-vocabulary cap (20 unique).
+      const rows = await tx.execute<{ count: number }>(sql`
+        SELECT COUNT(DISTINCT t)::int AS count
+        FROM (
+          SELECT unnest(tags) AS t FROM ${items}
+          WHERE chat_id = ${ctx.chatId}
+            AND id <> ${item_id}
+            AND archived_at IS NULL
+        ) sub
+      `);
+      const usedTags = Number(rows[0]?.count ?? 0);
+      const totalAfter = usedTags + new Set(normalized).size;
+      if (totalAfter > TAG_LIMIT_PER_CHAT) {
+        return err(
+          "tag_limit_exceeded",
+          `Tag limit (${TAG_LIMIT_PER_CHAT}) exceeded for this chat.`,
+        );
       }
+      patch.tags = normalized;
+      changes.push("tags");
     }
 
     if (changes.length === 0) {
-      return ok({
-        item: toItemSnapshot(current),
-        status: current.status as "open" | "in_progress" | "blocked" | "done",
-        priority: current.priority as "low" | "normal" | "high",
-        tags: current.tags,
-        changes: [],
-      });
+      return ok({ item: toItemSnapshot(current), changes: [] });
     }
 
     const [updated] = await tx
@@ -141,7 +97,7 @@ export async function executeSetItemAttributes(
     }
 
     await tx.insert(activityLog).values({
-      listId: updated.listId,
+      chatId: ctx.chatId,
       entityType: "item",
       entityId: updated.id,
       action: "item_edited",
@@ -150,14 +106,9 @@ export async function executeSetItemAttributes(
       payloadAfter: toItemSnapshot(updated),
     });
 
-    return ok({
-      item: toItemSnapshot(updated),
-      status: updated.status as "open" | "in_progress" | "blocked" | "done",
-      priority: updated.priority as "low" | "normal" | "high",
-      tags: updated.tags,
-      changes,
-      ...(warnings.length > 0 ? { warnings } : {}),
-    });
+    // silence unused-imports
+    void ne;
+
+    return ok({ item: toItemSnapshot(updated), changes });
   });
 }
-

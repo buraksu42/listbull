@@ -1,14 +1,13 @@
 /**
- * Executor: `complete_item`. Sets `is_done` explicitly (not toggle).
+ * Executor: `complete_item` (Phase 17 chat-only).
  *
- * No activity_log row is written when the requested state matches the
- * current state — the LLM should render that as "already done" rather
- * than a redundant confirmation. Notes (`is_checkable=false`) cannot
- * be completed.
+ * Toggle is_done. When the item has a task_recurrence_rule AND is
+ * being completed, we KEEP it open and surface a 'task_recurred'
+ * warning so the LLM/caller can advance the deadline in a follow-up.
  */
 import "server-only";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { activityLog, items } from "@/lib/db/schema";
@@ -17,13 +16,12 @@ import {
   type CompleteItemOutput,
 } from "@/lib/ai/tools";
 import { ERR, err, ok, toItemSnapshot } from "./_shared";
-import { userCanWriteList } from "@/lib/db/queries/items";
 
 import type { ExecResult } from "./_shared";
 
 export async function executeCompleteItem(
   input: unknown,
-  ctx: { userId: string; workspaceId: string },
+  ctx: { userId: string; chatId: number },
 ): Promise<ExecResult<CompleteItemOutput>> {
   const parsed = completeItemInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -35,105 +33,35 @@ export async function executeCompleteItem(
     const [current] = await tx
       .select()
       .from(items)
-      .where(eq(items.id, item_id))
+      .where(and(eq(items.id, item_id), eq(items.chatId, ctx.chatId)))
       .limit(1);
-    if (!current || current.archivedAt) {
-      return err(ERR.not_found, "Item not found.");
-    }
-    if (!current.isCheckable) {
-      return err(ERR.invalid_input, "Notes cannot be completed.");
-    }
+    if (!current) return err(ERR.not_found, "Item not found.");
 
-    const allowed = await userCanWriteList(
-      ctx.userId,
-      current.listId,
-      ctx.workspaceId,
-    );
-    if (!allowed) {
-      return err(ERR.forbidden, "You don't have access to that list.");
-    }
-
-    const wasDone = current.isDone;
-
-    // Idempotent re-state: skip activity_log + DB write entirely.
-    if (wasDone === is_done) {
-      return ok({ item: toItemSnapshot(current), was_done: wasDone });
-    }
-
+    const warnings: string[] = [];
     const now = new Date();
+    const patch: Partial<typeof items.$inferInsert> = {
+      isDone: is_done,
+      status: is_done ? "done" : "open",
+      completedAt: is_done ? now : null,
+      updatedAt: now,
+    };
 
-    // Task-level recurrence branch: when an item with a non-null
-    // `task_recurrence_rule` is completed, it auto-resurrects instead
-    // of permanently marking done. Deadline (if present) advances to
-    // the rule's next occurrence; status flips back to 'open';
-    // is_done resets; completed_at clears. Distinct from
-    // item_reminders.recurrence_rule which only re-fires reminder
-    // pings without resurrecting the task.
     if (is_done && current.taskRecurrenceRule) {
-      let nextDeadline: Date | null = null;
-      try {
-        const { RRule } = await import("rrule");
-        const rule = RRule.fromString(`RRULE:${current.taskRecurrenceRule}`);
-        const anchor = current.deadlineAt ?? now;
-        nextDeadline = rule.after(anchor, false) ?? null;
-      } catch (e) {
-        console.error("[complete-item] invalid task RRULE — clearing", {
-          itemId: current.id,
-          rule: current.taskRecurrenceRule,
-          error: String(e),
-        });
-      }
-
-      // Rule-exhausted (UNTIL/COUNT) or invalid → fall through to
-      // the normal one-shot complete path so the user sees closure.
-      if (nextDeadline !== null) {
-        const [updated] = await tx
-          .update(items)
-          .set({
-            isDone: false,
-            status: "open",
-            completedAt: null,
-            deadlineAt: nextDeadline,
-            updatedAt: now,
-          })
-          .where(eq(items.id, item_id))
-          .returning();
-        if (!updated) {
-          throw new Error("complete-item: recurrence update returned no row");
-        }
-
-        await tx.insert(activityLog).values({
-          listId: updated.listId,
-          entityType: "item",
-          entityId: updated.id,
-          action: "item_completed",
-          actorId: ctx.userId,
-          payloadBefore: toItemSnapshot(current),
-          payloadAfter: toItemSnapshot(updated),
-        });
-
-        return ok({
-          item: toItemSnapshot(updated),
-          was_done: wasDone,
-          warnings: ["task_recurred"],
-        });
-      }
-      // Falls through to normal complete (rule exhausted/invalid).
+      patch.isDone = false;
+      patch.status = "open";
+      patch.completedAt = null;
+      warnings.push("task_recurred");
     }
 
     const [updated] = await tx
       .update(items)
-      .set({
-        isDone: is_done,
-        completedAt: is_done ? now : null,
-        updatedAt: now,
-      })
+      .set(patch)
       .where(eq(items.id, item_id))
       .returning();
     if (!updated) throw new Error("complete-item: update returned no row");
 
     await tx.insert(activityLog).values({
-      listId: updated.listId,
+      chatId: ctx.chatId,
       entityType: "item",
       entityId: updated.id,
       action: is_done ? "item_completed" : "item_uncompleted",
@@ -142,6 +70,9 @@ export async function executeCompleteItem(
       payloadAfter: toItemSnapshot(updated),
     });
 
-    return ok({ item: toItemSnapshot(updated), was_done: wasDone });
+    return ok({
+      item: toItemSnapshot(updated),
+      ...(warnings.length ? { warnings } : {}),
+    });
   });
 }

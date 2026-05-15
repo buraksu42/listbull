@@ -1,12 +1,6 @@
 /**
- * Executor: `update_settings` — chat-driven user preferences update.
- *
- * Mirrors PATCH /api/settings minus the BYOK key. Builds a partial
- * patch from the supplied fields, computes which fields actually
- * change vs current state (so `changes` output is precise), persists
- * via single UPDATE. No activity_log row — settings are user-private,
- * not list-scoped (Inv-1's transactional + activity_log pattern is for
- * list-state mutations).
+ * Executor: `update_settings` (Phase 17 — user-level prefs, unchanged
+ * from pre-pivot except cleanup of workspace references).
  */
 import "server-only";
 
@@ -18,88 +12,82 @@ import {
   updateSettingsInputSchema,
   type UpdateSettingsOutput,
 } from "@/lib/ai/tools";
-import type {
-  AllowedDateFormat,
-  AllowedTimeFormat,
-} from "@/lib/validators/settings";
 import { ERR, err, ok } from "./_shared";
 
 import type { ExecResult } from "./_shared";
 
-type ChangeField =
-  | "locale"
-  | "timezone"
-  | "llm_model"
-  | "notifications_enabled"
-  | "date_format"
-  | "time_format";
-
 export async function executeUpdateSettings(
   input: unknown,
-  ctx: { userId: string; workspaceId: string },
+  ctx: { userId: string; chatId: number },
 ): Promise<ExecResult<UpdateSettingsOutput>> {
   const parsed = updateSettingsInputSchema.safeParse(input);
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
-  const {
-    locale,
-    timezone,
-    llm_model,
-    notifications_enabled,
-    date_format,
-    time_format,
-  } = parsed.data;
+  const data = parsed.data;
+  void ctx; // chatId not needed for user-level prefs
 
-  const current = await db.query.users.findFirst({
-    where: eq(users.id, ctx.userId),
-  });
-  if (!current) {
-    return err(ERR.not_found, "User row missing.");
-  }
+  const [current] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, ctx.userId))
+    .limit(1);
+  if (!current) return err(ERR.not_found, "User not found.");
 
+  const changes: Array<
+    | "locale"
+    | "timezone"
+    | "llm_model"
+    | "notifications_enabled"
+    | "date_format"
+    | "time_format"
+  > = [];
   const patch: Partial<typeof users.$inferInsert> = {
     updatedAt: new Date(),
   };
-  const changes: ChangeField[] = [];
 
-  if (locale !== undefined && locale !== current.locale) {
-    patch.locale = locale;
+  if (data.locale !== undefined && data.locale !== current.locale) {
+    patch.locale = data.locale;
     changes.push("locale");
   }
-  if (timezone !== undefined && timezone !== current.timezone) {
-    patch.timezone = timezone;
+  if (data.timezone !== undefined && data.timezone !== current.timezone) {
+    patch.timezone = data.timezone;
     changes.push("timezone");
   }
-  if (llm_model !== undefined && llm_model !== current.llmModel) {
-    patch.llmModel = llm_model;
+  if (data.llm_model !== undefined && data.llm_model !== current.llmModel) {
+    patch.llmModel = data.llm_model;
     changes.push("llm_model");
   }
   if (
-    notifications_enabled !== undefined &&
-    notifications_enabled !== current.notificationsEnabled
+    data.notifications_enabled !== undefined &&
+    data.notifications_enabled !== current.notificationsEnabled
   ) {
-    patch.notificationsEnabled = notifications_enabled;
+    patch.notificationsEnabled = data.notifications_enabled;
     changes.push("notifications_enabled");
   }
-  if (date_format !== undefined && date_format !== current.dateFormat) {
-    patch.dateFormat = date_format;
+  if (
+    data.date_format !== undefined &&
+    data.date_format !== current.dateFormat
+  ) {
+    patch.dateFormat = data.date_format;
     changes.push("date_format");
   }
-  if (time_format !== undefined && time_format !== current.timeFormat) {
-    patch.timeFormat = time_format;
+  if (
+    data.time_format !== undefined &&
+    data.time_format !== current.timeFormat
+  ) {
+    patch.timeFormat = data.time_format;
     changes.push("time_format");
   }
 
-  // Idempotent no-op when no fields actually change.
   if (changes.length === 0) {
     return ok({
-      locale: (current.locale as "tr" | "en") ?? "en",
+      locale: current.locale as "tr" | "en",
       timezone: current.timezone,
       llm_model: current.llmModel,
       notifications_enabled: current.notificationsEnabled,
-      date_format: current.dateFormat as AllowedDateFormat,
-      time_format: current.timeFormat as AllowedTimeFormat,
+      date_format: current.dateFormat as "DD.MM.YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD",
+      time_format: current.timeFormat as "24h" | "12h",
       changes: [],
     });
   }
@@ -109,17 +97,15 @@ export async function executeUpdateSettings(
     .set(patch)
     .where(eq(users.id, ctx.userId))
     .returning();
-  if (!updated) {
-    throw new Error("update-settings: update returned no row");
-  }
+  if (!updated) throw new Error("update-settings: update returned no row");
 
   return ok({
-    locale: (updated.locale as "tr" | "en") ?? "en",
+    locale: updated.locale as "tr" | "en",
     timezone: updated.timezone,
     llm_model: updated.llmModel,
     notifications_enabled: updated.notificationsEnabled,
-    date_format: updated.dateFormat as AllowedDateFormat,
-    time_format: updated.timeFormat as AllowedTimeFormat,
+    date_format: updated.dateFormat as "DD.MM.YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD",
+    time_format: updated.timeFormat as "24h" | "12h",
     changes,
   });
 }

@@ -1,6 +1,5 @@
 /**
- * Bot-side i18n. Phase 1 ships TR + EN strings inline (no next-intl on the bot path).
- * Mini App uses next-intl with messages/{tr,en}.json — those are wired in Phase 4.
+ * Bot-side i18n (Phase 17 chat-only).
  */
 
 type Locale = "tr" | "en";
@@ -8,19 +7,13 @@ type Locale = "tr" | "en";
 const dict = {
   tr: {
     welcome: (name: string, timezone: string) =>
-      `Merhaba ${name}! Ben listbull. 📥 Inbox listesini senin için oluşturdum.\n\n⏰ Saat dilimini ${timezone} olarak ayarladım. Yanlışsa bana "saat dilimi <şehir>" diye yaz (örn. "saat dilimi İstanbul"), ya da Mini App → Settings'ten değiştir.\n\nMini App'i aç, listelerini gör; ya da bana doğrudan yaz: "süt al" gibi bir mesajla bir item oluştururum.\n\nKomutlar için /help yaz.`,
-    help: `Komutlar:\n/lists — listelerini göster\n/today — bugünün işleri (workspace özelinde)\n/workspace — aktif workspace değiştir\n/share [liste] — bir listeyi başkasıyla paylaş\n/snapshot — paylaşılabilir liste linki üret\n/reset — konuşma geçmişini sil\n/help — bu mesaj\n\nGrup komutları (bot eklenmiş grup içinde):\n/bindgroup — sahibi olduğun bir workspace'i bu grupla bağla\n/unbindgroup — bu grup'un workspace bağını kaldır\n\nDoğrudan yazarsan AI ile listenle çalışırım. OpenRouter key'i direkt buraya yapıştırabilirsin (otomatik kaydederim + mesajını silerim). Grup'ta bot'a @-mention atarak veya bir mesaja reply atıp @bot <komut> diyerek to-do açabilirsin.`,
-    listsHeader: "Listelerin:",
-    noLists: "Henüz listen yok. /start ile başla.",
-    inboxLabel: "Inbox",
+      `Merhaba ${name}! Ben listbull.\n\n📋 Bu chat = bir to-do listesi. Bana doğal dilde yaz, ben işini görüyorum:\n• "süt al"\n• "Ali'ye toplantı notlarını gönder, yarın 14:00'da hatırlat"\n• "/list" → tüm item'ları göster\n\n⏰ Saat dilimin ${timezone}. Yanlışsa "saat dilimi <şehir>" yaz.\n\n🔑 Önce OpenRouter key gerek (chat sahibi olarak): openrouter.ai/keys → key oluştur → buraya yapıştır.`,
+    help: `Komutlar:\n/list — tüm item'ları göster (inline butonlarla)\n/reset — konuşma geçmişini sil\n/help — bu mesaj\n\nDoğrudan yazarsan AI ile chat'in listesi üzerinde çalışırım. OpenRouter key'i direkt buraya yapıştır — kaydederim, mesajını silerim.`,
   },
   en: {
     welcome: (name: string, timezone: string) =>
-      `Hi ${name}! I'm listbull. I've created your 📥 Inbox list.\n\n⏰ I've set your timezone to ${timezone}. If that's wrong, message me "saat dilimi <city>" (e.g. "timezone Berlin"), or change it in Mini App → Settings.\n\nOpen the Mini App to see your lists, or just message me: "buy milk" creates an item.\n\nType /help for commands.`,
-    help: `Commands:\n/lists — show your lists\n/today — today's tasks for this workspace\n/workspace — switch active workspace\n/share [list] — share a list with someone\n/snapshot — generate a shareable list link\n/reset — clear conversation history\n/help — this message\n\nGroup commands (inside a group the bot is in):\n/bindgroup — bind a workspace you own to this group\n/unbindgroup — remove the workspace ↔ group binding\n\nMessage me directly and I'll work with your lists via AI. You can paste your OpenRouter API key here — I save it and delete the message for safety. In groups, @-mention me or reply with a command.`,
-    listsHeader: "Your lists:",
-    noLists: "No lists yet. Run /start.",
-    inboxLabel: "Inbox",
+      `Hi ${name}! I'm listbull.\n\n📋 This chat = a to-do list. Talk naturally:\n• "buy milk"\n• "send meeting notes to @ali, remind me tomorrow 2pm"\n• "/list" → show all items\n\n⏰ Your timezone is ${timezone}. Wrong? Say "timezone <city>".\n\n🔑 You need an OpenRouter key (as chat owner): openrouter.ai/keys → create key → paste it here.`,
+    help: `Commands:\n/list — show all items (with inline buttons)\n/reset — clear conversation history\n/help — this message\n\nMessage me naturally and I'll work the chat's list via AI. Paste your OpenRouter API key here — I save it and delete the message.`,
   },
 } as const;
 

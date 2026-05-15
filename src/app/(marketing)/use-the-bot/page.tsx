@@ -1,19 +1,12 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "listbull — Telegram-native to-do bot",
+  title: "Use the bot — listbull",
   description:
-    "Open-source. Self-host in 15 minutes. Chat with the bot — that's the whole interface.",
+    "listbull is a Telegram-native to-do bot. Open the bot DM to start.",
 };
 
-/**
- * Marketing homepage (Phase 17 chat-only).
- *
- * Mini App development is frozen; everything happens via Telegram
- * chat. The page is intentionally sparse during the pivot — full
- * marketing surface comes back when chat UX stabilizes.
- */
-export default function MarketingHome() {
+export default function UseTheBotPage() {
   return (
     <main
       style={{
@@ -32,42 +25,28 @@ export default function MarketingHome() {
         style={{
           fontSize: "clamp(2rem, 5vw, 3.5rem)",
           fontWeight: 700,
-          letterSpacing: "var(--lb-tracking-title)",
-          marginBottom: "var(--lb-sp-3)",
+          marginBottom: "var(--lb-sp-4)",
         }}
       >
-        listbull
+        Open the bot in Telegram
       </h1>
       <p
         style={{
           fontSize: "var(--lb-fs-lg)",
           color: "var(--lb-muted-fg)",
           maxWidth: 560,
-          marginBottom: "var(--lb-sp-6)",
           lineHeight: 1.5,
+          marginBottom: "var(--lb-sp-6)",
         }}
       >
-        Telegram-native to-do bot. Every chat is its own list — the bot
-        handles everything via chat. Open source, self-host in 15
-        minutes, BYOK via OpenRouter.
+        listbull is fully chat-driven. Open the bot DM, paste your
+        OpenRouter API key (one-time setup), and start adding to-dos.
+        For groups: add the bot to the group, the owner pastes the key,
+        anyone in the group can mention the bot.
       </p>
       <div style={{ display: "flex", gap: "var(--lb-sp-3)" }}>
         <a
-          href="https://github.com/buraksu42/listbull"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            padding: "var(--lb-sp-3) var(--lb-sp-6)",
-            border: "1px solid var(--lb-border)",
-            borderRadius: "var(--lb-r-full)",
-            color: "var(--lb-fg)",
-            textDecoration: "none",
-          }}
-        >
-          GitHub
-        </a>
-        <Link
-          href="/use-the-bot"
+          href="https://t.me/listbull_test_bot"
           style={{
             padding: "var(--lb-sp-3) var(--lb-sp-6)",
             background: "var(--lb-accent)",
@@ -77,7 +56,19 @@ export default function MarketingHome() {
             fontWeight: 600,
           }}
         >
-          Try the bot →
+          Open @listbull_test_bot
+        </a>
+        <Link
+          href="/"
+          style={{
+            padding: "var(--lb-sp-3) var(--lb-sp-6)",
+            border: "1px solid var(--lb-border)",
+            borderRadius: "var(--lb-r-full)",
+            color: "var(--lb-fg)",
+            textDecoration: "none",
+          }}
+        >
+          Back
         </Link>
       </div>
     </main>
