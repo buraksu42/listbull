@@ -320,11 +320,27 @@ export async function handleMessage(ctx: Context): Promise<void> {
     return;
   }
 
-  // ─── Reply-to context (group only) ────────────────────────────────
-  if (isGroupContext) {
-    const replyTo = message.reply_to_message;
+  // ─── Reply-to context ─────────────────────────────────────────────
+  // Group: forward who the user was replying to so the LLM has the
+  // mention context. DM + group both: if the reply is to a bot
+  // force-reply prompt carrying a [ctx:<action>:<itemId>] marker, hand
+  // that to the LLM so it knows which item + action the message
+  // pertains to (edit / deadline / reminder / attach).
+  const replyTo = message.reply_to_message;
+  let actionMarker: { action: string; itemId: string } | null = null;
+  if (replyTo) {
     if (
-      replyTo &&
+      replyTo.from?.id === ctx.me.id &&
+      typeof replyTo.text === "string"
+    ) {
+      const m = replyTo.text.match(
+        /\[ctx:(edit|deadline|reminder|attach):([0-9a-f-]{36})\]/i,
+      );
+      if (m) {
+        actionMarker = { action: m[1]!.toLowerCase(), itemId: m[2]! };
+      }
+    } else if (
+      isGroupContext &&
       replyTo.from?.id !== ctx.me.id &&
       typeof replyTo.text === "string" &&
       replyTo.text.length > 0
@@ -343,6 +359,16 @@ export async function handleMessage(ctx: Context): Promise<void> {
     const placeholder = `[${attachment.kind} sent]`;
     if (!persistedContent) persistedContent = placeholder;
     llmContent = `${effectiveText || placeholder}\n\n${formatAttachmentContext(attachment)}`;
+  }
+
+  // actionMarker runs after attachment so it can layer the directive
+  // on top while preserving attachment metadata for the LLM.
+  if (actionMarker) {
+    const directive = buildActionDirective(actionMarker, effectiveText);
+    llmContent = attachment
+      ? `${directive}\n\n${formatAttachmentContext(attachment)}`
+      : directive;
+    if (!persistedContent) persistedContent = "(empty)";
   }
 
   const userMessageRow: NewMessage = {
@@ -448,6 +474,37 @@ function toMessageRow(
     toolCalls: null,
     toolCallId: m.toolCallId,
   };
+}
+
+/**
+ * Translate a force-reply action marker + the user's reply text into
+ * a directive the LLM can act on. The LLM is already trained on the
+ * tool catalog by the system prompt — it just needs to know which
+ * item and which kind of update to apply.
+ */
+function buildActionDirective(
+  marker: { action: string; itemId: string },
+  userText: string,
+): string {
+  const trimmed = userText.trim();
+  const body =
+    trimmed.length > 0
+      ? trimmed
+      : marker.action === "attach"
+        ? "(file/photo sent as attachment)"
+        : "(empty reply)";
+  switch (marker.action) {
+    case "edit":
+      return `Update item ${marker.itemId}: change its text to: ${body}. Call update_item.`;
+    case "deadline":
+      return `Set the deadline of item ${marker.itemId} based on this natural-language description: "${body}". Call set_deadline. If the user said "remove" or "clear", clear the deadline by passing deadline_at: null.`;
+    case "reminder":
+      return `Add a reminder to item ${marker.itemId} based on this natural-language description: "${body}". Call add_reminder — use offset_minutes when the user says "X before deadline", remind_at for absolute times.`;
+    case "attach":
+      return `User is replying with an attachment to add to item ${marker.itemId}. Their accompanying note: "${body}". Call attach_file_to_item with the attachment metadata from the latest message context.`;
+    default:
+      return body;
+  }
 }
 
 async function sendChunked(ctx: Context, text: string): Promise<void> {

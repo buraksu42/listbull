@@ -1,12 +1,22 @@
 /**
- * Callback router for /list inline-keyboard buttons (Phase 17).
+ * Callback router for /items inline-keyboard buttons (Phase 17).
  *
  * callback_data prefixes:
- *   item:toggle:<itemId>   → flip is_done, edit message
- *   item:edit:<itemId>     → force-reply prompt; LLM handles the reply
- *   item:delete:<itemId>   → soft-delete + edit message
- *   item:page:<offset>     → re-render with new offset
- *   items:add              → force-reply prompt for new item text
+ *   item:toggle:<itemId>    → flip is_done, edit message
+ *   item:edit:<itemId>      → force-reply prompt; LLM handles the reply
+ *   item:deadline:<itemId>  → force-reply prompt for new deadline
+ *   item:reminder:<itemId>  → force-reply prompt for new reminder
+ *   item:attach:<itemId>    → force-reply prompt; user replies with a
+ *                              photo/document/voice → handle-message
+ *                              picks up the attachment + LLM calls
+ *                              attach_file_to_item.
+ *   item:delete:<itemId>    → soft-delete + edit message
+ *   item:page:<offset>      → re-render with new offset
+ *   items:add               → force-reply prompt for new item text
+ *
+ * Force-reply prompts embed a `[ctx:<action>:<itemId>]` marker so the
+ * LLM call in handle-message knows which item + action the user's
+ * reply pertains to.
  */
 import type { Context } from "grammy";
 import { and, eq } from "drizzle-orm";
@@ -143,23 +153,59 @@ export async function handleItemActionCallback(
     return;
   }
 
-  // item:edit:<itemId> — force-reply prompt; user's reply text passes
-  // to LLM via handle-message which will call update_item.
-  if (data.startsWith("item:edit:")) {
-    const itemId = data.slice("item:edit:".length);
-    await ctx.answerCallbackQuery();
-    await ctx.api.sendMessage(
-      chatId,
-      locale === "tr"
-        ? `✏️ Yeni metni yaz (item id: ${itemId}):`
-        : `✏️ New text? (item id: ${itemId}):`,
-      {
+  // Force-reply action prompts. Each carries a [ctx:<action>:<itemId>]
+  // marker that handle-message scans to give the LLM the missing
+  // context (which item, what kind of update).
+  const forceReplyActions: Array<{
+    prefix: string;
+    action: "edit" | "deadline" | "reminder" | "attach";
+    prompt: { tr: string; en: string };
+  }> = [
+    {
+      prefix: "item:edit:",
+      action: "edit",
+      prompt: {
+        tr: "✏️ Yeni metni yaz:",
+        en: "✏️ New text?",
+      },
+    },
+    {
+      prefix: "item:deadline:",
+      action: "deadline",
+      prompt: {
+        tr: "📅 Bitiş tarihi ne olsun? (örn. \"yarın 18:00\", \"cuma\", \"3 gün sonra\")",
+        en: "📅 What's the deadline? (e.g. \"tomorrow 6pm\", \"Friday\", \"in 3 days\")",
+      },
+    },
+    {
+      prefix: "item:reminder:",
+      action: "reminder",
+      prompt: {
+        tr: "⏰ Ne zaman hatırlatayım? (örn. \"30 dakika sonra\", \"yarın 09:00\", \"bitiş tarihinden 1 gün önce\")",
+        en: "⏰ When should I remind you? (e.g. \"in 30 minutes\", \"tomorrow 9am\", \"1 day before deadline\")",
+      },
+    },
+    {
+      prefix: "item:attach:",
+      action: "attach",
+      prompt: {
+        tr: "📎 Bu mesaja fotoğraf, dosya veya ses göndererek item'a ekle.",
+        en: "📎 Reply to this message with a photo, file, or voice note to attach it.",
+      },
+    },
+  ];
+  for (const a of forceReplyActions) {
+    if (data.startsWith(a.prefix)) {
+      const itemId = data.slice(a.prefix.length);
+      await ctx.answerCallbackQuery();
+      const head = locale === "tr" ? a.prompt.tr : a.prompt.en;
+      await ctx.api.sendMessage(chatId, `${head}\n\n[ctx:${a.action}:${itemId}]`, {
         reply_markup: {
           force_reply: true,
           selective: true,
         },
-      },
-    );
-    return;
+      });
+      return;
+    }
   }
 }

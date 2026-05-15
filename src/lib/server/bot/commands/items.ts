@@ -21,7 +21,10 @@ import { items } from "@/lib/db/schema";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
 
-const PAGE_SIZE = 10;
+// Page size kept small so each item's label + action row sit together
+// on screen — the screenshot bug (scrolled-off buttons being ambiguous)
+// was a consequence of 10 items × 2 rows = 20 rows of buttons.
+const PAGE_SIZE = 5;
 
 export async function handleItems(ctx: Context): Promise<void> {
   const from = ctx.from;
@@ -119,9 +122,24 @@ export async function buildItemsView(
     lines.push(
       `${num}. ${checkbox} ${priorityIcon}${statusIcon}${text}${deadlineSuffix}${tagSuffix}`,
     );
+    // Row A — wide numbered label, taps to toggle. Number prevents the
+    // "which item does this button belong to?" ambiguity when the
+    // keyboard scrolls past its header.
+    const labelText =
+      it.text.length > 26 ? `${it.text.slice(0, 26)}…` : it.text;
     keyboard
-      .text(checkbox, `item:toggle:${it.id}`)
+      .text(
+        `${num}. ${checkbox} ${labelText}`,
+        `item:toggle:${it.id}`,
+      )
+      .row();
+    // Row B — 5 narrow action buttons. Order tuned for frequency:
+    // edit (most common), deadline, reminder, attach, delete (least).
+    keyboard
       .text("✏️", `item:edit:${it.id}`)
+      .text("📅", `item:deadline:${it.id}`)
+      .text("⏰", `item:reminder:${it.id}`)
+      .text("📎", `item:attach:${it.id}`)
       .text("🗑️", `item:delete:${it.id}`)
       .row();
   }
