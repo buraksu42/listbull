@@ -76,22 +76,18 @@ async function main(): Promise<void> {
 
   console.log("→ setMyCommands");
   await tg("setMyCommands", {
-    // Names must be ASCII a-z0-9_; descriptions can be UTF-8. Both TR
-    // and EN entries are registered so the autocomplete works in both
-    // locales — they all share a handler in src/lib/server/bot/index.ts.
+    // English-only by user preference — replies are still localized
+    // via users.locale. Descriptions kept short so autocomplete fits
+    // the Telegram dropdown.
     commands: [
-      { command: "start", description: "Get started / başla" },
-      { command: "help", description: "How to use / yardım" },
-      { command: "items", description: "Show all items / tüm işler 📋" },
+      { command: "start", description: "Get started" },
+      { command: "help", description: "How to use" },
+      { command: "items", description: "Show all items 📋" },
       { command: "today", description: "Today's items 📅" },
-      { command: "bugun", description: "Bugünün işleri 📅" },
       { command: "thisweek", description: "This week's items 🗓" },
-      { command: "buhafta", description: "Bu haftaki işler 🗓" },
       { command: "assigned", description: "Assigned items 👤" },
-      { command: "atanan", description: "Atanan işler 👤" },
       { command: "reminders", description: "Pending reminders 🔔" },
-      { command: "hatirlaticilar", description: "Hatırlatıcılar 🔔" },
-      { command: "reset", description: "Clear conversation / sıfırla" },
+      { command: "reset", description: "Clear conversation" },
     ],
   });
   console.log(`  ok`);

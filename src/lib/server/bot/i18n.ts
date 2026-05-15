@@ -8,7 +8,7 @@ const dict = {
   tr: {
     welcome: (name: string, timezone: string) =>
       `Merhaba ${name}! Ben listbull.\n\n📋 Bu chat = bir to-do listesi. Bana doğal dilde yaz, ben işini görüyorum:\n• "süt al"\n• "Ali'ye toplantı notlarını gönder, yarın 14:00'da hatırlat"\n• "/items" → tüm item'ları göster\n\n⏰ Saat dilimin ${timezone}. Yanlışsa "saat dilimi <şehir>" yaz.\n\n🔑 Önce OpenRouter key gerek (chat sahibi olarak): openrouter.ai/keys → key oluştur → buraya yapıştır.`,
-    help: `Komutlar:\n📋 /items — tüm item'ları göster (inline butonlarla)\n📅 /bugün — bugün için planlananlar\n🗓 /buhafta — bu haftaki işler\n👤 /atanan [@kullanıcı] — atanan işler (boş bırakırsan sana atananlar)\n🔔 /hatırlatıcılar — bekleyen hatırlatıcılar\n🧹 /reset — konuşma geçmişini sil\n❓ /help — bu mesaj\n\nDoğrudan yazarsan AI ile chat'in listesi üzerinde çalışırım. OpenRouter key'i direkt buraya yapıştır — kaydederim, mesajını silerim.`,
+    help: `Komutlar:\n📋 /items — tüm item'ları göster (inline butonlarla)\n📅 /today — bugün için planlananlar\n🗓 /thisweek — bu haftaki işler\n👤 /assigned [@kullanıcı] — atanan işler (boş bırakırsan sana atananlar)\n🔔 /reminders — bekleyen hatırlatıcılar\n🧹 /reset — konuşma geçmişini sil\n❓ /help — bu mesaj\n\nDoğrudan yazarsan AI ile chat'in listesi üzerinde çalışırım. OpenRouter key'i direkt buraya yapıştır — kaydederim, mesajını silerim.`,
   },
   en: {
     welcome: (name: string, timezone: string) =>

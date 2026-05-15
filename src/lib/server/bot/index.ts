@@ -44,12 +44,12 @@ function registerHandlers(bot: Bot): void {
   bot.command("help", handleHelp);
   bot.command("reset", handleReset);
   bot.command("items", handleItems);
-  // Filter-views: TR + EN aliases share handlers. Telegram bot command
-  // names must be a-z0-9_ (ASCII), so /bugün is exposed as /bugun.
-  bot.command(["bugun", "today"], handleToday);
-  bot.command(["buhafta", "thisweek"], handleWeek);
-  bot.command(["atanan", "assigned"], handleAssigned);
-  bot.command(["hatirlaticilar", "reminders"], handleReminders);
+  // Slash commands are English-only by user preference — the bot
+  // replies are still localized (TR/EN) based on users.locale.
+  bot.command("today", handleToday);
+  bot.command("thisweek", handleWeek);
+  bot.command("assigned", handleAssigned);
+  bot.command("reminders", handleReminders);
 
   // Inline-keyboard callbacks for /items view.
   bot.on("callback_query:data", async (ctx, next) => {

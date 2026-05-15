@@ -21,6 +21,12 @@ export async function executeAddReminder(
 ): Promise<ExecResult<AddReminderOutput>> {
   const parsed = addReminderInputSchema.safeParse(input);
   if (!parsed.success) {
+    // Loud-log so we can see what malformed args the LLM passed when
+    // a user reports "reminder error". Container stdout → docker logs.
+    console.error("[add_reminder] invalid_input", {
+      input,
+      issues: parsed.error.issues,
+    });
     return err(ERR.invalid_input, parsed.error.message);
   }
   const { item_id, remind_at, offset_minutes, recurrence_rule } = parsed.data;
@@ -31,7 +37,16 @@ export async function executeAddReminder(
       .from(items)
       .where(and(eq(items.id, item_id), eq(items.chatId, ctx.chatId)))
       .limit(1);
-    if (!current) return err(ERR.not_found, "Item not found.");
+    if (!current) {
+      console.error("[add_reminder] not_found", {
+        item_id,
+        chatId: ctx.chatId,
+      });
+      return err(
+        ERR.not_found,
+        `Item ${item_id} not found in this chat — make sure search_items returned this id from the current chat before calling add_reminder.`,
+      );
+    }
 
     let remindAt: Date;
     let kind: "absolute" | "before_deadline";
