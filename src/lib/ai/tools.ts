@@ -735,10 +735,10 @@ export type ListMembersOutput = z.infer<typeof listMembersOutputSchema>;
 //
 // Mirrors the PATCH /api/settings shape but exposed as a bot tool so
 // users without easy Mini App access can fix their timezone/locale/etc.
-// from the chat. BYOK key updates intentionally NOT supported here —
-// pasting an API key into a Telegram chat persists in conversation
-// history and is a security smell. Direct users to the Mini App
-// settings page for that.
+// from the chat. Workspace OpenRouter API keys flow through
+// `set_workspace_api_key` (Phase 16) which redacts the raw value
+// from message history and auto-deletes the user's Telegram message
+// for hygiene; do NOT add `api_key` to this tool.
 
 export const updateSettingsInputSchema = z
   .object({
@@ -799,6 +799,53 @@ export const updateSettingsOutputSchema = z.object({
 
 export type UpdateSettingsInput = z.infer<typeof updateSettingsInputSchema>;
 export type UpdateSettingsOutput = z.infer<typeof updateSettingsOutputSchema>;
+
+// ─── 7a3. set_workspace_api_key (Phase 16) ─────────────────────────────
+//
+// User pastes their OpenRouter API key into the chat; the executor
+// encrypts it with ENV_KEY and stores it on the active workspace's
+// `openrouter_api_key_encrypted`. Owner-only.
+//
+// Telegram-side hygiene (in handle-message.ts, NOT in this schema):
+//   - The raw key is regex-redacted in `messages.content` before
+//     persist, so `/reset` + history dumps never expose the secret.
+//   - The user's Telegram message is deleted via deleteMessage() in
+//     private chats (Bot API allows incoming-message deletion in DM)
+//     so the key doesn't sit in the chat scrollback either.
+//
+// The LLM MUST NOT echo the key back in its reply. Tool description
+// hammers this in.
+
+export const setWorkspaceApiKeyInputSchema = z.object({
+  /**
+   * The full OpenRouter key, starting with `sk-or-v1-`. Length
+   * ~75-80 chars; the regex is loose to tolerate future format
+   * tweaks.
+   */
+  api_key: z
+    .string()
+    .trim()
+    .regex(/^sk-or-v1-[A-Za-z0-9_-]{20,}$/, {
+      message:
+        "api_key must start with sk-or-v1- and be at least 30 characters",
+    }),
+});
+
+export const setWorkspaceApiKeyOutputSchema = z.object({
+  workspace: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+  }),
+  /** Last 4 chars of the key — for confirmation copy without exposing. */
+  key_suffix: z.string(),
+});
+
+export type SetWorkspaceApiKeyInput = z.infer<
+  typeof setWorkspaceApiKeyInputSchema
+>;
+export type SetWorkspaceApiKeyOutput = z.infer<
+  typeof setWorkspaceApiKeyOutputSchema
+>;
 
 // ─── 7b. remove_member — kick a member off a shared list (owner-only) ─
 
@@ -1387,6 +1434,8 @@ export const TOOL_NAMES = [
   "invite_to_workspace",
   "remove_workspace_member",
   "set_item_attributes",
+  // Phase 16: workspace OpenRouter API key via chat
+  "set_workspace_api_key",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -1715,13 +1764,31 @@ export const tools: readonly ToolDefinition[] = [
       "must be supplied. Use this when the user says 'saat dilimi " +
       "İstanbul olsun' / 'use Istanbul time' / 'set my timezone' / " +
       "'change to English' / 'turn off reminders' / 'tarih formatını " +
-      "MM/DD/YYYY yap' / 'switch to 12-hour clock'. BYOK API key " +
-      "cannot be set this way (security: chat history would persist " +
-      "the secret) — direct the user to the Mini App settings page " +
-      "for that. Output `changes` lists fields that actually changed; " +
+      "MM/DD/YYYY yap' / 'switch to 12-hour clock'. Workspace " +
+      "OpenRouter API keys: use `set_workspace_api_key`, NOT this " +
+      "tool. Output `changes` lists fields that actually changed; " +
       "use it to phrase a precise confirmation.",
     inputSchema: updateSettingsInputSchema,
     outputSchema: updateSettingsOutputSchema,
+  },
+  {
+    name: "set_workspace_api_key",
+    description:
+      "Persist an OpenRouter API key for the ACTIVE workspace. " +
+      "OWNER-ONLY. Pass the full key in `api_key` (starts with " +
+      "`sk-or-v1-`). The key is encrypted at rest with AES-256-GCM " +
+      "and never echoed back. Side effect: the user's Telegram " +
+      "message containing the key is auto-deleted (DM only) AND the " +
+      "key is regex-redacted from message history before persist. " +
+      "Call IMMEDIATELY when the user pastes a string starting with " +
+      "`sk-or-v1-` and does NOT explicitly say 'don't save'. Examples: " +
+      "'sk-or-v1-abc123...' (bare paste), 'workspace key olarak " +
+      "şunu kullan: sk-or-v1-...', 'set the api key sk-or-v1-...'. " +
+      "Owner check failures → suggest the workspace owner do it. " +
+      "Reply briefly: '✓ key kaydedildi (..." +
+      "<last4>)'; NEVER echo the key in your text response.",
+    inputSchema: setWorkspaceApiKeyInputSchema,
+    outputSchema: setWorkspaceApiKeyOutputSchema,
   },
   {
     name: "set_deadline",

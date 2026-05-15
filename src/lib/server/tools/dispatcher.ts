@@ -46,6 +46,7 @@ import { executeRemoveWorkspaceMember } from "./remove-workspace-member";
 import { executeListWorkspaceInvites } from "./list-workspace-invites";
 import { executeCancelWorkspaceInvite } from "./cancel-workspace-invite";
 import { executeSetItemAttributes } from "./set-item-attributes";
+import { executeSetWorkspaceApiKey } from "./set-workspace-api-key";
 import { ERR } from "./_shared";
 
 /**
@@ -146,6 +147,8 @@ async function routeCall(
       return await executeCancelWorkspaceInvite(input, ctx);
     case "set_item_attributes":
       return await executeSetItemAttributes(input, ctx);
+    case "set_workspace_api_key":
+      return await executeSetWorkspaceApiKey(input, ctx);
     default:
       return {
         ok: false,
@@ -197,6 +200,7 @@ const KNOWN_TOOLS = [
   "list_workspace_invites",
   "cancel_workspace_invite",
   "set_item_attributes",
+  "set_workspace_api_key",
 ] as const;
 
 function buildUnknownToolMessage(badName: string): string {

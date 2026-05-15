@@ -475,6 +475,53 @@ export async function handleMessage(ctx: Context): Promise<void> {
     workspaceId = await resolveActiveWorkspaceId(user.id);
   }
 
+  // Phase 16: pre-LLM intercept for pasted OpenRouter keys. Required
+  // because the noKey gate below would otherwise short-circuit a key-
+  // setting paste — chicken-and-egg: the bot says "no key, paste it",
+  // user pastes, but without an existing key we never reach the LLM
+  // to call set_workspace_api_key. So we detect the pattern here and
+  // call the executor directly, skipping LLM entirely. Best-effort
+  // deleteMessage runs even on owner-check failure so the leaked
+  // secret doesn't sit in Telegram scrollback.
+  const KEY_RE_INTERCEPT = /sk-or-v1-[A-Za-z0-9_-]{20,}/;
+  const keyMatch = effectiveText.match(KEY_RE_INTERCEPT);
+  if (keyMatch) {
+    const { executeSetWorkspaceApiKey } = await import(
+      "@/lib/server/tools/set-workspace-api-key"
+    );
+    const result = await executeSetWorkspaceApiKey(
+      { api_key: keyMatch[0] },
+      { userId: user.id, workspaceId },
+    );
+
+    // Best-effort: delete the message in DM so the raw key doesn't
+    // linger in scrollback. Skipped in groups (bot needs admin).
+    if (message.chat.type === "private") {
+      try {
+        await ctx.api.deleteMessage(message.chat.id, message.message_id);
+      } catch {
+        // Permissions / age — ignore.
+      }
+    }
+
+    if (result.ok) {
+      const suffix = result.data.key_suffix;
+      const wsName = result.data.workspace.name;
+      await ctx.reply(
+        locale === "tr"
+          ? `✓ Key kaydedildi (…${suffix}) — "${wsName}" workspace'i için aktif. Şifrelenmiş olarak saklanır, plaintext bir daha gözükmez. Pasted mesajını da hijyen için sildim.`
+          : `✓ Key saved (…${suffix}) — active for workspace "${wsName}". Stored encrypted; you won't see it plaintext again. I also deleted your pasted message for hygiene.`,
+      );
+    } else {
+      await ctx.reply(
+        locale === "tr"
+          ? `Key kaydedilemedi: ${result.error.message}\n\n(Sadece workspace owner key koyabilir. Mesajını yine de güvenlik için sildim.)`
+          : `Couldn't save key: ${result.error.message}\n\n(Only the workspace owner can set the key. I deleted your pasted message for safety anyway.)`,
+      );
+    }
+    return;
+  }
+
   let apiKey: string | null = null;
   const orgKeyEnc = await getWorkspaceOrgKeyEncrypted(workspaceId);
   if (orgKeyEnc) {
@@ -544,13 +591,18 @@ export async function handleMessage(ctx: Context): Promise<void> {
       lines.push("");
       lines.push(
         locale === "tr"
-          ? "📥 Nereye yapıştırırım"
-          : "📥 Where to paste it",
+          ? "📥 İki seçenek:"
+          : "📥 Two options:",
       );
       lines.push(
         locale === "tr"
-          ? "Mini App'i aç (alt sağdaki Open App butonu) → Workspace ayarları → Workspace API key → yapıştır → Kaydet. Key sunucuda AES-256-GCM ile şifrelenir; bir daha plaintext görünmez. Bu workspace'in tüm üyeleri bu key'i kullanır (sen taşırsın)."
-          : "Open Mini App (Open App button bottom-right) → Workspace settings → Workspace API key → paste → Save. The key is AES-256-GCM encrypted at rest; you'll never see it plaintext again. Every member of this workspace uses this key (you bear the cost).",
+          ? "  • Buraya direkt yapıştır — ben kaydederim, sonra pasted mesajını silerim (güvenlik). En hızlı yol."
+          : "  • Paste it here directly — I save it and delete your pasted message for safety. Fastest.",
+      );
+      lines.push(
+        locale === "tr"
+          ? "  • Mini App → Workspace ayarları → Workspace API key. Key sunucuda AES-256-GCM ile şifrelenir; plaintext bir daha gözükmez."
+          : "  • Mini App → Workspace settings → Workspace API key. The key is AES-256-GCM encrypted at rest.",
       );
       lines.push("");
       lines.push(
@@ -655,6 +707,22 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // model has the file_id to call `attach_file_to_item` with.
   let llmContent = effectiveText;
   let persistedContent = effectiveText;
+
+  // Phase 16: OpenRouter API key paste hygiene. If the user message
+  // contains `sk-or-v1-...`, redact it from the persisted content +
+  // schedule a deleteMessage call on the Telegram side AFTER the LLM
+  // round-trip completes (so the executor has a chance to consume the
+  // raw value first). The redaction happens BEFORE persist; the LLM
+  // still sees the full key via `llmContent` and `effectiveText`.
+  const OPENROUTER_KEY_RE = /sk-or-v1-[A-Za-z0-9_-]{20,}/g;
+  let containsApiKey = false;
+  if (OPENROUTER_KEY_RE.test(persistedContent)) {
+    containsApiKey = true;
+    persistedContent = persistedContent.replace(
+      OPENROUTER_KEY_RE,
+      (match) => `[REDACTED sk-or-v1-…${match.slice(-4)}]`,
+    );
+  }
   if (attachment) {
     const placeholder =
       locale === "tr"
@@ -688,6 +756,23 @@ export async function handleMessage(ctx: Context): Promise<void> {
 
   // Persist user message + invoke LLM.
   await insertMessages([userMessageRow]);
+
+  // Phase 16: delete the user's Telegram message if it pasted an API
+  // key, so the secret doesn't sit in the chat scrollback. Bot API
+  // permits deleting INCOMING messages in private chats. In group
+  // chats the bot needs admin rights — we skip there to avoid a
+  // permissions error; the persisted content is already redacted and
+  // the executor still sets the key. Best-effort: swallow errors.
+  if (containsApiKey && message.chat.type === "private") {
+    try {
+      await ctx.api.deleteMessage(message.chat.id, message.message_id);
+    } catch (err) {
+      console.warn(
+        "[handle-message] deleteMessage failed for api-key paste",
+        { err: String(err) },
+      );
+    }
+  }
 
   // workspaceId already resolved above (BYOK chain); reuse it for
   // executor ctx + workspace prompt. Phase 5 adds a bot-aware overlay
