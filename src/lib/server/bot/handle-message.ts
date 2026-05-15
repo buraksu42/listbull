@@ -490,7 +490,22 @@ export async function handleMessage(ctx: Context): Promise<void> {
       await insertMessages(rowsToInsert);
     }
 
-    if (response.assistantText.trim().length === 0) return;
+    if (response.assistantText.trim().length === 0) {
+      // Haiku sometimes finishes a tool round-trip without composing
+      // a final text. From the user's side that's "the bot ignored
+      // me" — send a generic ack derived from which tools fired.
+      const toolNames = response.persistedMessages
+        .map((m) =>
+          m.role === "assistant" && m.toolCalls
+            ? (m.toolCalls as unknown as ToolCall[]).map((c) => c.name)
+            : [],
+        )
+        .flat();
+      if (toolNames.length > 0) {
+        await ctx.reply(emptyTextFallback(toolNames, locale));
+      }
+      return;
+    }
     await sendChunked(ctx, response.assistantText);
   } catch (err) {
     console.error("[handle-message] LLM error", err);
@@ -566,6 +581,59 @@ function buildActionDirective(
     default:
       return body;
   }
+}
+
+/**
+ * Compose a friendly confirmation when haiku returns empty final
+ * text after one or more successful tool calls. Picks per-tool
+ * copy where useful, falls back to a generic "✅ Done".
+ */
+function emptyTextFallback(toolNames: string[], locale: "tr" | "en"): string {
+  const unique = Array.from(new Set(toolNames));
+  const lines: string[] = [];
+  for (const name of unique) {
+    switch (name) {
+      case "create_item":
+        lines.push(locale === "tr" ? "✅ Eklendi." : "✅ Added.");
+        break;
+      case "update_item":
+        lines.push(locale === "tr" ? "✏️ Güncellendi." : "✏️ Updated.");
+        break;
+      case "complete_item":
+        lines.push(locale === "tr" ? "✅ Tamamlandı." : "✅ Completed.");
+        break;
+      case "delete_item":
+        lines.push(locale === "tr" ? "🗑️ Silindi." : "🗑️ Deleted.");
+        break;
+      case "set_deadline":
+        lines.push(locale === "tr" ? "📅 Bitiş tarihi atandı." : "📅 Deadline set.");
+        break;
+      case "add_reminder":
+        lines.push(locale === "tr" ? "⏰ Hatırlatıcı kuruldu." : "⏰ Reminder set.");
+        break;
+      case "remove_reminder":
+        lines.push(locale === "tr" ? "🔕 Hatırlatıcı kaldırıldı." : "🔕 Reminder removed.");
+        break;
+      case "assign_item":
+        lines.push(locale === "tr" ? "👤 Atandı." : "👤 Assigned.");
+        break;
+      case "set_item_attributes":
+        lines.push(locale === "tr" ? "🏷️ Güncellendi." : "🏷️ Updated.");
+        break;
+      case "attach_file_to_item":
+        lines.push(locale === "tr" ? "📎 Eklendi." : "📎 Attached.");
+        break;
+      case "update_settings":
+        lines.push(locale === "tr" ? "⚙️ Ayar kaydedildi." : "⚙️ Setting saved.");
+        break;
+      default:
+        break;
+    }
+  }
+  if (lines.length === 0) {
+    return locale === "tr" ? "✅ Tamam." : "✅ Done.";
+  }
+  return lines.join("\n");
 }
 
 async function sendChunked(ctx: Context, text: string): Promise<void> {
