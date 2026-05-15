@@ -69,13 +69,25 @@ export async function handleMyChatMember(ctx: Context): Promise<void> {
     });
 
     const locale = pickLocale(owner.locale ?? inviter.language_code ?? null);
+    // The [ctx:set_key:<groupChatId>] marker is read by the
+    // key-paste intercept in handle-message — when the inviter
+    // replies to THIS DM with their key, we route it to the
+    // group's chats row, not the DM's. Without the marker, a key
+    // pasted in DM saves to the DM chat only and the group stays
+    // unauthed (silent-broken until the user re-pastes inside the
+    // group, which is a security smell).
     const msg =
       locale === "tr"
-        ? `👥 Beni "${groupLabel}" grubuna eklediğin için sağol! Bu chat'i kullanabilmem için bir OpenRouter API key gerek (chat sahibi sensin):\n\n🔑 Adımlar:\n  1. openrouter.ai/keys → Sign in → Create Key\n  2. Key'i (sk-or-v1-… ile başlar) bu DM'e yapıştır → otomatik kaydederim + mesajını silerim.\n\n✨ Sonra grup'ta @${ctx.me.username} ile mesaj atan herkes liste kullanabilir.`
-        : `👥 Thanks for adding me to "${groupLabel}"! I need an OpenRouter API key for this chat (you're the owner):\n\n🔑 Steps:\n  1. openrouter.ai/keys → Sign in → Create Key\n  2. Paste the key (sk-or-v1-…) into THIS DM → I save it and delete your message.\n\n✨ Then anyone who mentions @${ctx.me.username} in the group can use the list.`;
+        ? `👥 Beni "${groupLabel}" grubuna eklediğin için sağol! Bu grubu çalıştırmam için bir OpenRouter API key gerek (chat sahibi sensin):\n\n🔑 Adımlar:\n  1. openrouter.ai/keys → Sign in → Create Key\n  2. Key'i (sk-or-v1-… ile başlar) BU MESAJI YANITLAYARAK gönder → grup'a özel kaydederim + DM mesajını güvenlik için silerim.\n\n✨ Sonra grup'ta @${ctx.me.username} ile mesaj atan herkes liste kullanabilir.\n\n[ctx:set_key:${chat.id}]`
+        : `👥 Thanks for adding me to "${groupLabel}"! I need an OpenRouter API key to run this group (you're the owner):\n\n🔑 Steps:\n  1. openrouter.ai/keys → Sign in → Create Key\n  2. REPLY to this message with the key (sk-or-v1-…) → I save it for the group and delete your DM for safety.\n\n✨ Then anyone who mentions @${ctx.me.username} in the group can use the list.\n\n[ctx:set_key:${chat.id}]`;
 
     try {
-      await ctx.api.sendMessage(inviter.id, msg);
+      await ctx.api.sendMessage(inviter.id, msg, {
+        reply_markup: {
+          force_reply: true,
+          selective: true,
+        },
+      });
     } catch {
       // Inviter hasn't started bot DM yet — they'll see prompts in-group.
     }

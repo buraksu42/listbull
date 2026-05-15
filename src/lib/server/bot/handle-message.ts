@@ -254,12 +254,32 @@ export async function handleMessage(ctx: Context): Promise<void> {
   }
 
   // ─── Pre-LLM API key paste intercept ──────────────────────────────
+  // Two paths:
+  //   a) User pastes the key in the chat where it'll be used → target
+  //      is the current chatId.
+  //   b) User replies in DM to the bot's "set up GROUP key" prompt
+  //      (which carries a [ctx:set_key:<groupChatId>] marker). The
+  //      key is for the group, not the DM — route it to the marked
+  //      chatId. Without (b), pasting a key in DM after my_chat_member
+  //      would silently save it to the DM, leaving the group unauthed.
   const KEY_RE = /sk-or-v1-[A-Za-z0-9_-]{20,}/;
   const keyMatch = effectiveText.match(KEY_RE);
   if (keyMatch) {
+    let targetChatId = chatId;
+    const replyText = message.reply_to_message?.text;
+    if (
+      message.reply_to_message?.from?.id === ctx.me.id &&
+      typeof replyText === "string"
+    ) {
+      const m = replyText.match(/\[ctx:set_key:(-?\d+)\]/);
+      if (m) {
+        const parsed = Number.parseInt(m[1]!, 10);
+        if (Number.isFinite(parsed)) targetChatId = parsed;
+      }
+    }
     const result = await executeSetChatApiKey(
       { api_key: keyMatch[0] },
-      { userId: user.id, chatId },
+      { userId: user.id, chatId: targetChatId },
     );
     if (message.chat.type === "private") {
       try {
@@ -270,10 +290,16 @@ export async function handleMessage(ctx: Context): Promise<void> {
     }
     if (result.ok) {
       const suffix = result.data.key_suffix;
+      const groupSuffix =
+        targetChatId !== chatId
+          ? locale === "tr"
+            ? ` (grup için)`
+            : ` (for the group)`
+          : "";
       await ctx.reply(
         locale === "tr"
-          ? `🔑 Key kaydedildi (…${suffix}). Pasted mesajını güvenlik için sildim. ✨ Artık hazırım — yaz, başlayalım.`
-          : `🔑 Key saved (…${suffix}). Deleted your pasted message for safety. ✨ I'm ready — message away.`,
+          ? `🔑 Key kaydedildi${groupSuffix} (…${suffix}). Pasted mesajını güvenlik için sildim. ✨ Artık hazırım — yaz, başlayalım.`
+          : `🔑 Key saved${groupSuffix} (…${suffix}). Deleted your pasted message for safety. ✨ I'm ready — message away.`,
       );
     } else {
       await ctx.reply(
