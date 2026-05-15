@@ -174,6 +174,16 @@ export async function handleMessage(ctx: Context): Promise<void> {
   const from = ctx.from;
   const message = ctx.message;
   if (!from || !message) return;
+  // Per-message breadcrumb. Lets us tell instantly whether a webhook
+  // ever reaches the handler when a user reports "didn't work".
+  console.log("[msg]", {
+    from: from.id,
+    chatId: message.chat.id,
+    chatType: message.chat.type,
+    isReply: Boolean(message.reply_to_message),
+    textLen: typeof message.text === "string" ? message.text.length : 0,
+    hasAttachment: Boolean(extractAttachmentFromMessage(message)),
+  });
 
   const text = message.text ?? "";
   const caption =
@@ -427,6 +437,15 @@ export async function handleMessage(ctx: Context): Promise<void> {
 
   const dispatcher = createToolDispatcher({ userId: user.id, chatId });
 
+  const llmStartedAt = Date.now();
+  console.log("[llm] call", {
+    chatId,
+    model: chatRow?.llmModel ?? user.llmModel,
+    msgs: messagesForLlm.length,
+    hadActionMarker: actionMarker !== null,
+    action: actionMarker?.action ?? null,
+  });
+
   try {
     const response = await respond({
       apiKey,
@@ -444,6 +463,13 @@ export async function handleMessage(ctx: Context): Promise<void> {
         isOwner: chatRow?.ownerUserId === user.id,
       },
       toolDispatcher: dispatcher,
+    });
+    console.log("[llm] done", {
+      chatId,
+      ms: Date.now() - llmStartedAt,
+      textLen: response.assistantText.length,
+      persisted: response.persistedMessages.length,
+      assistantPreview: response.assistantText.slice(0, 80),
     });
 
     if (response.assistantText === NO_KEY_SENTINEL) {
