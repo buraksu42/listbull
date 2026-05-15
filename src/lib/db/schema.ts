@@ -49,7 +49,7 @@ export const users = pgTable(
      * no per-chat override exists (chats.llm_model). Kept for backward
      * compat with the per-user picker that shipped pre-pivot.
      */
-    llmModel: text("llm_model").notNull().default("google/gemini-2.5-flash"),
+    llmModel: text("llm_model").notNull().default("anthropic/claude-haiku-4.5"),
     notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
     /**
      * Phase 15: idempotency marker for the 09:00 daily digest cron.
@@ -98,7 +98,7 @@ export const chats = pgTable(
      */
     openrouterApiKeyEncrypted: text("openrouter_api_key_encrypted"),
     /** Owner-only setting: which LLM model the bot uses in this chat. */
-    llmModel: text("llm_model").notNull().default("google/gemini-2.5-flash"),
+    llmModel: text("llm_model").notNull().default("anthropic/claude-haiku-4.5"),
     /**
      * Idempotency marker for the chat-level 09:00 daily digest push.
      * Stored as `date` in owner's TZ — same pattern as

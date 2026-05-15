@@ -197,6 +197,13 @@
       "when": 1778891200000,
       "tag": "0027_chat_only_pivot",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1778891300000,
+      "tag": "0028_haiku_default",
+      "breakpoints": true
     }
   ]
 }
