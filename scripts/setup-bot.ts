@@ -1,11 +1,14 @@
 /**
- * One-shot Telegram bot setup helper.
+ * One-shot Telegram bot setup helper (Phase 17 chat-only).
  *
- * Configures everything the public Bot API exposes for a freshly
- * created bot, then prints the BotFather-only steps the operator
- * still has to do by hand (Telegram doesn't expose `/newapp`,
- * `/setmainminiapp`, `/setdomain`, `/setinline`, `/setinlinefeedback`,
- * or `/setjoingroups` over the public API).
+ * Configures everything the public Bot API exposes for the listbull
+ * bot, then prints the BotFather-only steps the operator still has to
+ * run by hand (Telegram doesn't expose `/setdomain`, `/setjoingroups`,
+ * or `/setprivacy` over the public API).
+ *
+ * Mini App was frozen in Phase 17 — this script no longer registers a
+ * chat menu button. All interaction is in-chat (inline keyboards via
+ * `/items`, free-form messages routed through the LLM).
  *
  * Run:
  *   TELEGRAM_BOT_TOKEN=<token> \
@@ -14,11 +17,9 @@
  *     npx tsx scripts/setup-bot.ts
  *
  * Optional:
- *   BOT_USERNAME=listbull_bot    # only used to render the
- *                                # BotFather instructions at the end.
- *                                # If missing, the script reads it
- *                                # from getMe.
- *   MENU_BUTTON_LABEL=listbull   # default "Open App"
+ *   BOT_USERNAME=listbull_bot    # only used to render the BotFather
+ *                                # instructions at the end. If missing,
+ *                                # the script reads it from getMe.
  */
 import process from "node:process";
 
@@ -27,10 +28,8 @@ type Json = Record<string, unknown>;
 const TOKEN = mustEnv("TELEGRAM_BOT_TOKEN");
 const SECRET = mustEnv("TELEGRAM_WEBHOOK_SECRET");
 const APP_BASE_URL = mustEnv("APP_BASE_URL").replace(/\/+$/, "");
-const MENU_LABEL = process.env.MENU_BUTTON_LABEL ?? "Open App";
 
 const webhookUrl = `${APP_BASE_URL}/api/telegram/webhook`;
-const miniAppUrl = `${APP_BASE_URL}/app`;
 
 function mustEnv(name: string): string {
   const value = process.env[name];
@@ -65,42 +64,45 @@ async function main(): Promise<void> {
     url: webhookUrl,
     secret_token: SECRET,
     drop_pending_updates: true,
+    // chat_member: pick up new-member joins so auto-onboarding works.
     allowed_updates: [
       "message",
-      "inline_query",
-      "chosen_inline_result",
       "callback_query",
       "my_chat_member",
+      "chat_member",
     ],
   });
   console.log(`  ok: ${webhookUrl}`);
 
   console.log("→ setMyCommands");
   await tg("setMyCommands", {
+    // Names must be ASCII a-z0-9_; descriptions can be UTF-8. Both TR
+    // and EN entries are registered so the autocomplete works in both
+    // locales — they all share a handler in src/lib/server/bot/index.ts.
     commands: [
-      { command: "start", description: "Get started" },
-      { command: "help", description: "How to use the bot" },
-      { command: "lists", description: "Show your lists" },
-      { command: "share", description: "Share a list with someone" },
-      { command: "snapshot", description: "Send a list snapshot to chat" },
-      { command: "today", description: "Today's tasks for this workspace" },
-      { command: "workspace", description: "Switch active workspace" },
-      { command: "bindgroup", description: "Bind a workspace to a group" },
-      { command: "unbindgroup", description: "Unbind a workspace from this group" },
-      { command: "reset", description: "Clear conversation context" },
+      { command: "start", description: "Get started / başla" },
+      { command: "help", description: "How to use / yardım" },
+      { command: "items", description: "Show all items / tüm işler 📋" },
+      { command: "today", description: "Today's items 📅" },
+      { command: "bugun", description: "Bugünün işleri 📅" },
+      { command: "thisweek", description: "This week's items 🗓" },
+      { command: "buhafta", description: "Bu haftaki işler 🗓" },
+      { command: "assigned", description: "Assigned items 👤" },
+      { command: "atanan", description: "Atanan işler 👤" },
+      { command: "reminders", description: "Pending reminders 🔔" },
+      { command: "hatirlaticilar", description: "Hatırlatıcılar 🔔" },
+      { command: "reset", description: "Clear conversation / sıfırla" },
     ],
   });
   console.log(`  ok`);
 
-  console.log("→ setChatMenuButton");
+  console.log("→ deleteChatMenuButton (Mini App frozen)");
+  // Pivot: Mini App is dormant, so no web_app menu button — fall back
+  // to Telegram's default commands menu.
   await tg("setChatMenuButton", {
-    menu_button: {
-      type: "web_app",
-      text: MENU_LABEL,
-      web_app: { url: miniAppUrl },
-    },
+    menu_button: { type: "commands" },
   });
-  console.log(`  ok: web_app "${MENU_LABEL}" → ${miniAppUrl}`);
+  console.log(`  ok: menu reset to default commands`);
 
   console.log("→ getWebhookInfo");
   const info = await tg<{
@@ -124,42 +126,12 @@ async function main(): Promise<void> {
   console.log("you must run them in chat with @BotFather yourself):");
   console.log("");
   console.log(`  1. Open https://t.me/BotFather`);
-  console.log(`  2. /setdomain          @${botUsername} → ${hostnameOf(APP_BASE_URL)}`);
-  console.log(`  3. /setjoingroups      @${botUsername} → Enable`);
-  console.log(`                          (lets users add the bot to`);
-  console.log(`                           groups for /bindgroup support)`);
-  console.log(`  4. /setprivacy         @${botUsername} → Enable`);
-  console.log(`                          (bot only sees @mentions +`);
-  console.log(`                           commands + replies-to-bot —`);
-  console.log(`                           never the whole group convo)`);
-  console.log(`  5. /setinline          @${botUsername} → Enable`);
-  console.log(`                          placeholder: Search items…`);
-  console.log(`  6. /setinlinefeedback  @${botUsername} → Enabled`);
-  console.log(`                          (required for Quick Create)`);
+  console.log(`  2. /setjoingroups   @${botUsername} → Enable`);
+  console.log(`                       (lets users add the bot to groups)`);
+  console.log(`  3. /setprivacy      @${botUsername} → Disable`);
+  console.log(`                       (chat-only model needs to see all`);
+  console.log(`                        group messages, not just @mentions)`);
   console.log("");
-  console.log("  Chat-list \"Open\" affordance (direct-link Mini App):");
-  console.log(`  7. /newapp             @${botUsername}`);
-  console.log(`                          Title:       listbull`);
-  console.log(`                          Description: AI list assistant`);
-  console.log(`                          Photo:       640x360 PNG (or skip)`);
-  console.log(`                          URL:         ${miniAppUrl}`);
-  console.log(`                          Short name:  app`);
-  console.log(`                          → link: t.me/${botUsername}/app`);
-  console.log(`  8. /setmainminiapp     @${botUsername} → app → Enabled`);
-  console.log(`                          (then RESTART your Telegram client`);
-  console.log(`                           — chat-list affordance is cached)`);
-  console.log("");
-  console.log("Verify after step 7: bot's row in Telegram chat list shows");
-  console.log("a launch icon; tapping opens the Mini App without entering");
-  console.log("the chat first.");
-}
-
-function hostnameOf(url: string): string {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url;
-  }
 }
 
 main().catch((err: unknown) => {

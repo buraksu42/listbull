@@ -647,13 +647,18 @@ export const tools = [
   {
     name: "add_reminder",
     description:
-      "Add a reminder to an item. Two kinds — pass EXACTLY ONE: " +
-      "`remind_at` (ISO 8601 absolute moment) OR `offset_minutes` (minutes before the item's " +
-      "deadline_at — item MUST have a deadline). Optional `recurrence_rule` (RFC 5545 RRULE) is " +
-      "allowed ONLY with absolute reminders, not with offset_minutes. Sub-minute offsets (e.g. " +
-      "'5 saniye' → offset_minutes=0) fire on the next 60-second cron tick — that's by design, " +
-      "DO NOT reject as 'too short'. Reminders are independent of deadlines: an item with NO " +
-      "deadline can still have absolute reminders.",
+      "Add a reminder to an item. Pass EXACTLY ONE of:\n" +
+      "  • `remind_at` (ISO 8601) — absolute moment.\n" +
+      "  • `offset_minutes` — minutes BEFORE the item's deadline_at. " +
+      "    If the item HAS a deadline → reminder fires at deadline - offset " +
+      "    (kind=before_deadline; auto-recomputes on deadline change).\n" +
+      "    If the item has NO deadline → reminder fires at NOW + offset " +
+      "    (kind=absolute, fallback). Useful for 'remind me in 30 minutes' " +
+      "    without forcing the user to set a deadline first.\n" +
+      "Optional `recurrence_rule` (RFC 5545 RRULE) is allowed ONLY with " +
+      "`remind_at`, not with `offset_minutes`. Sub-minute offsets like " +
+      "'5 saniye' → offset_minutes=0 fire on the next 60-second cron tick — " +
+      "that's by design, DO NOT reject as 'too short'.",
     inputSchema: addReminderInputSchema,
     outputSchema: addReminderOutputSchema,
   },

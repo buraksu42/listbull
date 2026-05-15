@@ -6,10 +6,13 @@
  */
 import { Bot } from "grammy";
 
+import { handleAssigned } from "@/lib/server/bot/commands/assigned";
 import { handleHelp } from "@/lib/server/bot/commands/help";
 import { handleItems } from "@/lib/server/bot/commands/items";
+import { handleReminders } from "@/lib/server/bot/commands/reminders";
 import { handleReset } from "@/lib/server/bot/commands/reset";
 import { handleStart } from "@/lib/server/bot/commands/start";
+import { handleToday, handleWeek } from "@/lib/server/bot/commands/today";
 import { handleMessage } from "@/lib/server/bot/handle-message";
 import { handleChatMemberUpdate } from "@/lib/server/bot/handlers/chat-member-update";
 import { handleItemActionCallback } from "@/lib/server/bot/handlers/item-action-callback";
@@ -41,6 +44,12 @@ function registerHandlers(bot: Bot): void {
   bot.command("help", handleHelp);
   bot.command("reset", handleReset);
   bot.command("items", handleItems);
+  // Filter-views: TR + EN aliases share handlers. Telegram bot command
+  // names must be a-z0-9_ (ASCII), so /bugün is exposed as /bugun.
+  bot.command(["bugun", "today"], handleToday);
+  bot.command(["buhafta", "thisweek"], handleWeek);
+  bot.command(["atanan", "assigned"], handleAssigned);
+  bot.command(["hatirlaticilar", "reminders"], handleReminders);
 
   // Inline-keyboard callbacks for /items view.
   bot.on("callback_query:data", async (ctx, next) => {

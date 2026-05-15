@@ -35,20 +35,27 @@ export async function executeAddReminder(
 
     let remindAt: Date;
     let kind: "absolute" | "before_deadline";
+    let effectiveOffsetMinutes: number | null = null;
     if (remind_at !== undefined) {
       remindAt = new Date(remind_at);
       kind = "absolute";
     } else if (offset_minutes !== undefined) {
-      if (!current.deadlineAt) {
-        return err(
-          ERR.bad_input,
-          "Offset reminders require the item to have a deadline first.",
+      if (current.deadlineAt) {
+        // Anchored to deadline → before_deadline kind. Reminder recomputes
+        // automatically when the deadline shifts (recomputeOffsetReminders).
+        remindAt = new Date(
+          current.deadlineAt.getTime() - offset_minutes * 60_000,
         );
+        kind = "before_deadline";
+        effectiveOffsetMinutes = offset_minutes;
+      } else {
+        // No deadline → interpret as "N minutes from now". Falls into the
+        // absolute kind so the cron picks it up just like a remind_at.
+        // Phase 17: user wanted offset_minutes to work without a forced
+        // set_deadline first.
+        remindAt = new Date(Date.now() + offset_minutes * 60_000);
+        kind = "absolute";
       }
-      remindAt = new Date(
-        current.deadlineAt.getTime() - offset_minutes * 60_000,
-      );
-      kind = "before_deadline";
     } else {
       return err(ERR.invalid_input, "remind_at or offset_minutes required.");
     }
@@ -59,7 +66,7 @@ export async function executeAddReminder(
         itemId: item_id,
         kind,
         remindAt,
-        offsetMinutes: offset_minutes ?? null,
+        offsetMinutes: effectiveOffsetMinutes,
         recurrenceRule: recurrence_rule ?? null,
       })
       .returning();
