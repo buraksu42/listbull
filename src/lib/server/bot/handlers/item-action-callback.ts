@@ -32,6 +32,7 @@ import { buildSubItemsView } from "@/lib/server/bot/views/sub-items";
 import { insertBotActionContext } from "@/lib/db/queries/bot-action-contexts";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
+import { rollupParentDoneState } from "@/lib/server/tools/_shared";
 import { toItemSnapshot } from "@/lib/db/snapshots";
 
 export async function handleItemActionCallback(
@@ -500,6 +501,10 @@ export async function handleItemActionCallback(
         payloadBefore: toItemSnapshot(current),
         payloadAfter: toItemSnapshot(updated),
       });
+      // Mirror complete_item executor: when the toggled row is a
+      // checklist child, reconcile the parent's done state in the
+      // same tx so the badge in the re-rendered view is correct.
+      await rollupParentDoneState(tx, updated.id, chatId, user.id);
     });
     await ctx.answerCallbackQuery();
     if (toggledParentId) {

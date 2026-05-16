@@ -15,7 +15,7 @@ import {
   completeItemInputSchema,
   type CompleteItemOutput,
 } from "@/lib/ai/tools";
-import { ERR, err, ok, toItemSnapshot } from "./_shared";
+import { ERR, err, ok, rollupParentDoneState, toItemSnapshot } from "./_shared";
 
 import type { ExecResult } from "./_shared";
 
@@ -111,6 +111,10 @@ export async function executeCompleteItem(
       payloadBefore: toItemSnapshot(current),
       payloadAfter: toItemSnapshot(updated),
     });
+
+    // Auto-rollup parent done state when the changed item is a child.
+    // No-op for top-level / non-todo / RRULE parents.
+    await rollupParentDoneState(tx, updated.id, ctx.chatId, ctx.userId);
 
     return ok({
       item: toItemSnapshot(updated),

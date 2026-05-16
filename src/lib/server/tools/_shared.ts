@@ -5,10 +5,10 @@
  * a chat_id. Helpers here are now purely about envelope types,
  * reminder-recompute on deadline change, and ILIKE escape.
  */
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { itemReminders } from "@/lib/db/schema";
+import { activityLog, itemReminders, items } from "@/lib/db/schema";
 import {
   toAttachmentSnapshot,
   toItemReminderSnapshot,
@@ -57,6 +57,96 @@ export function escapeLike(input: string): string {
 
 /** Drizzle transaction handle type. */
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Phase 17c — checklist auto-rollup.
+ *
+ * After a child item's done state changes (via complete_item OR the
+ * /items inline toggle), reconcile the parent's done state so a
+ * checklist closes itself the moment its last open sub-item is
+ * checked, and re-opens if a child gets unchecked.
+ *
+ * Rules:
+ *   - Only applies when the changed item has parentItemId set AND
+ *     parent.kind === 'todo' AND parent is not archived.
+ *   - Parent done = (every live child isDone). 0 live children → no-op
+ *     (an empty parent stays in whatever state it's in).
+ *   - Skips RRULE parents — recurring checklist semantics are TBD.
+ *   - Writes an activity_log row with payloadAfter.auto_rollup = true
+ *     so the feed makes it obvious the flip wasn't a manual action.
+ *   - Always called inside the same tx as the child write so the
+ *     parent transition stays atomic with the trigger.
+ */
+export async function rollupParentDoneState(
+  tx: Tx,
+  childItemId: string,
+  chatId: number,
+  actorId: string,
+): Promise<void> {
+  const [child] = await tx
+    .select({
+      parentItemId: items.parentItemId,
+    })
+    .from(items)
+    .where(and(eq(items.id, childItemId), eq(items.chatId, chatId)))
+    .limit(1);
+  if (!child || !child.parentItemId) return;
+
+  const [parent] = await tx
+    .select()
+    .from(items)
+    .where(
+      and(
+        eq(items.id, child.parentItemId),
+        eq(items.chatId, chatId),
+        isNull(items.archivedAt),
+      ),
+    )
+    .limit(1);
+  if (!parent) return;
+  if (parent.kind !== "todo") return;
+  if (parent.taskRecurrenceRule) return;
+
+  const siblings = await tx
+    .select({ isDone: items.isDone })
+    .from(items)
+    .where(
+      and(
+        eq(items.parentItemId, child.parentItemId),
+        isNull(items.archivedAt),
+      ),
+    );
+  if (siblings.length === 0) return;
+
+  const desired = siblings.every((s) => s.isDone);
+  if (parent.isDone === desired) return;
+
+  const now = new Date();
+  const [updated] = await tx
+    .update(items)
+    .set({
+      isDone: desired,
+      status: desired ? "done" : "open",
+      completedAt: desired ? now : null,
+      updatedAt: now,
+    })
+    .where(eq(items.id, parent.id))
+    .returning();
+  if (!updated) return;
+
+  await tx.insert(activityLog).values({
+    chatId,
+    entityType: "item",
+    entityId: parent.id,
+    action: desired ? "item_completed" : "item_uncompleted",
+    actorId,
+    payloadBefore: toItemSnapshot(parent),
+    payloadAfter: {
+      ...toItemSnapshot(updated),
+      auto_rollup: true,
+    },
+  });
+}
 
 /**
  * When an item's deadline_at changes, recompute every `before_deadline`
