@@ -66,14 +66,20 @@ async function computeLocalDayBounds(
   dayOffset: number,
   dayCount: number,
 ): Promise<{ startUtc: Date; endUtc: Date }> {
-  const rows = await db.execute<{ start_utc: Date; end_utc: Date }>(sql`
+  // postgres-js returns raw timestamptz values as strings; Drizzle's
+  // gte()/lt() helpers expect a Date and call .toISOString() during
+  // query build, which would throw on the string. Coerce here.
+  const rows = await db.execute<{ start_utc: string | Date; end_utc: string | Date }>(sql`
     SELECT
       (((NOW() AT TIME ZONE ${timezone})::date + ${dayOffset} * interval '1 day') AT TIME ZONE ${timezone}) AS start_utc,
       (((NOW() AT TIME ZONE ${timezone})::date + ${dayOffset + dayCount} * interval '1 day') AT TIME ZONE ${timezone}) AS end_utc
   `);
   const row = rows[0];
   if (!row) throw new Error("computeLocalDayBounds: no row");
-  return { startUtc: row.start_utc, endUtc: row.end_utc };
+  return {
+    startUtc: row.start_utc instanceof Date ? row.start_utc : new Date(row.start_utc),
+    endUtc: row.end_utc instanceof Date ? row.end_utc : new Date(row.end_utc),
+  };
 }
 
 export async function handleWeek(ctx: Context): Promise<void> {
