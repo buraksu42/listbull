@@ -65,6 +65,10 @@ export async function executeAttachFileToItem(
           and(
             eq(itemAttachments.itemId, d.item_id),
             eq(itemAttachments.telegramFileUniqueId, d.file_unique_id ?? ""),
+            // Chat-scope the dedup lookup — without this, a caller in
+            // chat A could probe whether a (item_id, file_unique_id)
+            // pair exists in chat B and pull its metadata.
+            eq(itemAttachments.chatId, ctx.chatId),
           ),
         )
         .limit(1);

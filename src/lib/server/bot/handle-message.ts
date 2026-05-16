@@ -518,14 +518,26 @@ export async function handleMessage(ctx: Context): Promise<void> {
       return;
     }
 
-    const rowsToInsert: NewMessage[] = response.persistedMessages.map((m) =>
+    // Defense-in-depth: even though the system prompt forbids it,
+    // strip any OpenRouter key shape from assistant text before it
+    // hits either Telegram or the messages table. Cheap belt-and-
+    // suspenders; the LLM almost never trips it but if it ever does
+    // a single leak is permanent.
+    const safeAssistantText = redactSensitivePatterns(response.assistantText);
+    const safePersistedMessages = response.persistedMessages.map((m) =>
+      m.role === "assistant"
+        ? { ...m, content: redactSensitivePatterns(m.content) }
+        : m,
+    );
+
+    const rowsToInsert: NewMessage[] = safePersistedMessages.map((m) =>
       toMessageRow(user, chatId, m),
     );
     if (rowsToInsert.length > 0) {
       await insertMessages(rowsToInsert);
     }
 
-    if (response.assistantText.trim().length === 0) {
+    if (safeAssistantText.trim().length === 0) {
       // Haiku sometimes finishes a tool round-trip without composing
       // a final text. From the user's side that's "the bot ignored
       // me" — send a generic ack derived from which tools fired.
@@ -541,7 +553,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
       }
       return;
     }
-    await sendChunked(ctx, response.assistantText);
+    await sendChunked(ctx, safeAssistantText);
   } catch (err) {
     console.error("[handle-message] LLM error", err);
     // OpenRouter 402 → user's own funds problem, not infra — surface
@@ -683,6 +695,32 @@ function emptyTextFallback(toolNames: string[], locale: "tr" | "en"): string {
     return locale === "tr" ? "✅ Tamam." : "✅ Done.";
   }
   return lines.join("\n");
+}
+
+/**
+ * Belt-and-suspenders content filter on assistant-generated text
+ * before it lands in either Telegram or the messages table. The
+ * patterns below cover the credential shapes we know the LLM has
+ * been instructed to never echo:
+ *   • OpenRouter API keys (`sk-or-v1-…`)
+ *   • Anthropic API keys (`sk-ant-…`) — future-proofing
+ *   • Generic `Bearer <token>` headers
+ * If the LLM ever ignores the system prompt and leaks one of these,
+ * downstream consumers (the user's Telegram + our DB + the next
+ * OpenRouter round-trip) see "[redacted]" instead. The /password
+ * flow is already keyed off a side-channel send (see reveal_secret),
+ * so generic password text doesn't need a regex here.
+ */
+const SENSITIVE_PATTERNS: RegExp[] = [
+  /sk-or-v1-[A-Za-z0-9_-]{20,}/g,
+  /sk-ant-[A-Za-z0-9_-]{20,}/g,
+  /Bearer\s+[A-Za-z0-9._-]{20,}/g,
+];
+
+function redactSensitivePatterns(text: string): string {
+  let out = text;
+  for (const p of SENSITIVE_PATTERNS) out = out.replace(p, "[redacted]");
+  return out;
 }
 
 async function sendChunked(ctx: Context, text: string): Promise<void> {

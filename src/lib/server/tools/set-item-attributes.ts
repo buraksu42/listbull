@@ -70,7 +70,9 @@ export async function executeSetItemAttributes(
       const normalized = Array.from(
         new Set(tags.map((t) => t.trim().toLowerCase()).filter((t) => t)),
       );
-      // Per-chat tag-vocabulary cap (20 unique).
+      // Per-chat tag-vocabulary cap (20 unique). The chat_id filter
+      // also stops a cross-chat item_id from polluting the count
+      // and either falsely tripping or falsely bypassing the limit.
       const rows = await tx.execute<{ count: number }>(sql`
         SELECT COUNT(DISTINCT t)::int AS count
         FROM (

@@ -59,7 +59,14 @@ export async function executeSendItemAttachments(
   const attachments = await db
     .select()
     .from(itemAttachments)
-    .where(eq(itemAttachments.itemId, parsed.data.item_id))
+    .where(
+      and(
+        eq(itemAttachments.itemId, parsed.data.item_id),
+        // Defense-in-depth: don't re-send another chat's files even
+        // if a stale item_id slips through the parent item check.
+        eq(itemAttachments.chatId, ctx.chatId),
+      ),
+    )
     .orderBy(asc(itemAttachments.createdAt));
 
   let sent = 0;

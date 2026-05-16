@@ -565,9 +565,15 @@ export const revealSecretInputSchema = z.object({
   item_id: z.string().uuid(),
 });
 
+// IMPORTANT: this output schema deliberately omits the plaintext
+// value. The executor sends the value directly to the chat via the
+// Telegram Bot API; only the label + suffix come back so the LLM
+// can phrase its wrap-up. This keeps plaintext out of the messages
+// table, the OpenRouter request payload, and our own log lines.
 export const revealSecretOutputSchema = z.object({
   label: z.string(),
-  value: z.string(),
+  suffix: z.string(),
+  delivered: z.literal(true),
 });
 
 export type RevealSecretInput = z.infer<typeof revealSecretInputSchema>;
@@ -839,13 +845,15 @@ export const tools = [
   {
     name: "reveal_secret",
     description:
-      "Decrypt and return a stored credential. DM-ONLY (executor refuses in groups). " +
+      "Send a stored credential to the chat. DM-ONLY (executor refuses in groups). " +
       "Use this when the user asks for a saved password — e.g. 'Gmail şifresi ne?', " +
       "'what's the Wi-Fi password?'. Flow: first call search_items({kind:'secret', query: 'gmail'}) " +
       "to locate the entry, then call reveal_secret(item_id) with the resolved id. " +
-      "When you receive the value, paste it back to the user IN ONE LINE prefixed with 🔒, then " +
-      "REMIND them: 'Telegram'da bu mesaj görünür; gözden geçirince sil.' Never echo the value " +
-      "more than once per turn.",
+      "THE EXECUTOR ITSELF SENDS THE VALUE TO THE CHAT — you never receive the plaintext. " +
+      "Your reply should just confirm: \"🔒 {label} şifresini gönderdim — yukarıdaki mesaja bak. " +
+      "Okuduktan sonra silmeyi unutma.\" Do NOT pretend to know the value; do NOT echo a fake " +
+      "value; do NOT paste any letters or numbers from the suffix back. The actual value lives " +
+      "only in the side-channel message I dispatched.",
     inputSchema: revealSecretInputSchema,
     outputSchema: revealSecretOutputSchema,
   },

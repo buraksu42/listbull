@@ -1,10 +1,15 @@
 /**
- * Executor: `reveal_secret` (Phase 17b memory mode).
+ * Executor: `reveal_secret` (Phase 17b memory mode — hardened).
  *
- * Decrypt and return a stored credential. DM-only. The encryption
- * envelope is base64(iv||authTag||ciphertext); ENV_KEY is the master
- * key. Activity log records a "secret_revealed" event with the
- * label only — the plaintext never lands in any log or message row.
+ * Threat: if the decrypted value reaches the LLM, it lands in the
+ * messages table AND the next OpenRouter request payload. To keep
+ * plaintext in a single short-lived path, the executor sends the
+ * value DIRECTLY to the chat via the Telegram Bot API and returns
+ * only metadata (label + last-4 suffix + delivered flag) to the
+ * dispatcher. The LLM never sees the plaintext.
+ *
+ * DM-only at the chat layer too — the chats row must be type
+ * 'private'. Groups are refused with a friendly nudge.
  */
 import "server-only";
 
@@ -17,9 +22,12 @@ import {
   type RevealSecretOutput,
 } from "@/lib/ai/tools";
 import { decrypt } from "@/lib/server/encryption";
+import { env } from "@/lib/env";
 import { ERR, err, ok } from "./_shared";
 
 import type { ExecResult } from "./_shared";
+
+const TELEGRAM_API = "https://api.telegram.org";
 
 export async function executeRevealSecret(
   input: unknown,
@@ -31,7 +39,7 @@ export async function executeRevealSecret(
   }
 
   // DM-only guard. Groups never get to see credentials even if the
-  // LLM tries.
+  // LLM somehow tries to call this.
   const [chat] = await db
     .select({ type: chats.type })
     .from(chats)
@@ -67,18 +75,56 @@ export async function executeRevealSecret(
   let value: string;
   try {
     value = decrypt(row.secretEncrypted);
-  } catch (err) {
+  } catch (e) {
     console.error("[reveal_secret] decrypt failed", {
       itemId: row.id,
-      error: err instanceof Error ? err.message : String(err),
+      error: e instanceof Error ? e.message : String(e),
     });
-    return ok({
-      label: row.text,
-      value: "(decrypt failed — re-add via /password)",
-    });
+    return err(
+      "internal_error",
+      "Couldn't decrypt that secret — re-add via /password.",
+    );
   }
 
-  // Audit: label only, never the value.
+  const suffix = value.length >= 4 ? value.slice(-4) : value;
+
+  // Side-channel: deliver the value as its own Telegram message so
+  // it never enters the LLM context. We use raw fetch (same as
+  // send_item_attachments) to avoid threading a grammy Context
+  // through the dispatcher.
+  const safeBody = `🔒 ${row.text}\n\n${value}\n\n⚠️ Bu mesajı okuduktan sonra sil — Telegram'da kayıtlı kalır.`;
+  try {
+    const res = await fetch(
+      `${TELEGRAM_API}/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chat_id: ctx.chatId,
+          text: safeBody,
+        }),
+      },
+    );
+    const json = (await res.json()) as { ok: boolean; description?: string };
+    if (!json.ok) {
+      console.error("[reveal_secret] sendMessage failed", {
+        itemId: row.id,
+        desc: json.description,
+      });
+      return err(
+        "internal_error",
+        "Couldn't deliver the secret to chat.",
+      );
+    }
+  } catch (e) {
+    console.error("[reveal_secret] sendMessage threw", {
+      itemId: row.id,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return err("internal_error", "Telegram delivery failed.");
+  }
+
+  // Audit: label + last-4 only. Never the plaintext.
   await db.insert(activityLog).values({
     chatId: ctx.chatId,
     entityType: "item",
@@ -86,8 +132,8 @@ export async function executeRevealSecret(
     action: "secret_revealed",
     actorId: ctx.userId,
     payloadBefore: null,
-    payloadAfter: { label: row.text, suffix: value.slice(-4) },
+    payloadAfter: { label: row.text, suffix },
   });
 
-  return ok({ label: row.text, value });
+  return ok({ label: row.text, suffix, delivered: true });
 }
