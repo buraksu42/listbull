@@ -6,6 +6,10 @@ import { NextResponse } from "next/server";
 
 import { getBot } from "@/lib/server/bot";
 import { env } from "@/lib/env";
+import {
+  enforceRateLimit,
+  markUpdateSeen,
+} from "@/lib/server/middleware/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +33,37 @@ function secretsEqual(provided: string, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
+function pickClientIp(request: Request): string {
+  // Behind Traefik / Cloudflare — pick the leftmost forwarded IP.
+  const xff = request.headers.get("x-forwarded-for");
+  if (xff) {
+    const first = xff.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  const real = request.headers.get("x-real-ip");
+  if (real) return real.trim();
+  return "unknown";
+}
+
 export async function POST(request: Request) {
+  // Per-IP rate limit FIRST — both legit Telegram bursts and bad-
+  // secret floods stay below 600/min/IP. Telegram delivers to a small
+  // set of IPs, so a single tenant is well under this ceiling. If
+  // Upstash isn't configured this is a no-op (no spurious blocks).
+  const ip = pickClientIp(request);
+  const rl = await enforceRateLimit({
+    scope: "telegram-webhook-ip",
+    identifier: ip,
+    tokens: 600,
+    windowSeconds: 60,
+  });
+  if (rl.limited) {
+    return NextResponse.json(
+      { ok: false, error: { code: "rate_limited" } },
+      { status: 429 },
+    );
+  }
+
   const provided = request.headers.get(SECRET_HEADER) ?? "";
   if (!secretsEqual(provided, env.TELEGRAM_WEBHOOK_SECRET)) {
     return NextResponse.json(
@@ -62,6 +96,16 @@ export async function POST(request: Request) {
       { ok: false, error: { code: "bad_request", message: "Invalid JSON" } },
       { status: 400 },
     );
+  }
+
+  // Replay protection: even if an attacker captures secret + body
+  // and replays, the second delivery acks without side effects.
+  // Telegram's own retries also benefit — no double-processing.
+  if (typeof update.update_id === "number") {
+    const fresh = await markUpdateSeen(update.update_id);
+    if (!fresh) {
+      return NextResponse.json({ ok: true, replayed: true });
+    }
   }
 
   const bot = await getBot();
