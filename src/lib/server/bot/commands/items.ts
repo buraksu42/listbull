@@ -52,9 +52,9 @@ export async function buildItemsView(
   locale: "tr" | "en",
   offset: number,
 ): Promise<{ text: string; keyboard: InlineKeyboard }> {
-  // /items renders to-dos only — memory items have their own /memory
-  // surface (Phase 17b). The kind filter keeps the existing UX exactly
-  // the same for any pre-existing rows since the default is 'todo'.
+  // /items renders OPEN to-dos only. Done items move to /done so the
+  // list doesn't accumulate over months. Memory items have their own
+  // /memory surface.
   const rows = await db
     .select()
     .from(items)
@@ -62,10 +62,11 @@ export async function buildItemsView(
       and(
         eq(items.chatId, chatId),
         eq(items.kind, "todo"),
+        eq(items.isDone, false),
         isNull(items.archivedAt),
       ),
     )
-    .orderBy(asc(items.isDone), asc(items.position), asc(items.createdAt))
+    .orderBy(asc(items.position), asc(items.createdAt))
     .limit(PAGE_SIZE + 1)
     .offset(offset);
 
@@ -79,6 +80,7 @@ export async function buildItemsView(
       and(
         eq(items.chatId, chatId),
         eq(items.kind, "todo"),
+        eq(items.isDone, false),
         isNull(items.archivedAt),
       ),
     );

@@ -7,6 +7,7 @@
 import { Bot } from "grammy";
 
 import { handleAssigned } from "@/lib/server/bot/commands/assigned";
+import { handleDone } from "@/lib/server/bot/commands/done";
 import { handleHelp } from "@/lib/server/bot/commands/help";
 import { handleItems } from "@/lib/server/bot/commands/items";
 import { handleMemory } from "@/lib/server/bot/commands/memory";
@@ -46,6 +47,7 @@ function registerHandlers(bot: Bot): void {
   bot.command("help", handleHelp);
   bot.command("reset", handleReset);
   bot.command("items", handleItems);
+  bot.command("done", handleDone);
   bot.command("memory", handleMemory);
   // English-only slash menu (user preference); /sifre kept as a
   // tolerant alias for anyone with the old command in muscle memory.
@@ -63,7 +65,8 @@ function registerHandlers(bot: Bot): void {
     if (
       data.startsWith("item:") ||
       data.startsWith("items:") ||
-      data.startsWith("memory:")
+      data.startsWith("memory:") ||
+      data.startsWith("done:")
     ) {
       await handleItemActionCallback(ctx);
       return;

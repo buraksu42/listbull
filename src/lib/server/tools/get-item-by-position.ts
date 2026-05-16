@@ -32,7 +32,8 @@ export async function executeGetItemByPosition(
 
   // Same WHERE + ORDER as buildItemsView so the position the user
   // sees is the position we resolve. Phase 17b: scope to kind='todo'
-  // — positional refs are about the /items view, not /memory.
+  // + is_done=false — positional refs target the /items view, which
+  // only shows OPEN items.
   const rows = await db
     .select()
     .from(items)
@@ -40,10 +41,11 @@ export async function executeGetItemByPosition(
       and(
         eq(items.chatId, ctx.chatId),
         eq(items.kind, "todo"),
+        eq(items.isDone, false),
         isNull(items.archivedAt),
       ),
     )
-    .orderBy(asc(items.isDone), asc(items.position), asc(items.createdAt));
+    .orderBy(asc(items.position), asc(items.createdAt));
 
   const total = rows.length;
   const row = rows[position - 1];

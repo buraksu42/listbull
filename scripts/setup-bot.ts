@@ -82,7 +82,8 @@ async function main(): Promise<void> {
     commands: [
       { command: "start", description: "Get started" },
       { command: "help", description: "How to use" },
-      { command: "items", description: "Show all items 📋" },
+      { command: "items", description: "Open to-dos 📋" },
+      { command: "done", description: "Completed items ✅" },
       { command: "memory", description: "Memory keepsakes 📁" },
       { command: "password", description: "Save / view passwords 🔒 (DM-only)" },
       { command: "today", description: "Today's items 📅" },

@@ -25,6 +25,7 @@ import { and, asc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { activityLog, itemAttachments, items } from "@/lib/db/schema";
+import { buildDoneView } from "@/lib/server/bot/commands/done";
 import { buildItemsView } from "@/lib/server/bot/commands/items";
 import { buildMemoryView } from "@/lib/server/bot/commands/memory";
 import { insertBotActionContext } from "@/lib/db/queries/bot-action-contexts";
@@ -39,12 +40,13 @@ export async function handleItemActionCallback(
   if (!cb || typeof cb.data !== "string") return;
   let data = cb.data;
   // Prefixes we own: `item:*` and `items:*` (todos), `memory:*`
-  // (memory-mode actions). Old `list:` kept as tolerant alias for
-  // legacy keyboards in user chats from before the chat-only pivot.
+  // (memory-mode actions), `done:*` (completed view). Old `list:`
+  // kept as tolerant alias for legacy keyboards.
   if (
     !data.startsWith("item:") &&
     !data.startsWith("items:") &&
     !data.startsWith("memory:") &&
+    !data.startsWith("done:") &&
     !data.startsWith("list:")
   ) {
     return;
@@ -214,6 +216,148 @@ export async function handleItemActionCallback(
     data.startsWith("memory:attach_dl:")
   ) {
     data = data.replace(/^memory:/, "item:");
+  }
+
+  // ─── /done surface handlers ─────────────────────────────────────
+
+  if (data.startsWith("done:noop:")) {
+    await ctx.answerCallbackQuery();
+    return;
+  }
+
+  if (data.startsWith("done:page:")) {
+    const offset =
+      Number.parseInt(data.slice("done:page:".length), 10) || 0;
+    await ctx.answerCallbackQuery();
+    const view = await buildDoneView(chatId, locale, offset);
+    await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+    return;
+  }
+
+  if (data.startsWith("done:reopen:")) {
+    const itemId = data.slice("done:reopen:".length);
+    await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(items)
+        .where(and(eq(items.id, itemId), eq(items.chatId, chatId)))
+        .limit(1);
+      if (!current) return;
+      const [updated] = await tx
+        .update(items)
+        .set({
+          isDone: false,
+          status: "open",
+          completedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(items.id, itemId))
+        .returning();
+      if (!updated) return;
+      await tx.insert(activityLog).values({
+        chatId,
+        entityType: "item",
+        entityId: itemId,
+        action: "item_uncompleted",
+        actorId: user.id,
+        payloadBefore: toItemSnapshot(current),
+        payloadAfter: toItemSnapshot(updated),
+      });
+    });
+    await ctx.answerCallbackQuery(
+      locale === "tr" ? "↩️ Geri açıldı" : "↩️ Reopened",
+    );
+    const view = await buildDoneView(chatId, locale, 0);
+    await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+    return;
+  }
+
+  if (data.startsWith("done:archive:")) {
+    const itemId = data.slice("done:archive:".length);
+    const [it] = await db
+      .select({ text: items.text })
+      .from(items)
+      .where(and(eq(items.id, itemId), eq(items.chatId, chatId)))
+      .limit(1);
+    if (!it) {
+      await ctx.answerCallbackQuery(
+        locale === "tr" ? "Bulunamadı." : "Not found.",
+      );
+      return;
+    }
+    const title = it.text.length > 60 ? `${it.text.slice(0, 60)}…` : it.text;
+    await ctx.answerCallbackQuery();
+    await ctx.api.sendMessage(
+      chatId,
+      locale === "tr"
+        ? `🗑️ "${title}" kalıcı arşivlensin mi? /done listesinden çıkar; activity log'da iz kalır.`
+        : `🗑️ Archive "${title}" permanently? Removes from /done; activity log keeps a trace.`,
+      {
+        reply_markup: new InlineKeyboard()
+          .text(
+            locale === "tr" ? "✅ Evet, arşivle" : "✅ Yes, archive",
+            `done:archive_yes:${itemId}`,
+          )
+          .text(
+            locale === "tr" ? "❌ İptal" : "❌ Cancel",
+            `done:archive_no:${itemId}`,
+          ),
+      },
+    );
+    return;
+  }
+
+  if (data.startsWith("done:archive_yes:")) {
+    const itemId = data.slice("done:archive_yes:".length);
+    await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(items)
+        .where(and(eq(items.id, itemId), eq(items.chatId, chatId)))
+        .limit(1);
+      if (!current) return;
+      const now = new Date();
+      const [archived] = await tx
+        .update(items)
+        .set({ archivedAt: now, updatedAt: now })
+        .where(eq(items.id, itemId))
+        .returning();
+      if (!archived) return;
+      await tx.insert(activityLog).values({
+        chatId,
+        entityType: "item",
+        entityId: itemId,
+        action: "item_deleted",
+        actorId: user.id,
+        payloadBefore: toItemSnapshot(current),
+        payloadAfter: toItemSnapshot(archived),
+      });
+    });
+    await ctx.answerCallbackQuery(
+      locale === "tr" ? "🗑️ Arşivlendi" : "🗑️ Archived",
+    );
+    try {
+      await ctx.editMessageText(
+        locale === "tr" ? "🗑️ Arşivlendi." : "🗑️ Archived.",
+      );
+    } catch {
+      // ignore
+    }
+    return;
+  }
+
+  if (data.startsWith("done:archive_no:")) {
+    await ctx.answerCallbackQuery(
+      locale === "tr" ? "İptal" : "Cancelled",
+    );
+    try {
+      await ctx.editMessageText(
+        locale === "tr" ? "❌ İptal edildi." : "❌ Cancelled.",
+      );
+    } catch {
+      // ignore
+    }
+    return;
   }
 
   // list:add — force-reply prompt for new item text.
