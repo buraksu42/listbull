@@ -47,8 +47,9 @@ function registerHandlers(bot: Bot): void {
   bot.command("reset", handleReset);
   bot.command("items", handleItems);
   bot.command("memory", handleMemory);
-  // /sifre is ASCII; we also accept /secret as the English alias.
-  bot.command(["sifre", "secret"], handleSecret);
+  // English-only slash menu (user preference); /sifre kept as a
+  // tolerant alias for anyone with the old command in muscle memory.
+  bot.command(["password", "sifre"], handleSecret);
   // Slash commands are English-only by user preference — the bot
   // replies are still localized (TR/EN) based on users.locale.
   bot.command("today", handleToday);

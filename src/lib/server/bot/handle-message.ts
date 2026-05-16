@@ -731,8 +731,8 @@ async function handleSecretStep(
     if (label.length === 0 || label.length > 100) {
       await ctx.reply(
         locale === "tr"
-          ? "❗️ Etiket boş ya da çok uzun. /sifre ile baştan başla."
-          : "❗️ Label empty or too long. Run /sifre again to restart.",
+          ? "❗️ Etiket boş ya da çok uzun. /password ile baştan başla."
+          : "❗️ Label empty or too long. Run /password again to restart.",
       );
       return;
     }
@@ -769,8 +769,8 @@ async function handleSecretStep(
   if (value.length === 0 || value.length > 2000) {
     await ctx.reply(
       locale === "tr"
-        ? "❗️ Şifre boş ya da çok uzun. /sifre ile yeniden başla."
-        : "❗️ Password empty or too long. Run /sifre again.",
+        ? "❗️ Şifre boş ya da çok uzun. /password ile yeniden başla."
+        : "❗️ Password empty or too long. Run /password again.",
     );
     return;
   }

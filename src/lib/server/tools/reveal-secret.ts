@@ -74,7 +74,7 @@ export async function executeRevealSecret(
     });
     return ok({
       label: row.text,
-      value: "(decrypt failed — re-add via /sifre)",
+      value: "(decrypt failed — re-add via /password)",
     });
   }
 

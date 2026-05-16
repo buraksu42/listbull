@@ -42,8 +42,8 @@ export async function handleSecret(ctx: Context): Promise<void> {
   if (message.chat.type !== "private") {
     await ctx.reply(
       locale === "tr"
-        ? "🔒 Şifre saklama güvenlik nedeniyle sadece DM'de çalışır. DM'ime gel ve /sifre yaz."
-        : "🔒 Password storage is DM-only. Message me privately and run /sifre.",
+        ? "🔒 Şifre saklama güvenlik nedeniyle sadece DM'de çalışır. DM'ime gel ve /password yaz."
+        : "🔒 Password storage is DM-only. Message me privately and run /password.",
     );
     return;
   }
