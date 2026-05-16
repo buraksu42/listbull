@@ -17,7 +17,7 @@ import { InlineKeyboard } from "grammy";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { itemAttachments, items } from "@/lib/db/schema";
+import { itemAttachments, itemReminders, items } from "@/lib/db/schema";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
 
@@ -88,13 +88,16 @@ export async function buildItemsView(
 
   // One-shot attachment count for the visible page so we can render
   // 📎N indicator + know whether to label the action as "attach" or
-  // "view" without N round-trips.
+  // "view" without N round-trips. Same trick for active-reminder
+  // count so the body can surface 🔔 next to items with pending
+  // pings (independent from the deadline indicator).
   const visibleIds = (hasNext ? rows.slice(0, PAGE_SIZE) : rows).map(
     (r) => r.id,
   );
   const attachmentCounts = new Map<string, number>();
+  const reminderCounts = new Map<string, number>();
   if (visibleIds.length > 0) {
-    const counts = await db
+    const aCounts = await db
       .select({
         itemId: itemAttachments.itemId,
         count: sql<number>`count(*)::int`,
@@ -102,7 +105,22 @@ export async function buildItemsView(
       .from(itemAttachments)
       .where(inArray(itemAttachments.itemId, visibleIds))
       .groupBy(itemAttachments.itemId);
-    for (const row of counts) attachmentCounts.set(row.itemId, row.count);
+    for (const row of aCounts) attachmentCounts.set(row.itemId, row.count);
+
+    const rCounts = await db
+      .select({
+        itemId: itemReminders.itemId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(itemReminders)
+      .where(
+        and(
+          inArray(itemReminders.itemId, visibleIds),
+          eq(itemReminders.sent, false),
+        ),
+      )
+      .groupBy(itemReminders.itemId);
+    for (const row of rCounts) reminderCounts.set(row.itemId, row.count);
   }
 
   const header =
@@ -157,8 +175,10 @@ export async function buildItemsView(
       it.text.length > 50 ? `${it.text.slice(0, 50)}…` : it.text;
     const attachCount = attachmentCounts.get(it.id) ?? 0;
     const attachSuffix = attachCount > 0 ? ` 📎${attachCount}` : "";
+    const reminderCount = reminderCounts.get(it.id) ?? 0;
+    const reminderSuffix = reminderCount > 0 ? " 🔔" : "";
     lines.push(
-      `${num}. ${checkbox} ${priorityIcon}${statusIcon}${text}${deadlineSuffix}${attachSuffix}${tagSuffix}`,
+      `${num}. ${checkbox} ${priorityIcon}${statusIcon}${text}${deadlineSuffix}${reminderSuffix}${attachSuffix}${tagSuffix}`,
     );
     // Row A — wide numbered label, taps to toggle. Number prevents the
     // "which item does this button belong to?" ambiguity when the

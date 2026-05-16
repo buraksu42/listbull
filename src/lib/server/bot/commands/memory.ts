@@ -26,7 +26,7 @@ import { InlineKeyboard } from "grammy";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { itemAttachments, items } from "@/lib/db/schema";
+import { itemAttachments, itemReminders, items } from "@/lib/db/schema";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
 
@@ -91,6 +91,7 @@ export async function buildMemoryView(
 
   const visibleIds = visible.map((r) => r.id);
   const attachmentCounts = new Map<string, number>();
+  const reminderCounts = new Map<string, number>();
   const childCounts = new Map<string, number>();
   if (visibleIds.length > 0) {
     const aCounts = await db
@@ -102,6 +103,21 @@ export async function buildMemoryView(
       .where(inArray(itemAttachments.itemId, visibleIds))
       .groupBy(itemAttachments.itemId);
     for (const r of aCounts) attachmentCounts.set(r.itemId, r.count);
+
+    const rCounts = await db
+      .select({
+        itemId: itemReminders.itemId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(itemReminders)
+      .where(
+        and(
+          inArray(itemReminders.itemId, visibleIds),
+          eq(itemReminders.sent, false),
+        ),
+      )
+      .groupBy(itemReminders.itemId);
+    for (const r of rCounts) reminderCounts.set(r.itemId, r.count);
 
     const cCounts = await db
       .select({
@@ -159,12 +175,14 @@ export async function buildMemoryView(
     }
     const attachCount = attachmentCounts.get(it.id) ?? 0;
     const attachSuffix = attachCount > 0 ? ` 📎${attachCount}` : "";
+    const reminderCount = reminderCounts.get(it.id) ?? 0;
+    const reminderSuffix = reminderCount > 0 ? " 🔔" : "";
     const childCount = childCounts.get(it.id) ?? 0;
     const childSuffix = childCount > 0 ? ` 📂${childCount}` : "";
     const text =
       it.text.length > 50 ? `${it.text.slice(0, 50)}…` : it.text;
     lines.push(
-      `${num}. 📌 ${priorityIcon}${text}${deadlineSuffix}${attachSuffix}${childSuffix}${tagSuffix}`,
+      `${num}. 📌 ${priorityIcon}${text}${deadlineSuffix}${reminderSuffix}${attachSuffix}${childSuffix}${tagSuffix}`,
     );
 
     // Row A — wide numbered label. Memory items don't toggle; tap
