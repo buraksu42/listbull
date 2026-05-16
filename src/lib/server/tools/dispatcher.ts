@@ -22,6 +22,7 @@ import { executeCompleteChecklistRun } from "./complete-checklist-run";
 import { executeCompleteItem } from "./complete-item";
 import { executeCreateItem } from "./create-item";
 import { executeDeleteItem } from "./delete-item";
+import { executeGetItemByPosition } from "./get-item-by-position";
 import { executeListChatMembers } from "./list-chat-members";
 import { executeRemoveReminder } from "./remove-reminder";
 import { executeSearchItems } from "./search-items";
@@ -109,6 +110,8 @@ async function routeCall(
       return await executeSetChatApiKey(input, ctx);
     case "list_chat_members":
       return await executeListChatMembers(input, ctx);
+    case "get_item_by_position":
+      return await executeGetItemByPosition(input, ctx);
     default:
       return {
         ok: false,
@@ -137,6 +140,7 @@ const KNOWN_TOOLS = [
   "complete_checklist_run",
   "set_chat_api_key",
   "list_chat_members",
+  "get_item_by_position",
 ] as const;
 
 function buildUnknownToolMessage(badName: string): string {

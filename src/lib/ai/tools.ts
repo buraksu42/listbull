@@ -545,6 +545,34 @@ export type ListChatMembersInput = z.infer<typeof listChatMembersInputSchema>;
 export type ListChatMembersOutput = z.infer<typeof listChatMembersOutputSchema>;
 
 // ═══════════════════════════════════════════════════════════════════
+// 17. get_item_by_position (Phase 17b)
+// ═══════════════════════════════════════════════════════════════════
+//
+// Resolve "the Nth item" the user sees in /items. The /items view
+// orders items by (isDone asc, position asc, createdAt asc) — this
+// tool mirrors that order so a user message like "9 tamamlandı" or
+// "5'i sil" can be turned into a concrete item_id by the LLM
+// without resorting to fuzzy text matching.
+
+export const getItemByPositionInputSchema = z.object({
+  /** 1-based position from the /items view. */
+  position: z.number().int().positive(),
+});
+
+export const getItemByPositionOutputSchema = z.object({
+  item: itemSnapshotSchema.nullable(),
+  /** Total open+done items in the chat (matches /items header count). */
+  total: z.number().int().nonnegative(),
+});
+
+export type GetItemByPositionInput = z.infer<
+  typeof getItemByPositionInputSchema
+>;
+export type GetItemByPositionOutput = z.infer<
+  typeof getItemByPositionOutputSchema
+>;
+
+// ═══════════════════════════════════════════════════════════════════
 // TOOL REGISTRY
 // ═══════════════════════════════════════════════════════════════════
 
@@ -565,6 +593,7 @@ export const TOOL_NAMES = [
   "complete_checklist_run",
   "set_chat_api_key",
   "list_chat_members",
+  "get_item_by_position",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -752,5 +781,17 @@ export const tools = [
       "usernames OR to phrase 'X'in işleri' / 'X has 3 open items'.",
     inputSchema: listChatMembersInputSchema,
     outputSchema: listChatMembersOutputSchema,
+  },
+  {
+    name: "get_item_by_position",
+    description:
+      "Resolve the Nth item from the user's /items view. Items are ordered the SAME way /items " +
+      "renders them (open items first, then position, then createdAt). " +
+      "MUST be called whenever the user references an item by a bare number — e.g. '9 tamamlandı', " +
+      "'5'i sil', '3'e hatırlatıcı kur', '7. işi bana ata'. Do NOT search_items by the number; do " +
+      "NOT fuzzy-match. Position is 1-based. Returns {item: null, total} when N is out of range — " +
+      "in that case tell the user 'sadece N item var' and stop.",
+    inputSchema: getItemByPositionInputSchema,
+    outputSchema: getItemByPositionOutputSchema,
   },
 ] as const;
