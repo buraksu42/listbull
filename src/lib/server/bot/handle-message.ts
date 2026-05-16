@@ -280,6 +280,19 @@ export async function handleMessage(ctx: Context): Promise<void> {
   const KEY_RE = /sk-or-v1-[A-Za-z0-9_-]{20,}/;
   const keyMatch = effectiveText.match(KEY_RE);
   if (keyMatch) {
+    // Group-paste hardening: if someone pastes an OpenRouter key in
+    // a group chat, refuse the storage path entirely and nudge them
+    // to DM. The key is already public in the Telegram group thread
+    // (we can't delete it without admin), but at least we don't
+    // make it active on a chat we can't fully secure.
+    if (message.chat.type !== "private") {
+      await ctx.reply(
+        locale === "tr"
+          ? "🔒 Grup'ta API key paste etme — grup geçmişine düşüyor. DM'ime gel, oradan kuralım."
+          : "🔒 Don't paste API keys in groups — they land in chat history. DM me to set this up safely.",
+      );
+      return;
+    }
     let targetChatId = chatId;
     if (message.reply_to_message?.from?.id === ctx.me.id) {
       const ctxRow = await getBotActionContext(
@@ -326,6 +339,54 @@ export async function handleMessage(ctx: Context): Promise<void> {
       );
     }
     return;
+  }
+
+  // ─── Free-form credential pattern intercept ───────────────────────
+  // Stops the messages-table + OpenRouter request from carrying a
+  // plaintext password when the user types "şifrem ABC123" instead
+  // of using /password. Skipped when the message is a reply to a
+  // bot prompt (the /password value step lands here and must pass
+  // through to the secret_value handler). Tuned for the high-recall
+  // side: matches credentials that follow a label (`password: ...`,
+  // `pin: ...`, `şifrem ABC123`).
+  const isReplyToBot =
+    message.reply_to_message?.from?.id === ctx.me.id;
+  if (!isReplyToBot) {
+    const FREEFORM_SECRET_RE =
+      /\b(?:password|passwd|pwd|pass|pin|şifre(?:m|n|si)?|sifre(?:m|n|si)?)\b[\s:=,'-]+([A-Za-z0-9!@#$%^&*_+=.,/\\-]{6,})/i;
+    const m = effectiveText.match(FREEFORM_SECRET_RE);
+    if (m && m[1]) {
+      const redacted = effectiveText.replace(
+        FREEFORM_SECRET_RE,
+        (full) => full.replace(m[1]!, "[redacted]"),
+      );
+      // Persist only the redacted form so messages.content never
+      // contains the secret. The original raw text is dropped
+      // before the LLM call — we return without calling respond().
+      await insertMessages([
+        {
+          userId: user.id,
+          chatId,
+          role: "user",
+          content: redacted,
+          toolCalls: null,
+          toolCallId: null,
+        },
+      ]);
+      if (message.chat.type === "private") {
+        try {
+          await ctx.api.deleteMessage(message.chat.id, message.message_id);
+        } catch {
+          // ignore best-effort failures
+        }
+      }
+      await ctx.reply(
+        locale === "tr"
+          ? "🔒 Mesajında şifre gibi görünen bir şey gördüm. Güvenli saklamak için DM'imde `/password` yaz, ben akışı başlatayım. (Yazdığın orijinal mesajı veri tabanıma redact'ledim; Telegram'da görünüyorsa elinle silmen iyi olur.)"
+          : "🔒 Looks like you typed something password-shaped. To store it securely, run `/password` in DM. (I redacted the original from my database; if it's still visible in Telegram, please delete it yourself.)",
+      );
+      return;
+    }
   }
 
   // ─── Resolve OpenRouter key from chats table ──────────────────────
