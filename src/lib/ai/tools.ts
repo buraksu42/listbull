@@ -453,43 +453,15 @@ export const attachFileToItemOutputSchema = z.object({
 export type AttachFileToItemInput = z.infer<typeof attachFileToItemInputSchema>;
 export type AttachFileToItemOutput = z.infer<typeof attachFileToItemOutputSchema>;
 
-// ═══════════════════════════════════════════════════════════════════
-// 13. start_checklist_run
-// ═══════════════════════════════════════════════════════════════════
-//
-// Phase 17 note: checklist concept currently has no `list_runs` table
-// (dropped with lists). This tool is a stub kept for compatibility;
-// returns a stable success without persisting. Will be re-introduced
-// chat-scoped when checklist semantics are re-spec'd.
-
-export const startChecklistRunInputSchema = z.object({});
-
-export const startChecklistRunOutputSchema = z.object({
-  ok: z.literal(true),
-});
-
-export type StartChecklistRunInput = z.infer<typeof startChecklistRunInputSchema>;
-export type StartChecklistRunOutput = z.infer<typeof startChecklistRunOutputSchema>;
+// Phase 17b: checklist tools (`start_checklist_run` /
+// `complete_checklist_run`) were dropped from the registry because
+// the executors were never wired post-pivot — the LLM kept telling
+// users "checklist özelliği yenileniyor" which was a hallucination
+// on top of a stub. Chat-only model uses tags + multiple items for
+// grouped tasks instead.
 
 // ═══════════════════════════════════════════════════════════════════
-// 14. complete_checklist_run
-// ═══════════════════════════════════════════════════════════════════
-
-export const completeChecklistRunInputSchema = z.object({});
-
-export const completeChecklistRunOutputSchema = z.object({
-  ok: z.literal(true),
-});
-
-export type CompleteChecklistRunInput = z.infer<
-  typeof completeChecklistRunInputSchema
->;
-export type CompleteChecklistRunOutput = z.infer<
-  typeof completeChecklistRunOutputSchema
->;
-
-// ═══════════════════════════════════════════════════════════════════
-// 15. set_chat_api_key (Phase 17, renamed from set_workspace_api_key)
+// 13. set_chat_api_key (Phase 17, renamed from set_workspace_api_key)
 // ═══════════════════════════════════════════════════════════════════
 //
 // User pastes their OpenRouter API key in chat; executor encrypts +
@@ -589,8 +561,6 @@ export const TOOL_NAMES = [
   "set_item_attributes",
   "update_settings",
   "attach_file_to_item",
-  "start_checklist_run",
-  "complete_checklist_run",
   "set_chat_api_key",
   "list_chat_members",
   "get_item_by_position",
@@ -743,21 +713,6 @@ export const tools = [
       "is called with the transcript.",
     inputSchema: attachFileToItemInputSchema,
     outputSchema: attachFileToItemOutputSchema,
-  },
-  {
-    name: "start_checklist_run",
-    description:
-      "Stub during the chat-only pivot. Returns ok=true without persisting. Will be re-spec'd " +
-      "with proper chat scope; DO NOT call this tool — answer the user with 'checklist özelliği " +
-      "yenileniyor, şu an manuel kullan' instead.",
-    inputSchema: startChecklistRunInputSchema,
-    outputSchema: startChecklistRunOutputSchema,
-  },
-  {
-    name: "complete_checklist_run",
-    description: "Stub during the chat-only pivot. Same notes as start_checklist_run.",
-    inputSchema: completeChecklistRunInputSchema,
-    outputSchema: completeChecklistRunOutputSchema,
   },
   {
     name: "set_chat_api_key",

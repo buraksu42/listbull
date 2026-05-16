@@ -18,7 +18,6 @@ import type { ToolName } from "@/lib/ai/tools";
 import { executeAddReminder } from "./add-reminder";
 import { executeAssignItem } from "./assign-item";
 import { executeAttachFileToItem } from "./attach-file-to-item";
-import { executeCompleteChecklistRun } from "./complete-checklist-run";
 import { executeCompleteItem } from "./complete-item";
 import { executeCreateItem } from "./create-item";
 import { executeDeleteItem } from "./delete-item";
@@ -29,7 +28,6 @@ import { executeSearchItems } from "./search-items";
 import { executeSetChatApiKey } from "./set-chat-api-key";
 import { executeSetDeadline } from "./set-deadline";
 import { executeSetItemAttributes } from "./set-item-attributes";
-import { executeStartChecklistRun } from "./start-checklist-run";
 import { executeUpdateItem } from "./update-item";
 import { executeUpdateSettings } from "./update-settings";
 import { ERR } from "./_shared";
@@ -102,10 +100,6 @@ async function routeCall(
       return await executeUpdateSettings(input, ctx);
     case "attach_file_to_item":
       return await executeAttachFileToItem(input, ctx);
-    case "start_checklist_run":
-      return await executeStartChecklistRun(input, ctx);
-    case "complete_checklist_run":
-      return await executeCompleteChecklistRun(input, ctx);
     case "set_chat_api_key":
       return await executeSetChatApiKey(input, ctx);
     case "list_chat_members":
@@ -136,8 +130,6 @@ const KNOWN_TOOLS = [
   "set_item_attributes",
   "update_settings",
   "attach_file_to_item",
-  "start_checklist_run",
-  "complete_checklist_run",
   "set_chat_api_key",
   "list_chat_members",
   "get_item_by_position",
