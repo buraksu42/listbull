@@ -166,7 +166,7 @@ export async function buildItemsView(
       if (diffMs < 0) {
         deadlineSuffix = " ⚠️";
       } else if (diffMs < oneDay) {
-        deadlineSuffix = " ⏰";
+        deadlineSuffix = " ⏳";
       } else {
         deadlineSuffix = " 📅";
       }

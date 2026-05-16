@@ -109,6 +109,6 @@ export async function handleAssigned(ctx: Context): Promise<void> {
 function markerForDeadline(d: Date): string {
   const diff = d.getTime() - Date.now();
   if (diff < 0) return "⚠️";
-  if (diff < 24 * 60 * 60 * 1000) return "⏰";
+  if (diff < 24 * 60 * 60 * 1000) return "⏳";
   return "📅";
 }

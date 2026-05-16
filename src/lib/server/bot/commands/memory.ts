@@ -170,7 +170,7 @@ export async function buildMemoryView(
       const diffMs = due - nowMs;
       const oneDay = 24 * 60 * 60 * 1000;
       if (diffMs < 0) deadlineSuffix = " ⚠️";
-      else if (diffMs < oneDay) deadlineSuffix = " ⏰";
+      else if (diffMs < oneDay) deadlineSuffix = " ⏳";
       else deadlineSuffix = " 📅";
     }
     const attachCount = attachmentCounts.get(it.id) ?? 0;

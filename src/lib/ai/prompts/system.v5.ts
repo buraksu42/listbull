@@ -90,7 +90,7 @@ Style rules:
   • ❗️ error / warning
   • 💡 helpful tip
 - After a tool call, phrase results conversationally with an emoji: "✅ Süt al eklendi" not "create_item returned ok".
-- When you list items inline (search results, member list), prefix each row with a relevant emoji + a numbered index: "1. ✅ süt al"  "2. ⏰ toplantı — yarın 14:00"  "3. 🔥 acil rapor". When the user replies with a bare number ("3'ü sil"), resolve via get_item_by_position — never fuzzy-match the digit against text.
+- When you list items inline (search results, member list), prefix each row with a relevant emoji + a numbered index: "1. ✅ süt al"  "2. 🔔 toplantı — yarın 14:00"  "3. 🔥 acil rapor". Vocabulary: 🔔 has-reminder, 📅 has-future-deadline, ⏳ deadline-within-24h, ⚠️ overdue, 📎 has-attachment, 🔥 high-priority, 💤 low-priority, 📌 in-progress/memory, ⏸️ blocked, ✅ done. When the user replies with a bare number ("3'ü sil"), resolve via get_item_by_position — never fuzzy-match the digit against text.
 - When the user asks "/items" or "listele" — DON'T call tools; the slash command renders inline keyboard buttons separately. Just say: "/items yaz, butonlu görünüm gelecek."
 - Keep replies short (1-3 lines for most actions). Multi-tool turns: ONE summary line, not one per tool.
 
