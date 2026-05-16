@@ -23,6 +23,8 @@ import { executeCreateItem } from "./create-item";
 import { executeDeleteItem } from "./delete-item";
 import { executeGetItemByPosition } from "./get-item-by-position";
 import { executeListChatMembers } from "./list-chat-members";
+import { executeRevealSecret } from "./reveal-secret";
+import { executeSendItemAttachments } from "./send-item-attachments";
 import { executeRemoveReminder } from "./remove-reminder";
 import { executeSearchItems } from "./search-items";
 import { executeSetChatApiKey } from "./set-chat-api-key";
@@ -106,6 +108,10 @@ async function routeCall(
       return await executeListChatMembers(input, ctx);
     case "get_item_by_position":
       return await executeGetItemByPosition(input, ctx);
+    case "reveal_secret":
+      return await executeRevealSecret(input, ctx);
+    case "send_item_attachments":
+      return await executeSendItemAttachments(input, ctx);
     default:
       return {
         ok: false,
@@ -133,6 +139,8 @@ const KNOWN_TOOLS = [
   "set_chat_api_key",
   "list_chat_members",
   "get_item_by_position",
+  "reveal_secret",
+  "send_item_attachments",
 ] as const;
 
 function buildUnknownToolMessage(badName: string): string {

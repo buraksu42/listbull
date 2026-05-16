@@ -94,6 +94,7 @@ export async function handleMyChatMember(ctx: Context): Promise<void> {
         action: "set_key",
         itemId: null,
         targetChatId: chat.id,
+        metadata: null,
       });
     } catch {
       // Inviter hasn't started bot DM yet — they'll see prompts in-group.

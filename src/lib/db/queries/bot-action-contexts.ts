@@ -18,9 +18,19 @@ import { botActionContexts } from "@/lib/db/schema";
 export type BotActionContext = {
   chatId: number;
   messageId: number;
-  action: "edit" | "deadline" | "reminder" | "attach" | "set_key" | "memory_add";
+  action:
+    | "edit"
+    | "deadline"
+    | "reminder"
+    | "attach"
+    | "set_key"
+    | "memory_add"
+    | "secret_label"
+    | "secret_value";
   itemId: string | null;
   targetChatId: number | null;
+  /** Multi-step flow payload (e.g. /şifre label across two prompts). */
+  metadata: string | null;
 };
 
 export async function insertBotActionContext(
@@ -34,6 +44,7 @@ export async function insertBotActionContext(
       action: input.action,
       itemId: input.itemId,
       targetChatId: input.targetChatId,
+      metadata: input.metadata,
     })
     .onConflictDoNothing();
 }
@@ -59,5 +70,6 @@ export async function getBotActionContext(
     action: row.action as BotActionContext["action"],
     itemId: row.itemId,
     targetChatId: row.targetChatId,
+    metadata: row.metadata,
   };
 }

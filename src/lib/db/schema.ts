@@ -396,12 +396,14 @@ export const botActionContexts = pgTable(
   {
     chatId: bigint("chat_id", { mode: "number" }).notNull(),
     messageId: bigint("message_id", { mode: "number" }).notNull(),
-    /** 'edit' | 'deadline' | 'reminder' | 'attach' | 'set_key' */
+    /** 'edit' | 'deadline' | 'reminder' | 'attach' | 'set_key' | 'memory_add' | 'secret_label' | 'secret_value' */
     action: text("action").notNull(),
-    /** item UUID for item:* actions; null for set_key (target lives in target_chat_id). */
+    /** item UUID for item:* actions; null for set_key/memory_add/secret_label. */
     itemId: uuid("item_id"),
     /** target chat for set_key (group routing); null for item:* actions. */
     targetChatId: bigint("target_chat_id", { mode: "number" }),
+    /** Free-form payload for multi-step flows (e.g. /şifre label between steps). */
+    metadata: text("metadata"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

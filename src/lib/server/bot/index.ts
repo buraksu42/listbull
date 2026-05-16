@@ -12,6 +12,7 @@ import { handleItems } from "@/lib/server/bot/commands/items";
 import { handleMemory } from "@/lib/server/bot/commands/memory";
 import { handleReminders } from "@/lib/server/bot/commands/reminders";
 import { handleReset } from "@/lib/server/bot/commands/reset";
+import { handleSecret } from "@/lib/server/bot/commands/secret";
 import { handleStart } from "@/lib/server/bot/commands/start";
 import { handleToday, handleWeek } from "@/lib/server/bot/commands/today";
 import { handleMessage } from "@/lib/server/bot/handle-message";
@@ -46,6 +47,8 @@ function registerHandlers(bot: Bot): void {
   bot.command("reset", handleReset);
   bot.command("items", handleItems);
   bot.command("memory", handleMemory);
+  // /sifre is ASCII; we also accept /secret as the English alias.
+  bot.command(["sifre", "secret"], handleSecret);
   // Slash commands are English-only by user preference — the bot
   // replies are still localized (TR/EN) based on users.locale.
   bot.command("today", handleToday);

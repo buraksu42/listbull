@@ -88,6 +88,7 @@ export async function handleItemActionCallback(
       action: "memory_add",
       itemId: null,
       targetChatId: null,
+      metadata: null,
     });
     return;
   }
@@ -358,6 +359,7 @@ export async function handleItemActionCallback(
         action: "attach",
         itemId,
         targetChatId: null,
+        metadata: null,
       });
       return;
     }
@@ -422,6 +424,7 @@ export async function handleItemActionCallback(
       action: "attach",
       itemId,
       targetChatId: null,
+      metadata: null,
     });
     return;
   }
@@ -552,6 +555,7 @@ export async function handleItemActionCallback(
         action: a.action,
         itemId,
         targetChatId: null,
+        metadata: null,
       });
       return;
     }

@@ -225,6 +225,13 @@
       "when": 1778891600000,
       "tag": "0031_memory_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1778891700000,
+      "tag": "0032_bot_action_metadata",
+      "breakpoints": true
     }
   ]
 }

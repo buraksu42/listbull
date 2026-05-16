@@ -27,7 +27,10 @@ import "server-only";
 import type { Context } from "grammy";
 
 import { env } from "@/lib/env";
-import { getBotActionContext } from "@/lib/db/queries/bot-action-contexts";
+import {
+  getBotActionContext,
+  insertBotActionContext,
+} from "@/lib/db/queries/bot-action-contexts";
 import { ensureChat } from "@/lib/db/queries/chats";
 import { getRecentMessages, insertMessages } from "@/lib/db/queries/messages";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
@@ -38,10 +41,11 @@ import {
   ROUNDTRIP_CAP_SENTINEL,
   respond,
 } from "@/lib/ai/respond";
-import { decrypt } from "@/lib/server/encryption";
+import { decrypt, encrypt } from "@/lib/server/encryption";
 import { db } from "@/lib/db/client";
-import { chats } from "@/lib/db/schema";
-import { and, eq } from "drizzle-orm";
+import { activityLog, chats, items } from "@/lib/db/schema";
+import { and, eq, isNull } from "drizzle-orm";
+import { toItemSnapshot } from "@/lib/db/snapshots";
 import { createToolDispatcher } from "@/lib/server/tools/dispatcher";
 import { pickLocale } from "@/lib/server/bot/i18n";
 import { executeSetChatApiKey } from "@/lib/server/tools/set-chat-api-key";
@@ -378,6 +382,32 @@ export async function handleMessage(ctx: Context): Promise<void> {
         action: persisted?.action ?? null,
         itemId: persisted?.itemId ?? null,
       });
+
+      // /şifre two-step flow lives outside the LLM. Intercept here
+      // so plaintext never reaches OpenRouter or the messages table.
+      if (
+        persisted &&
+        (persisted.action === "secret_label" ||
+          persisted.action === "secret_value")
+      ) {
+        if (message.chat.type !== "private") {
+          await ctx.reply(
+            locale === "tr"
+              ? "🔒 Şifre akışı sadece DM'de çalışır."
+              : "🔒 Password flow is DM-only.",
+          );
+          return;
+        }
+        await handleSecretStep(ctx, {
+          chatId,
+          userId: user.id,
+          persisted,
+          replyText: effectiveText,
+          locale,
+        });
+        return;
+      }
+
       if (persisted && persisted.action !== "set_key") {
         // memory_add has no itemId (we're creating one); per-item
         // actions (edit/deadline/reminder/attach) require it.
@@ -672,4 +702,156 @@ async function sendChunked(ctx: Context, text: string): Promise<void> {
   for (const c of chunks) {
     await ctx.reply(c);
   }
+}
+
+// ─── /şifre two-step flow (DM-only, LLM bypass) ────────────────────
+//
+// Step 1 (secret_label): user just replied with the label (e.g. "Gmail").
+//   Send a second force-reply asking for the value, persist metadata=label.
+// Step 2 (secret_value): user just replied with the password value.
+//   Encrypt, ensure parent "Şifreler" memory item, insert kind='secret'
+//   child, delete the user's pasted message, confirm with last-4 hint.
+
+const SECRET_PARENT_TEXT = "📁 Şifreler";
+
+async function handleSecretStep(
+  ctx: Context,
+  input: {
+    chatId: number;
+    userId: string;
+    persisted: { action: string; metadata: string | null; itemId: string | null };
+    replyText: string;
+    locale: "tr" | "en";
+  },
+): Promise<void> {
+  const { chatId, userId, persisted, replyText, locale } = input;
+
+  if (persisted.action === "secret_label") {
+    const label = replyText.trim();
+    if (label.length === 0 || label.length > 100) {
+      await ctx.reply(
+        locale === "tr"
+          ? "❗️ Etiket boş ya da çok uzun. /sifre ile baştan başla."
+          : "❗️ Label empty or too long. Run /sifre again to restart.",
+      );
+      return;
+    }
+    const message = ctx.message!;
+    const valuePromptText =
+      locale === "tr"
+        ? `🔒 Etiket: ${label}\n\nŞimdi şifreyi yapıştır — bu mesaja yanıt olarak gönder. Yapıştırdığın mesajı güvenlik için sileceğim.`
+        : `🔒 Label: ${label}\n\nNow paste the password — reply to this message. I'll auto-delete your pasted message for safety.`;
+    const sent = await ctx.api.sendMessage(chatId, valuePromptText, {
+      reply_markup: { force_reply: true, selective: true },
+    });
+    await insertBotActionContext({
+      chatId,
+      messageId: sent.message_id,
+      action: "secret_value",
+      itemId: null,
+      targetChatId: null,
+      metadata: label,
+    });
+    // Delete the user's label message too — labels are not secrets
+    // but trimming the chat history keeps the credential flow tidy.
+    try {
+      await ctx.api.deleteMessage(chatId, message.message_id);
+    } catch {
+      // ignore best-effort delete failures
+    }
+    return;
+  }
+
+  // secret_value path
+  const label = persisted.metadata?.trim() || "(label missing)";
+  const value = replyText.trim();
+  const message = ctx.message!;
+  if (value.length === 0 || value.length > 2000) {
+    await ctx.reply(
+      locale === "tr"
+        ? "❗️ Şifre boş ya da çok uzun. /sifre ile yeniden başla."
+        : "❗️ Password empty or too long. Run /sifre again.",
+    );
+    return;
+  }
+
+  const encrypted = encrypt(value);
+  const suffix = value.length >= 4 ? value.slice(-4) : value;
+
+  // Ensure a single parent memory "📁 Şifreler" per chat so /memory
+  // groups credentials together and the CHECK constraint (secret
+  // must have a parent) is satisfied.
+  const parent = await ensureSecretParent(chatId, userId);
+
+  await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(items)
+      .values({
+        chatId,
+        text: label,
+        kind: "secret",
+        parentItemId: parent.id,
+        secretEncrypted: encrypted,
+        createdBy: userId,
+      })
+      .returning();
+    if (!created) throw new Error("secret insert returned no row");
+    await tx.insert(activityLog).values({
+      chatId,
+      entityType: "item",
+      entityId: created.id,
+      action: "secret_created",
+      actorId: userId,
+      payloadBefore: null,
+      payloadAfter: {
+        ...toItemSnapshot(created),
+        // Mask: never let the encrypted blob touch JSONB logs either.
+        secretEncrypted: undefined,
+        secretSuffix: suffix,
+      },
+    });
+  });
+
+  // Auto-delete the pasted password message.
+  try {
+    await ctx.api.deleteMessage(chatId, message.message_id);
+  } catch {
+    // ignore
+  }
+
+  await ctx.reply(
+    locale === "tr"
+      ? `🔒 "${label}" kaydedildi (…${suffix}). Görmek için: "${label} şifresi ne?"`
+      : `🔒 "${label}" saved (…${suffix}). To view: "what's the ${label} password?"`,
+  );
+}
+
+async function ensureSecretParent(
+  chatId: number,
+  userId: string,
+): Promise<{ id: string }> {
+  const [existing] = await db
+    .select({ id: items.id })
+    .from(items)
+    .where(
+      and(
+        eq(items.chatId, chatId),
+        eq(items.kind, "memory"),
+        eq(items.text, SECRET_PARENT_TEXT),
+        isNull(items.archivedAt),
+      ),
+    )
+    .limit(1);
+  if (existing) return { id: existing.id };
+  const [created] = await db
+    .insert(items)
+    .values({
+      chatId,
+      text: SECRET_PARENT_TEXT,
+      kind: "memory",
+      createdBy: userId,
+    })
+    .returning({ id: items.id });
+  if (!created) throw new Error("ensureSecretParent: insert returned no row");
+  return { id: created.id };
 }

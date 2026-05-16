@@ -552,6 +552,56 @@ export type ListChatMembersInput = z.infer<typeof listChatMembersInputSchema>;
 export type ListChatMembersOutput = z.infer<typeof listChatMembersOutputSchema>;
 
 // ═══════════════════════════════════════════════════════════════════
+// 17b. reveal_secret (Phase 17b memory mode)
+// ═══════════════════════════════════════════════════════════════════
+//
+// Decrypt and return a stored credential. DM-only enforced inside
+// the executor — calling from a group returns a "DM-only" error. The
+// LLM is instructed to call this in response to "X şifresi ne?" /
+// "what's the password for X" only after locating the secret via
+// search_items(kind='secret').
+
+export const revealSecretInputSchema = z.object({
+  item_id: z.string().uuid(),
+});
+
+export const revealSecretOutputSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+});
+
+export type RevealSecretInput = z.infer<typeof revealSecretInputSchema>;
+export type RevealSecretOutput = z.infer<typeof revealSecretOutputSchema>;
+
+// ═══════════════════════════════════════════════════════════════════
+// 17c. send_item_attachments (Phase 17b memory mode)
+// ═══════════════════════════════════════════════════════════════════
+//
+// Resend every stored attachment for an item directly to the chat —
+// the user gets the file(s) in Telegram, ready to view/save. Used
+// when the user asks for content like "konser biletleri?" — the
+// LLM locates the memory item, calls this tool, and the executor
+// fires the sendPhoto/sendDocument calls server-side, returning a
+// summary so the LLM can phrase the wrap-up.
+
+export const sendItemAttachmentsInputSchema = z.object({
+  item_id: z.string().uuid(),
+});
+
+export const sendItemAttachmentsOutputSchema = z.object({
+  sent: z.number().int().nonnegative(),
+  /** Item's text — for friendly framing in the assistant reply. */
+  label: z.string(),
+});
+
+export type SendItemAttachmentsInput = z.infer<
+  typeof sendItemAttachmentsInputSchema
+>;
+export type SendItemAttachmentsOutput = z.infer<
+  typeof sendItemAttachmentsOutputSchema
+>;
+
+// ═══════════════════════════════════════════════════════════════════
 // 17. get_item_by_position (Phase 17b)
 // ═══════════════════════════════════════════════════════════════════
 //
@@ -599,6 +649,8 @@ export const TOOL_NAMES = [
   "set_chat_api_key",
   "list_chat_members",
   "get_item_by_position",
+  "reveal_secret",
+  "send_item_attachments",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -783,5 +835,32 @@ export const tools = [
       "in that case tell the user 'sadece N item var' and stop.",
     inputSchema: getItemByPositionInputSchema,
     outputSchema: getItemByPositionOutputSchema,
+  },
+  {
+    name: "reveal_secret",
+    description:
+      "Decrypt and return a stored credential. DM-ONLY (executor refuses in groups). " +
+      "Use this when the user asks for a saved password — e.g. 'Gmail şifresi ne?', " +
+      "'what's the Wi-Fi password?'. Flow: first call search_items({kind:'secret', query: 'gmail'}) " +
+      "to locate the entry, then call reveal_secret(item_id) with the resolved id. " +
+      "When you receive the value, paste it back to the user IN ONE LINE prefixed with 🔒, then " +
+      "REMIND them: 'Telegram'da bu mesaj görünür; gözden geçirince sil.' Never echo the value " +
+      "more than once per turn.",
+    inputSchema: revealSecretInputSchema,
+    outputSchema: revealSecretOutputSchema,
+  },
+  {
+    name: "send_item_attachments",
+    description:
+      "Re-send all attachments stored on a memory/todo item directly into the chat. " +
+      "Use when the user asks for the actual content of a saved item — 'konser biletleri?', " +
+      "'pasaport fotoğrafı', 'göster faturayı', 'send me the boarding pass'. Flow: locate the " +
+      "item with search_items (try kind='memory' first, fall back to 'any'), then call this with " +
+      "item_id. The bot sends each file as a fresh message — your text reply should just frame " +
+      "the result ('🎫 Konser biletini gönderdim, kolay gelsin.'). If the item has no attachments " +
+      "or doesn't exist, the executor returns sent=0; tell the user there's nothing attached and " +
+      "offer to attach one via /memory → 📎.",
+    inputSchema: sendItemAttachmentsInputSchema,
+    outputSchema: sendItemAttachmentsOutputSchema,
   },
 ] as const;

@@ -84,6 +84,7 @@ async function main(): Promise<void> {
       { command: "help", description: "How to use" },
       { command: "items", description: "Show all items 📋" },
       { command: "memory", description: "Memory keepsakes 📁" },
+      { command: "sifre", description: "Save / view passwords 🔒 (DM-only)" },
       { command: "today", description: "Today's items 📅" },
       { command: "thisweek", description: "This week's items 🗓" },
       { command: "assigned", description: "Assigned items 👤" },
