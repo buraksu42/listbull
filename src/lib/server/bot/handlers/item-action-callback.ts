@@ -471,6 +471,7 @@ export async function handleItemActionCallback(
   // need — so it's free.
   if (data.startsWith("item:toggle:")) {
     const itemId = data.slice("item:toggle:".length);
+    console.log("[cb:toggle]", { chatId, itemId });
     let toggledParentId: string | null = null;
     await db.transaction(async (tx) => {
       const [current] = await tx

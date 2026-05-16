@@ -90,7 +90,10 @@ export async function rollupParentDoneState(
     .from(items)
     .where(and(eq(items.id, childItemId), eq(items.chatId, chatId)))
     .limit(1);
-  if (!child || !child.parentItemId) return;
+  if (!child || !child.parentItemId) {
+    console.log("[rollup:skip]", { childItemId, reason: !child ? "child_missing" : "no_parent" });
+    return;
+  }
 
   const [parent] = await tx
     .select()
@@ -103,9 +106,18 @@ export async function rollupParentDoneState(
       ),
     )
     .limit(1);
-  if (!parent) return;
-  if (parent.kind !== "todo") return;
-  if (parent.taskRecurrenceRule) return;
+  if (!parent) {
+    console.log("[rollup:skip]", { childItemId, parentId: child.parentItemId, reason: "parent_missing_or_archived" });
+    return;
+  }
+  if (parent.kind !== "todo") {
+    console.log("[rollup:skip]", { parentId: parent.id, reason: "parent_kind", kind: parent.kind });
+    return;
+  }
+  if (parent.taskRecurrenceRule) {
+    console.log("[rollup:skip]", { parentId: parent.id, reason: "rrule_parent" });
+    return;
+  }
 
   const siblings = await tx
     .select({ isDone: items.isDone })
@@ -116,9 +128,21 @@ export async function rollupParentDoneState(
         isNull(items.archivedAt),
       ),
     );
-  if (siblings.length === 0) return;
+  if (siblings.length === 0) {
+    console.log("[rollup:skip]", { parentId: parent.id, reason: "no_siblings" });
+    return;
+  }
 
-  const desired = siblings.every((s) => s.isDone);
+  const doneCount = siblings.filter((s) => s.isDone === true).length;
+  const desired = doneCount === siblings.length;
+  console.log("[rollup:eval]", {
+    parentId: parent.id,
+    parentIsDone: parent.isDone,
+    siblings: siblings.length,
+    siblingsDone: doneCount,
+    desired,
+    willFlip: parent.isDone !== desired,
+  });
   if (parent.isDone === desired) return;
 
   const now = new Date();
