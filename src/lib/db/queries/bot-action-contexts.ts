@@ -18,7 +18,7 @@ import { botActionContexts } from "@/lib/db/schema";
 export type BotActionContext = {
   chatId: number;
   messageId: number;
-  action: "edit" | "deadline" | "reminder" | "attach" | "set_key";
+  action: "edit" | "deadline" | "reminder" | "attach" | "set_key" | "memory_add";
   itemId: string | null;
   targetChatId: number | null;
 };

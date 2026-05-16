@@ -366,7 +366,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // that to the LLM so it knows which item + action the message
   // pertains to (edit / deadline / reminder / attach).
   const replyTo = message.reply_to_message;
-  let actionMarker: { action: string; itemId: string } | null = null;
+  let actionMarker: { action: string; itemId: string | null } | null = null;
   if (replyTo) {
     if (replyTo.from?.id === ctx.me.id) {
       // DB-backed lookup replaces the old inline `[ctx:...]` marker.
@@ -378,11 +378,16 @@ export async function handleMessage(ctx: Context): Promise<void> {
         action: persisted?.action ?? null,
         itemId: persisted?.itemId ?? null,
       });
-      if (persisted && persisted.itemId && persisted.action !== "set_key") {
-        actionMarker = {
-          action: persisted.action,
-          itemId: persisted.itemId,
-        };
+      if (persisted && persisted.action !== "set_key") {
+        // memory_add has no itemId (we're creating one); per-item
+        // actions (edit/deadline/reminder/attach) require it.
+        const needsItemId = persisted.action !== "memory_add";
+        if (!needsItemId || persisted.itemId) {
+          actionMarker = {
+            action: persisted.action,
+            itemId: persisted.itemId ?? null,
+          };
+        }
       }
     } else if (
       isGroupContext &&
@@ -571,7 +576,7 @@ function toMessageRow(
  * item and which kind of update to apply.
  */
 function buildActionDirective(
-  marker: { action: string; itemId: string },
+  marker: { action: string; itemId: string | null },
   userText: string,
 ): string {
   const trimmed = userText.trim();
@@ -590,6 +595,8 @@ function buildActionDirective(
       return `Add a reminder to item ${marker.itemId} based on this natural-language description: "${body}". Call add_reminder — use offset_minutes when the user says "X before deadline", remind_at for absolute times.`;
     case "attach":
       return `User is replying with an attachment to add to item ${marker.itemId}. Their accompanying note: "${body}". Call attach_file_to_item with the attachment metadata from the latest message context.`;
+    case "memory_add":
+      return `User wants a new MEMORY item (kind='memory'): ${body}. Call create_item with kind='memory'. Memory items are permanent keepsakes (tickets, docs, receipts); never auto-archive. If an attachment is present in the message, also call attach_file_to_item against the returned item id.`;
     default:
       return body;
   }

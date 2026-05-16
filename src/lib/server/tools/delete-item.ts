@@ -34,6 +34,14 @@ export async function executeDeleteItem(
       )
       .limit(1);
     if (!current) return err(ERR.not_found, "Item not found.");
+    if (current.kind === "memory" || current.kind === "secret") {
+      // Memory rows are deliberately protected from LLM-driven delete
+      // — the user must confirm via /memory → 🗑️ which double-taps.
+      return err(
+        "protected",
+        `Memory/secret items can't be deleted via tool. Reply: "Bu /memory'de — 🗑️ butonu ile onaylayarak silmen gerek."`,
+      );
+    }
 
     const now = new Date();
     const [archived] = await tx

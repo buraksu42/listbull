@@ -83,6 +83,7 @@ async function main(): Promise<void> {
       { command: "start", description: "Get started" },
       { command: "help", description: "How to use" },
       { command: "items", description: "Show all items 📋" },
+      { command: "memory", description: "Memory keepsakes 📁" },
       { command: "today", description: "Today's items 📅" },
       { command: "thisweek", description: "This week's items 🗓" },
       { command: "assigned", description: "Assigned items 👤" },

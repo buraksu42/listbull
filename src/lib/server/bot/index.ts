@@ -9,6 +9,7 @@ import { Bot } from "grammy";
 import { handleAssigned } from "@/lib/server/bot/commands/assigned";
 import { handleHelp } from "@/lib/server/bot/commands/help";
 import { handleItems } from "@/lib/server/bot/commands/items";
+import { handleMemory } from "@/lib/server/bot/commands/memory";
 import { handleReminders } from "@/lib/server/bot/commands/reminders";
 import { handleReset } from "@/lib/server/bot/commands/reset";
 import { handleStart } from "@/lib/server/bot/commands/start";
@@ -44,6 +45,7 @@ function registerHandlers(bot: Bot): void {
   bot.command("help", handleHelp);
   bot.command("reset", handleReset);
   bot.command("items", handleItems);
+  bot.command("memory", handleMemory);
   // Slash commands are English-only by user preference — the bot
   // replies are still localized (TR/EN) based on users.locale.
   bot.command("today", handleToday);
@@ -51,10 +53,14 @@ function registerHandlers(bot: Bot): void {
   bot.command("assigned", handleAssigned);
   bot.command("reminders", handleReminders);
 
-  // Inline-keyboard callbacks for /items view.
+  // Inline-keyboard callbacks for /items + /memory views.
   bot.on("callback_query:data", async (ctx, next) => {
     const data = ctx.callbackQuery.data ?? "";
-    if (data.startsWith("item:") || data.startsWith("items:")) {
+    if (
+      data.startsWith("item:") ||
+      data.startsWith("items:") ||
+      data.startsWith("memory:")
+    ) {
       await handleItemActionCallback(ctx);
       return;
     }

@@ -26,6 +26,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { activityLog, itemAttachments, items } from "@/lib/db/schema";
 import { buildItemsView } from "@/lib/server/bot/commands/items";
+import { buildMemoryView } from "@/lib/server/bot/commands/memory";
 import { insertBotActionContext } from "@/lib/db/queries/bot-action-contexts";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
@@ -36,14 +37,14 @@ export async function handleItemActionCallback(
 ): Promise<void> {
   const cb = ctx.callbackQuery;
   if (!cb || typeof cb.data !== "string") return;
-  const data = cb.data;
-  // Prefixes we own: `item:*` (per-item actions) and `items:*`
-  // (collection-level actions like `items:add`). The old `list:`
-  // prefix is kept as a tolerant alias for any legacy keyboards
-  // still floating in user chats from before the chat-only pivot.
+  let data = cb.data;
+  // Prefixes we own: `item:*` and `items:*` (todos), `memory:*`
+  // (memory-mode actions). Old `list:` kept as tolerant alias for
+  // legacy keyboards in user chats from before the chat-only pivot.
   if (
     !data.startsWith("item:") &&
     !data.startsWith("items:") &&
+    !data.startsWith("memory:") &&
     !data.startsWith("list:")
   ) {
     return;
@@ -61,6 +62,158 @@ export async function handleItemActionCallback(
     return;
   }
   const locale = pickLocale(user.locale);
+
+  // ─── memory: surface-specific handlers ──────────────────────────
+  //
+  // Most "open a force-reply for action X on item Y" actions are
+  // shared between /items and /memory — we normalize them at the
+  // bottom of this block. Memory needs distinct flows for:
+  //   - add  → force-reply with action context kind='memory'
+  //   - toggle → no-op (memory items don't have done state)
+  //   - delete → confirmation sheet, never archive directly
+  //   - page → re-render /memory view with new offset
+
+  if (data === "memory:add") {
+    await ctx.answerCallbackQuery();
+    const sent = await ctx.api.sendMessage(
+      chatId,
+      locale === "tr"
+        ? "📁 Hafızaya ne ekleyeyim?"
+        : "📁 What should I keep in memory?",
+      { reply_markup: { force_reply: true, selective: true } },
+    );
+    await insertBotActionContext({
+      chatId,
+      messageId: sent.message_id,
+      action: "memory_add",
+      itemId: null,
+      targetChatId: null,
+    });
+    return;
+  }
+
+  if (data.startsWith("memory:page:")) {
+    const offset =
+      Number.parseInt(data.slice("memory:page:".length), 10) || 0;
+    await ctx.answerCallbackQuery();
+    const view = await buildMemoryView(chatId, locale, offset);
+    await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+    return;
+  }
+
+  if (data.startsWith("memory:toggle:")) {
+    // Memory items don't toggle — friendly nudge.
+    await ctx.answerCallbackQuery(
+      locale === "tr"
+        ? "📁 Hafıza item'ları işaretlenmez."
+        : "📁 Memory items have no done state.",
+    );
+    return;
+  }
+
+  if (data.startsWith("memory:delete:")) {
+    const itemId = data.slice("memory:delete:".length);
+    const [it] = await db
+      .select({ text: items.text })
+      .from(items)
+      .where(and(eq(items.id, itemId), eq(items.chatId, chatId)))
+      .limit(1);
+    if (!it) {
+      await ctx.answerCallbackQuery(
+        locale === "tr" ? "Bulunamadı." : "Not found.",
+      );
+      return;
+    }
+    const title = it.text.length > 60 ? `${it.text.slice(0, 60)}…` : it.text;
+    await ctx.answerCallbackQuery();
+    await ctx.api.sendMessage(
+      chatId,
+      locale === "tr"
+        ? `🗑️ "${title}" hafızadan silinsin mi? Bu geri alınmaz.`
+        : `🗑️ Delete "${title}" from memory? This can't be undone.`,
+      {
+        reply_markup: new InlineKeyboard()
+          .text(
+            locale === "tr" ? "✅ Evet, sil" : "✅ Yes, delete",
+            `memory:delete_yes:${itemId}`,
+          )
+          .text(
+            locale === "tr" ? "❌ İptal" : "❌ Cancel",
+            `memory:delete_no:${itemId}`,
+          ),
+      },
+    );
+    return;
+  }
+
+  if (data.startsWith("memory:delete_yes:")) {
+    const itemId = data.slice("memory:delete_yes:".length);
+    await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(items)
+        .where(and(eq(items.id, itemId), eq(items.chatId, chatId)))
+        .limit(1);
+      if (!current) return;
+      const now = new Date();
+      const [archived] = await tx
+        .update(items)
+        .set({ archivedAt: now, updatedAt: now })
+        .where(eq(items.id, itemId))
+        .returning();
+      if (!archived) return;
+      await tx.insert(activityLog).values({
+        chatId,
+        entityType: "item",
+        entityId: itemId,
+        action: "item_deleted",
+        actorId: user.id,
+        payloadBefore: toItemSnapshot(current),
+        payloadAfter: toItemSnapshot(archived),
+      });
+    });
+    await ctx.answerCallbackQuery(
+      locale === "tr" ? "🗑️ Silindi" : "🗑️ Deleted",
+    );
+    // Replace the confirm prompt with a small ack so user doesn't
+    // get a stale "are you sure?" message sitting in the chat.
+    try {
+      await ctx.editMessageText(
+        locale === "tr" ? "🗑️ Silindi." : "🗑️ Deleted.",
+      );
+    } catch {
+      // ignore "not modified" / "message can't be edited"
+    }
+    return;
+  }
+
+  if (data.startsWith("memory:delete_no:")) {
+    await ctx.answerCallbackQuery(
+      locale === "tr" ? "İptal" : "Cancelled",
+    );
+    try {
+      await ctx.editMessageText(
+        locale === "tr" ? "❌ İptal edildi." : "❌ Cancelled.",
+      );
+    } catch {
+      // ignore
+    }
+    return;
+  }
+
+  // Shared actions: edit / deadline / reminder / attach* — same UX
+  // on /memory as /items, so we rewrite the prefix and fall through
+  // to the existing handlers.
+  if (
+    data.startsWith("memory:edit:") ||
+    data.startsWith("memory:deadline:") ||
+    data.startsWith("memory:reminder:") ||
+    data.startsWith("memory:attach:") ||
+    data.startsWith("memory:attach_new:") ||
+    data.startsWith("memory:attach_dl:")
+  ) {
+    data = data.replace(/^memory:/, "item:");
+  }
 
   // list:add — force-reply prompt for new item text.
   if (data === "items:add") {

@@ -36,6 +36,15 @@ export async function executeCompleteItem(
       .where(and(eq(items.id, item_id), eq(items.chatId, ctx.chatId)))
       .limit(1);
     if (!current) return err(ERR.not_found, "Item not found.");
+    if (current.kind === "memory" || current.kind === "secret") {
+      // Memory rows have no done semantic. Refuse so the LLM tells
+      // the user "Hafıza item'ları işaretlenmiyor — silmek istersen
+      // /memory'den onaylayabilirsin."
+      return err(
+        "protected",
+        `Memory items have no done state. Reply: "Hafıza item'ları işaretlenmez."`,
+      );
+    }
 
     const warnings: string[] = [];
     const now = new Date();
