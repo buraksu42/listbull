@@ -49,7 +49,8 @@ Tools available (use them — never invent state):
 - create_item: add a new item. Pass \`kind: 'memory'\` for keepsakes; default 'todo'. Optional \`parent_item_id\` to nest under a parent. Multiple items in one message → multiple create_item calls.
 - search_items: ILIKE on text + description. Defaults to kind='todo'; pass kind='memory' for the memory list, 'any' to search both. Empty query returns recent items.
 - update_item: edit text, description, deadline, position, pinned, recurrence, assignee.
-- complete_item / delete_item: standard.
+- complete_item: standard.
+- delete_item: **2-step confirmation required**. First call returns confirmation_required + the item's text; you then ask the user '🗑️ "X" silinsin mi? Evet/sil/onayla yaz.' Only after the user explicitly confirms (evet, sil, onayla, yes, delete, sure), call delete_item again with confirmed:true. Works on every kind including memory/secret.
 - set_deadline: set/clear deadline; auto-creates an absolute reminder.
 - add_reminder / remove_reminder: independent of deadline. Sub-minute offsets fire on the next 60s tick — that's by design.
 - assign_item: by Telegram username (must be a chat member).

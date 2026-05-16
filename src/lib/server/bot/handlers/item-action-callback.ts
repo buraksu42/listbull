@@ -427,9 +427,46 @@ export async function handleItemActionCallback(
     return;
   }
 
-  // item:delete:<itemId> — soft delete + re-render.
+  // item:delete:<itemId> — opens confirmation sheet (no immediate
+  // archive). Symmetric with /memory's two-tap delete; matches the
+  // chat-side "always ask before deleting" rule.
   if (data.startsWith("item:delete:")) {
     const itemId = data.slice("item:delete:".length);
+    const [it] = await db
+      .select({ text: items.text })
+      .from(items)
+      .where(and(eq(items.id, itemId), eq(items.chatId, chatId)))
+      .limit(1);
+    if (!it) {
+      await ctx.answerCallbackQuery(
+        locale === "tr" ? "Bulunamadı." : "Not found.",
+      );
+      return;
+    }
+    const title = it.text.length > 60 ? `${it.text.slice(0, 60)}…` : it.text;
+    await ctx.answerCallbackQuery();
+    await ctx.api.sendMessage(
+      chatId,
+      locale === "tr"
+        ? `🗑️ "${title}" silinsin mi?`
+        : `🗑️ Delete "${title}"?`,
+      {
+        reply_markup: new InlineKeyboard()
+          .text(
+            locale === "tr" ? "✅ Evet, sil" : "✅ Yes, delete",
+            `item:delete_yes:${itemId}`,
+          )
+          .text(
+            locale === "tr" ? "❌ İptal" : "❌ Cancel",
+            `item:delete_no:${itemId}`,
+          ),
+      },
+    );
+    return;
+  }
+
+  if (data.startsWith("item:delete_yes:")) {
+    const itemId = data.slice("item:delete_yes:".length);
     await db.transaction(async (tx) => {
       const [current] = await tx
         .select()
@@ -457,10 +494,27 @@ export async function handleItemActionCallback(
     await ctx.answerCallbackQuery(
       locale === "tr" ? "🗑️ Silindi" : "🗑️ Deleted",
     );
-    const view = await buildItemsView(chatId, locale, 0);
-    await ctx.editMessageText(view.text, {
-      reply_markup: view.keyboard,
-    });
+    try {
+      await ctx.editMessageText(
+        locale === "tr" ? "🗑️ Silindi." : "🗑️ Deleted.",
+      );
+    } catch {
+      // ignore "not modified" / "message can't be edited"
+    }
+    return;
+  }
+
+  if (data.startsWith("item:delete_no:")) {
+    await ctx.answerCallbackQuery(
+      locale === "tr" ? "İptal" : "Cancelled",
+    );
+    try {
+      await ctx.editMessageText(
+        locale === "tr" ? "❌ İptal edildi." : "❌ Cancelled.",
+      );
+    } catch {
+      // ignore
+    }
     return;
   }
 

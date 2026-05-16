@@ -248,6 +248,15 @@ export type CompleteItemOutput = z.infer<typeof completeItemOutputSchema>;
 
 export const deleteItemInputSchema = z.object({
   item_id: z.string().uuid(),
+  /**
+   * Phase 17b: hard 2-step gate. The first call must omit / set
+   * `confirmed: false` and the executor returns a
+   * `confirmation_required` error. The LLM then asks the user
+   * ("🗑️ X silinsin mi? Emin misin?"). Only when the user replies
+   * with explicit confirmation (evet / sil / onayla / yes / delete)
+   * does the LLM call delete_item again with `confirmed: true`.
+   */
+  confirmed: z.boolean().optional().default(false),
 });
 
 export const deleteItemOutputSchema = z.object({
@@ -719,9 +728,15 @@ export const tools = [
   {
     name: "delete_item",
     description:
-      "Soft-delete an item (archived_at = now). The item disappears from default views but the " +
-      "audit log keeps a restore-snapshot for 30 days. Use when the user says 'sil' / 'kaldır' / " +
-      "'never mind'. NO confirmation prompt — soft delete is recoverable.",
+      "Soft-delete an item (archived_at = now). Works on every kind — todo, memory, secret. " +
+      "**TWO-STEP CONFIRMATION REQUIRED**:\n" +
+      "  1. First call WITHOUT confirmed (or confirmed:false). The executor returns " +
+      "`confirmation_required`. Then ask the user: '🗑️ \"<item text>\" silinsin mi? Onaylamak için " +
+      "evet / sil / onayla yaz.' (Or EN: 'delete <item>? Reply yes / delete to confirm.')\n" +
+      "  2. ONLY after the user explicitly confirms (evet, sil, onayla, yes, delete, sure), call " +
+      "delete_item again with confirmed:true. After success phrase: '🗑️ <item> silindi.'\n" +
+      "Never skip step 1. Memory/secret items also follow this gate via the LLM path; only the " +
+      "/memory and /done inline buttons can also drive it directly.",
     inputSchema: deleteItemInputSchema,
     outputSchema: deleteItemOutputSchema,
   },

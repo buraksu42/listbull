@@ -34,12 +34,16 @@ export async function executeDeleteItem(
       )
       .limit(1);
     if (!current) return err(ERR.not_found, "Item not found.");
-    if (current.kind === "memory" || current.kind === "secret") {
-      // Memory rows are deliberately protected from LLM-driven delete
-      // — the user must confirm via /memory → 🗑️ which double-taps.
+
+    // Phase 17b: two-step confirmation gate. Even todo items now
+    // require the LLM to have explicitly confirmed with the user
+    // before the executor touches anything. Memory + secret used to
+    // refuse outright; they now go through the same gate so the chat
+    // surface can drive a delete after a confirmation prompt.
+    if (!parsed.data.confirmed) {
       return err(
-        "protected",
-        `Memory/secret items can't be deleted via tool. Reply: "Bu /memory'de — 🗑️ butonu ile onaylayarak silmen gerek."`,
+        "confirmation_required",
+        `Ask the user to confirm before deleting "${current.text}". Phrase: '🗑️ "${current.text}" silinsin mi? Onaylamak için evet / sil / onayla yaz.' Then re-call delete_item with confirmed:true after explicit confirmation.`,
       );
     }
 
