@@ -152,6 +152,18 @@ export const searchItemsInputSchema = z.object({
    * to search the whole chat.
    */
   kind: z.enum(["todo", "memory", "secret", "any"]).optional().default("todo"),
+  /**
+   * Phase 17c: nesting filter.
+   *   "any"  → don't filter (default; preserves pre-17c behavior)
+   *   "none" → top-level only (parent_item_id IS NULL); use this to
+   *            recover the /items view shape.
+   *   <uuid> → children of the given parent_item_id; use to enumerate
+   *            sub-items of a known checklist parent.
+   */
+  parent_item_id: z
+    .union([z.literal("any"), z.literal("none"), z.string().uuid()])
+    .optional()
+    .default("any"),
   limit: z.number().int().min(1).max(50).default(20),
 });
 
@@ -685,7 +697,14 @@ export const tools = [
       "turns the item into a note (no checkbox, no deadline). " +
       "Use when the user says 'süt al' / 'add milk' / 'todo: ...' / when the message contains " +
       "concrete action items (forwards, voice transcripts). Multiple items in one user message " +
-      "should be split into multiple create_item calls, not concatenated.",
+      "should be split into multiple create_item calls, not concatenated. " +
+      "**Checklists / sub-items**: pass `parent_item_id` (the uuid of a top-level item in the " +
+      "same chat) to nest. ONE LEVEL ONLY — the executor rejects with `no_grandchildren` if the " +
+      "parent is itself nested. For todo sub-items the parent must also be a todo (no mixing " +
+      "into memory trees). When the user lists ≥3 atomic actions under one umbrella " +
+      "('haftalık temizlik: çamaşır, bulaşık, çöp'; 'alışveriş: süt, ekmek, yumurta'; " +
+      "'tatil hazırlık: pasaport, otel, sigorta'), create the parent first, capture its id, " +
+      "then create each child with `parent_item_id` set.",
     inputSchema: createItemInputSchema,
     outputSchema: createItemOutputSchema,
   },
@@ -697,7 +716,9 @@ export const tools = [
       "scope; `include_archived` brings soft-deleted ones. `has_reminder: true` restricts to items " +
       "with at least one future, unsent reminder — pair with empty query for 'hangi hatırlatıcılar " +
       "var?'. `limit` 1-50 (default 20). Use this BEFORE complete_item / delete_item / update_item " +
-      "when the user references items by name ('süt'ü tamamla' → search → complete with item_id).",
+      "when the user references items by name ('süt'ü tamamla' → search → complete with item_id). " +
+      "**Nesting filter** `parent_item_id`: 'any' (default) = no filter; 'none' = top-level only " +
+      "(matches /items); a uuid = children of that parent (enumerate a checklist's sub-items).",
     inputSchema: searchItemsInputSchema,
     outputSchema: searchItemsOutputSchema,
   },
@@ -721,7 +742,13 @@ export const tools = [
       "completion ADVANCES the deadline to the rule's next occurrence and resets is_done=false / " +
       "status='open' instead of permanently completing — the warnings array carries " +
       "'task_recurred' so you can phrase the reply accordingly. Phrase confirmation as " +
-      "'✓ <text> tamam' (TR) / '✓ <text> done' (EN).",
+      "'✓ <text> tamam' (TR) / '✓ <text> done' (EN). " +
+      "**Checklist gate**: when the target is a top-level parent with open sub-items, the " +
+      "executor returns `gate_blocked` listing the open children. Surface them to the user — " +
+      "phrase: 'N alt item açık (\"x\", \"y\"). Önce onları bitirelim mi yoksa hepsini birden " +
+      "tamamladım mı diyim?'. If the user says 'hepsini' / 'all done', call complete_item on " +
+      "each child id first, THEN retry the parent. Completing a sub-item directly never hits " +
+      "the gate.",
     inputSchema: completeItemInputSchema,
     outputSchema: completeItemOutputSchema,
   },
@@ -731,11 +758,15 @@ export const tools = [
       "Soft-delete an item (archived_at = now). Works on every kind — todo, memory, secret. " +
       "**TWO-STEP CONFIRMATION REQUIRED**:\n" +
       "  1. First call WITHOUT confirmed (or confirmed:false). The executor returns " +
-      "`confirmation_required`. Then ask the user: '🗑️ \"<item text>\" silinsin mi? Onaylamak için " +
-      "evet / sil / onayla yaz.' (Or EN: 'delete <item>? Reply yes / delete to confirm.')\n" +
+      "`confirmation_required` and the message TEXT YOU SHOULD USE — it already mentions any " +
+      "sub-items that will cascade (e.g. '\"Haftalık temizlik\" ve 3 alt item silinsin mi?'). " +
+      "Echo that phrase to the user verbatim or close to it.\n" +
       "  2. ONLY after the user explicitly confirms (evet, sil, onayla, yes, delete, sure), call " +
-      "delete_item again with confirmed:true. After success phrase: '🗑️ <item> silindi.'\n" +
-      "Never skip step 1. Memory/secret items also follow this gate via the LLM path; only the " +
+      "delete_item again with confirmed:true. After success phrase: '🗑️ <item> silindi.' (or " +
+      "'🗑️ <item> ve N alt item silindi.' when cascade happened).\n" +
+      "Never skip step 1. **Cascade**: deleting a top-level parent atomically archives every " +
+      "live sub-item in the same transaction. Sub-items can also be deleted individually without " +
+      "touching the parent. Memory/secret items follow the same gate via the LLM path; only the " +
       "/memory and /done inline buttons can also drive it directly.",
     inputSchema: deleteItemInputSchema,
     outputSchema: deleteItemOutputSchema,

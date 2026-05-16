@@ -39,6 +39,8 @@ export const ERR = {
   forbidden: "forbidden",
   not_found: "not_found",
   internal_error: "internal_error",
+  /** Action refused because a parent has open sub-items (checklist gate). */
+  gate_blocked: "gate_blocked",
 } as const;
 
 /** Whether the given ISO 8601 string is in the past. */

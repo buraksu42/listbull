@@ -55,6 +55,9 @@ export async function buildItemsView(
   // /items renders OPEN to-dos only. Done items move to /done so the
   // list doesn't accumulate over months. Memory items have their own
   // /memory surface.
+  // Top-level only: sub-items (parent_item_id != null) live under
+  // their parent's drill-in view, not flattened here. Mirrors what
+  // /memory has done since Phase 17b.
   const rows = await db
     .select()
     .from(items)
@@ -64,6 +67,7 @@ export async function buildItemsView(
         eq(items.kind, "todo"),
         eq(items.isDone, false),
         isNull(items.archivedAt),
+        isNull(items.parentItemId),
       ),
     )
     .orderBy(asc(items.position), asc(items.createdAt))
@@ -82,6 +86,7 @@ export async function buildItemsView(
         eq(items.kind, "todo"),
         eq(items.isDone, false),
         isNull(items.archivedAt),
+        isNull(items.parentItemId),
       ),
     );
   const total = totalRow.length;
@@ -96,6 +101,11 @@ export async function buildItemsView(
   );
   const attachmentCounts = new Map<string, number>();
   const reminderCounts = new Map<string, number>();
+  // Phase 17c: per-parent sub-item rollup. open = count of live,
+  // not-done children; total = all live children. Drives the
+  // 📂{open}/{total} body suffix + the "Alt-itemlar" inline button.
+  const childOpenCounts = new Map<string, number>();
+  const childTotalCounts = new Map<string, number>();
   if (visibleIds.length > 0) {
     const aCounts = await db
       .select({
@@ -121,6 +131,26 @@ export async function buildItemsView(
       )
       .groupBy(itemReminders.itemId);
     for (const row of rCounts) reminderCounts.set(row.itemId, row.count);
+
+    const cCounts = await db
+      .select({
+        parentId: items.parentItemId,
+        open: sql<number>`count(*) FILTER (WHERE ${items.isDone} = false)::int`,
+        total: sql<number>`count(*)::int`,
+      })
+      .from(items)
+      .where(
+        and(
+          inArray(items.parentItemId, visibleIds),
+          isNull(items.archivedAt),
+        ),
+      )
+      .groupBy(items.parentItemId);
+    for (const row of cCounts) {
+      if (!row.parentId) continue;
+      childOpenCounts.set(row.parentId, row.open);
+      childTotalCounts.set(row.parentId, row.total);
+    }
   }
 
   const header =
@@ -177,8 +207,11 @@ export async function buildItemsView(
     const attachSuffix = attachCount > 0 ? ` 📎${attachCount}` : "";
     const reminderCount = reminderCounts.get(it.id) ?? 0;
     const reminderSuffix = reminderCount > 0 ? " 🔔" : "";
+    const childTotal = childTotalCounts.get(it.id) ?? 0;
+    const childOpen = childOpenCounts.get(it.id) ?? 0;
+    const childSuffix = childTotal > 0 ? ` 📂${childOpen}/${childTotal}` : "";
     lines.push(
-      `${num}. ${checkbox} ${priorityIcon}${statusIcon}${text}${deadlineSuffix}${reminderSuffix}${attachSuffix}${tagSuffix}`,
+      `${num}. ${checkbox} ${priorityIcon}${statusIcon}${text}${deadlineSuffix}${reminderSuffix}${attachSuffix}${childSuffix}${tagSuffix}`,
     );
     // Row A — wide numbered label, taps to toggle. Number prevents the
     // "which item does this button belong to?" ambiguity when the
@@ -203,6 +236,15 @@ export async function buildItemsView(
       .text(attachLabel, `item:attach:${it.id}`)
       .text("🗑️", `item:delete:${it.id}`)
       .row();
+    // Row C (conditional) — drill-in to sub-items view when the
+    // item is a checklist parent.
+    if (childTotal > 0) {
+      const label =
+        locale === "tr"
+          ? `📂 Alt-itemlar (${childOpen}/${childTotal})`
+          : `📂 Sub-items (${childOpen}/${childTotal})`;
+      keyboard.text(label, `item:children:${it.id}`).row();
+    }
   }
 
   // Bottom row: pagination + add

@@ -33,7 +33,9 @@ export async function executeGetItemByPosition(
   // Same WHERE + ORDER as buildItemsView so the position the user
   // sees is the position we resolve. Phase 17b: scope to kind='todo'
   // + is_done=false — positional refs target the /items view, which
-  // only shows OPEN items.
+  // only shows OPEN items. Phase 17c: also filter parent_item_id IS
+  // NULL — /items hides sub-items under their parent's drill-in, so
+  // a bare "5" never refers to a child. Sub-items are addressed by id.
   const rows = await db
     .select()
     .from(items)
@@ -43,6 +45,7 @@ export async function executeGetItemByPosition(
         eq(items.kind, "todo"),
         eq(items.isDone, false),
         isNull(items.archivedAt),
+        isNull(items.parentItemId),
       ),
     )
     .orderBy(asc(items.position), asc(items.createdAt));

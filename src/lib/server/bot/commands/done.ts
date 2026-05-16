@@ -16,7 +16,7 @@
  */
 import type { Context } from "grammy";
 import { InlineKeyboard } from "grammy";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { items } from "@/lib/db/schema";
@@ -47,6 +47,8 @@ export async function buildDoneView(
   locale: "tr" | "en",
   offset: number,
 ): Promise<{ text: string; keyboard: InlineKeyboard }> {
+  // Phase 17c: top-level only. Completed sub-items show up under their
+  // parent's drill-in view, not as standalone rows here.
   const rows = await db
     .select()
     .from(items)
@@ -56,6 +58,7 @@ export async function buildDoneView(
         eq(items.kind, "todo"),
         eq(items.isDone, true),
         isNull(items.archivedAt),
+        isNull(items.parentItemId),
       ),
     )
     .orderBy(desc(items.completedAt))
@@ -74,9 +77,37 @@ export async function buildDoneView(
         eq(items.kind, "todo"),
         eq(items.isDone, true),
         isNull(items.archivedAt),
+        isNull(items.parentItemId),
       ),
     );
   const total = totalRow.length;
+
+  // Per-parent sub-item rollup so completed checklists show e.g.
+  // "📂 3/3" (all children done) vs "📂 1/3" (parent done early).
+  const visibleIds = visible.map((r) => r.id);
+  const childDoneCounts = new Map<string, number>();
+  const childTotalCounts = new Map<string, number>();
+  if (visibleIds.length > 0) {
+    const cCounts = await db
+      .select({
+        parentId: items.parentItemId,
+        done: sql<number>`count(*) FILTER (WHERE ${items.isDone} = true)::int`,
+        total: sql<number>`count(*)::int`,
+      })
+      .from(items)
+      .where(
+        and(
+          inArray(items.parentItemId, visibleIds),
+          isNull(items.archivedAt),
+        ),
+      )
+      .groupBy(items.parentItemId);
+    for (const row of cCounts) {
+      if (!row.parentId) continue;
+      childDoneCounts.set(row.parentId, row.done);
+      childTotalCounts.set(row.parentId, row.total);
+    }
+  }
 
   const header =
     locale === "tr"
@@ -107,7 +138,10 @@ export async function buildDoneView(
       ? ` — ${fmt.format(it.completedAt)}`
       : "";
     const text = it.text.length > 50 ? `${it.text.slice(0, 50)}…` : it.text;
-    lines.push(`${num}. ✅ ${text}${completedStr}`);
+    const childTotal = childTotalCounts.get(it.id) ?? 0;
+    const childDone = childDoneCounts.get(it.id) ?? 0;
+    const childSuffix = childTotal > 0 ? ` 📂${childDone}/${childTotal}` : "";
+    lines.push(`${num}. ✅ ${text}${childSuffix}${completedStr}`);
     // Row A — wide numbered label (no action; visual anchor)
     const labelText =
       it.text.length > 26 ? `${it.text.slice(0, 26)}…` : it.text;

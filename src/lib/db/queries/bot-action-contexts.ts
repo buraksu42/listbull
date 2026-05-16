@@ -26,7 +26,8 @@ export type BotActionContext = {
     | "set_key"
     | "memory_add"
     | "secret_label"
-    | "secret_value";
+    | "secret_value"
+    | "add_child";
   itemId: string | null;
   targetChatId: number | null;
   /** Multi-step flow payload (e.g. /şifre label across two prompts). */

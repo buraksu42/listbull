@@ -33,6 +33,7 @@ export async function executeSearchItems(
     include_archived,
     has_reminder,
     kind,
+    parent_item_id,
     limit,
   } = parsed.data;
 
@@ -42,6 +43,13 @@ export async function executeSearchItems(
   // 'any' opts out of the filter entirely; the default 'todo' keeps
   // pre-Phase-17b call sites returning the same rows as before.
   if (kind !== "any") conds.push(eq(items.kind, kind));
+  // Phase 17c: nesting filter. "any" (default) = no filter,
+  // "none" = top-level only, uuid = children of that parent.
+  if (parent_item_id === "none") {
+    conds.push(isNull(items.parentItemId));
+  } else if (parent_item_id !== "any") {
+    conds.push(eq(items.parentItemId, parent_item_id));
+  }
 
   if (query.trim().length > 0) {
     const pattern = `%${escapeLike(query.trim())}%`;

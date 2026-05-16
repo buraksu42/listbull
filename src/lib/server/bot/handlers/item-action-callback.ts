@@ -28,6 +28,7 @@ import { activityLog, itemAttachments, items } from "@/lib/db/schema";
 import { buildDoneView } from "@/lib/server/bot/commands/done";
 import { buildItemsView } from "@/lib/server/bot/commands/items";
 import { buildMemoryView } from "@/lib/server/bot/commands/memory";
+import { buildSubItemsView } from "@/lib/server/bot/views/sub-items";
 import { insertBotActionContext } from "@/lib/db/queries/bot-action-contexts";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
@@ -360,6 +361,78 @@ export async function handleItemActionCallback(
     return;
   }
 
+  // ─── Sub-items drill-in (Phase 17c) ───────────────────────────
+  //
+  // Callback shapes:
+  //   item:children:<parentId>             → render sub-items view
+  //   item:children_page:<parentId>:<off>  → paginate within view
+  //   item:children_back                    → back to /items page 0
+  //   item:add_child:<parentId>             → force-reply for new sub-item
+
+  if (data === "item:children_back") {
+    await ctx.answerCallbackQuery();
+    const view = await buildItemsView(chatId, locale, 0);
+    await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+    return;
+  }
+
+  if (data.startsWith("item:children_page:")) {
+    const rest = data.slice("item:children_page:".length);
+    const sepIdx = rest.lastIndexOf(":");
+    if (sepIdx === -1) {
+      await ctx.answerCallbackQuery();
+      return;
+    }
+    const parentId = rest.slice(0, sepIdx);
+    const offset = Number.parseInt(rest.slice(sepIdx + 1), 10) || 0;
+    await ctx.answerCallbackQuery();
+    const view = await buildSubItemsView(parentId, chatId, locale, offset);
+    await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+    return;
+  }
+
+  if (data.startsWith("item:children:")) {
+    const parentId = data.slice("item:children:".length);
+    await ctx.answerCallbackQuery();
+    const view = await buildSubItemsView(parentId, chatId, locale, 0);
+    await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+    return;
+  }
+
+  if (data.startsWith("item:add_child:")) {
+    const parentId = data.slice("item:add_child:".length);
+    const [parent] = await db
+      .select({ text: items.text })
+      .from(items)
+      .where(and(eq(items.id, parentId), eq(items.chatId, chatId)))
+      .limit(1);
+    if (!parent) {
+      await ctx.answerCallbackQuery(
+        locale === "tr" ? "Liste bulunamadı." : "List not found.",
+      );
+      return;
+    }
+    const title =
+      parent.text.length > 60 ? `${parent.text.slice(0, 60)}…` : parent.text;
+    const body =
+      locale === "tr"
+        ? `📂 "${title}" altına ne ekleyeyim?`
+        : `📂 What to add under "${title}"?`;
+    await ctx.answerCallbackQuery();
+    const sent = await ctx.api.sendMessage(chatId, body, {
+      reply_markup: { force_reply: true, selective: true },
+    });
+    await insertBotActionContext({
+      chatId,
+      messageId: sent.message_id,
+      action: "add_child",
+      itemId: parentId,
+      targetChatId: null,
+      metadata: null,
+    });
+    return;
+  }
+
   // list:add — force-reply prompt for new item text.
   if (data === "items:add") {
     await ctx.answerCallbackQuery();
@@ -388,8 +461,16 @@ export async function handleItemActionCallback(
   }
 
   // item:toggle:<itemId>
+  //
+  // The re-render target depends on the toggled row's `parentItemId`:
+  //   - top-level (null)  → /items view (where user came from)
+  //   - sub-item          → that parent's sub-items view (keep them
+  //                          in the drill-in instead of bouncing out)
+  // We capture parentItemId inside the tx — same SELECT we already
+  // need — so it's free.
   if (data.startsWith("item:toggle:")) {
     const itemId = data.slice("item:toggle:".length);
+    let toggledParentId: string | null = null;
     await db.transaction(async (tx) => {
       const [current] = await tx
         .select()
@@ -397,6 +478,7 @@ export async function handleItemActionCallback(
         .where(and(eq(items.id, itemId), eq(items.chatId, chatId)))
         .limit(1);
       if (!current) return;
+      toggledParentId = current.parentItemId;
       const next = !current.isDone;
       const [updated] = await tx
         .update(items)
@@ -420,10 +502,18 @@ export async function handleItemActionCallback(
       });
     });
     await ctx.answerCallbackQuery();
-    const view = await buildItemsView(chatId, locale, 0);
-    await ctx.editMessageText(view.text, {
-      reply_markup: view.keyboard,
-    });
+    if (toggledParentId) {
+      const view = await buildSubItemsView(
+        toggledParentId,
+        chatId,
+        locale,
+        0,
+      );
+      await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+    } else {
+      const view = await buildItemsView(chatId, locale, 0);
+      await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+    }
     return;
   }
 

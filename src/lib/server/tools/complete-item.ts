@@ -7,7 +7,7 @@
  */
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { activityLog, items } from "@/lib/db/schema";
@@ -44,6 +44,39 @@ export async function executeCompleteItem(
         "protected",
         `Memory items have no done state. Reply: "Hafıza item'ları işaretlenmez."`,
       );
+    }
+
+    // Phase 17c: checklist gate. A top-level todo with open sub-items
+    // cannot be completed in one step — the LLM must surface the open
+    // children to the user and either bulk-complete them first or get
+    // explicit permission. Uncompleting (is_done=false) bypasses this.
+    if (is_done && current.parentItemId === null && current.kind === "todo") {
+      const openChildren = await tx
+        .select({ id: items.id, text: items.text })
+        .from(items)
+        .where(
+          and(
+            eq(items.parentItemId, current.id),
+            eq(items.isDone, false),
+            isNull(items.archivedAt),
+          ),
+        );
+      if (openChildren.length > 0) {
+        const preview = openChildren
+          .slice(0, 5)
+          .map((c) => `"${c.text}"`)
+          .join(", ");
+        const extra =
+          openChildren.length > 5
+            ? ` ve ${openChildren.length - 5} tane daha`
+            : "";
+        return err(
+          "gate_blocked",
+          `Parent has ${openChildren.length} open sub-item(s): ${preview}${extra}. ` +
+            `Ask the user: "${openChildren.length} alt item açık (${preview}${extra}). Önce onları bitirelim mi yoksa hepsini birden tamamladım mı diyim?" ` +
+            `If they say "hepsini" / "all" / "evet hepsi", call complete_item on each child id first, then retry the parent.`,
+        );
+      }
     }
 
     const warnings: string[] = [];

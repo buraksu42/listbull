@@ -48,10 +48,15 @@ export async function executeCreateItem(
 
   return await db.transaction(async (tx) => {
     // Validate parent FK eagerly so the CHECK constraint on the DB
-    // doesn't surface as a generic 23514 error.
+    // doesn't surface as a generic 23514 error. Also enforce the
+    // one-level nesting rule for todos (parent must be top-level + same kind).
     if (parent_item_id) {
       const [parent] = await tx
-        .select({ id: items.id })
+        .select({
+          id: items.id,
+          parentItemId: items.parentItemId,
+          kind: items.kind,
+        })
         .from(items)
         .where(
           and(eq(items.id, parent_item_id), eq(items.chatId, ctx.chatId)),
@@ -61,6 +66,18 @@ export async function executeCreateItem(
         return err(
           ERR.not_found,
           `parent_item_id ${parent_item_id} not found in this chat.`,
+        );
+      }
+      if (parent.parentItemId !== null) {
+        return err(
+          ERR.invalid_input,
+          `no_grandchildren: parent ${parent_item_id} is already nested under another item. Sub-items can only nest one level deep.`,
+        );
+      }
+      if (kind === "todo" && parent.kind !== "todo") {
+        return err(
+          ERR.invalid_input,
+          `kind_mismatch: cannot nest a todo under a ${parent.kind} parent. Checklist sub-items must share kind with their parent.`,
         );
       }
     }
