@@ -115,6 +115,9 @@ export type MessageWithToolCalls = Omit<Message, "toolCalls"> & {
 
 // ─── Activity log payload snapshots (chat-scoped) ───────────────────
 
+/** 'todo' | 'memory' | 'secret' — items.kind discriminator. */
+export type ItemKind = "todo" | "memory" | "secret";
+
 /** JSON-safe snapshot of an `items` row. */
 export type ItemSnapshot = {
   id: string;
@@ -136,6 +139,10 @@ export type ItemSnapshot = {
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** 'todo' | 'memory' | 'secret' — discriminator. */
+  kind: ItemKind;
+  /** Nested-item parent; null for top-level. */
+  parentItemId: string | null;
 };
 
 /** JSON-safe snapshot of an `item_reminders` row. */

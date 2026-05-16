@@ -45,6 +45,10 @@ export const itemSnapshotSchema = z.object({
   archivedAt: z.string().datetime({ offset: true }).nullable(),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
+  /** 'todo' | 'memory' | 'secret' — discriminator (Phase 17b). */
+  kind: z.enum(["todo", "memory", "secret"]),
+  /** Nested-item parent; null for top-level. */
+  parentItemId: z.string().uuid().nullable(),
 });
 
 export type ItemSnapshotShape = z.infer<typeof itemSnapshotSchema>;
@@ -89,6 +93,21 @@ export const createItemInputSchema = z
      */
     deadline_at: z.string().datetime({ offset: true }).optional(),
     is_checkable: z.boolean().default(true),
+    /**
+     * Phase 17b: discriminator. 'todo' is the default; 'memory' marks
+     * never-auto-delete keepsakes (tickets, docs, receipts) and is
+     * protected from delete_item/complete_item. 'secret' is reserved
+     * for the /şifre slash flow — LLM must NOT create secrets directly.
+     */
+    kind: z.enum(["todo", "memory"]).optional().default("todo"),
+    /**
+     * Phase 17b: when set, the new item becomes a nested sub-item of
+     * the given parent (e.g. "Paris seyahati" → "pasaport", "uçak
+     * bileti", "otel"). Parent must exist in the same chat and not be
+     * archived. Mostly used inside memory mode but allowed for todos
+     * too.
+     */
+    parent_item_id: z.string().uuid().optional(),
   })
   .refine(
     (v) => !(v.is_checkable === false && v.deadline_at !== undefined),
@@ -125,6 +144,14 @@ export const searchItemsInputSchema = z.object({
    * reminder. Use this to answer "hangi hatırlatıcılar var?".
    */
   has_reminder: z.boolean().default(false),
+  /**
+   * Phase 17b: discriminator filter. Defaults to 'todo' so backward-
+   * compat is preserved (existing search calls keep returning to-dos
+   * only). Pass 'memory' to find memory items, 'secret' for password
+   * lookups (the executor still enforces DM-only on secrets), or 'any'
+   * to search the whole chat.
+   */
+  kind: z.enum(["todo", "memory", "secret", "any"]).optional().default("todo"),
   limit: z.number().int().min(1).max(50).default(20),
 });
 
@@ -337,20 +364,28 @@ export const setItemAttributesInputSchema = z
     priority: z.enum(["low", "normal", "high"]).optional(),
     /** Replace tags (not append). Pass [] to clear. */
     tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+    /**
+     * Phase 17b: promote a todo → memory or demote memory → todo.
+     * 'secret' is not allowed via this tool — secrets are created and
+     * destroyed only through the /şifre slash flow.
+     */
+    kind: z.enum(["todo", "memory"]).optional(),
   })
   .refine(
     (v) =>
       v.status !== undefined ||
       v.priority !== undefined ||
-      v.tags !== undefined,
+      v.tags !== undefined ||
+      v.kind !== undefined,
     {
-      message: "at least one of status/priority/tags must be supplied",
+      message:
+        "at least one of status/priority/tags/kind must be supplied",
     },
   );
 
 export const setItemAttributesOutputSchema = z.object({
   item: itemSnapshotSchema,
-  changes: z.array(z.enum(["status", "priority", "tags"])),
+  changes: z.array(z.enum(["status", "priority", "tags", "kind"])),
 });
 
 export type SetItemAttributesInput = z.infer<typeof setItemAttributesInputSchema>;

@@ -11,6 +11,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 const timestamps = {
@@ -144,6 +145,9 @@ export const chatMembers = pgTable(
 // ─── items ─────────────────────────────────────────────────────────
 //
 // Phase 17: list_id removed. Items belong directly to a `chats` row.
+// Phase 17b (Memory mode): `kind` discriminator splits items into
+// to-dos, never-auto-delete memory keepsakes, and encrypted secrets
+// (DM-only, always nested under a memory parent).
 export const items = pgTable(
   "items",
   {
@@ -151,6 +155,28 @@ export const items = pgTable(
     chatId: bigint("chat_id", { mode: "number" })
       .notNull()
       .references(() => chats.chatId, { onDelete: "cascade" }),
+    /**
+     * 'todo' | 'memory' | 'secret' (app-layer enum; CHECK constraint
+     * in DB). Memory rows are protected from auto-cleanup + delete
+     * tool guards. Secret rows store the AES-256-GCM envelope in
+     * `secretEncrypted` and are always nested under a memory parent.
+     */
+    kind: text("kind").notNull().default("todo"),
+    /**
+     * Nested-item linkage: a memory item like "Paris trip" can have
+     * sub-items (passport, tickets, hotel) bound to it. Secrets MUST
+     * have a parent. Top-level memory and todo items keep this NULL.
+     */
+    parentItemId: uuid("parent_item_id").references(
+      (): AnyPgColumn => items.id,
+      { onDelete: "cascade" },
+    ),
+    /**
+     * AES-256-GCM envelope (base64) holding a credential value.
+     * Populated only when kind='secret'. ENV_KEY-encrypted at rest;
+     * decrypted on demand via reveal_secret tool (DM-only flow).
+     */
+    secretEncrypted: text("secret_encrypted"),
     text: text("text").notNull(),
     /**
      * Phase 14a: optional long-form context (≤5000 chars). Distinct
@@ -200,6 +226,15 @@ export const items = pgTable(
     index("items_assignee_idx").on(t.assigneeId, t.isDone),
     index("items_status_idx").on(t.chatId, t.status),
     index("items_tags_gin").using("gin", t.tags),
+    index("items_kind_idx").on(
+      t.chatId,
+      t.kind,
+      t.archivedAt,
+      t.position,
+    ),
+    index("items_parent_idx")
+      .on(t.parentItemId)
+      .where(sql`${t.parentItemId} is not null`),
   ],
 );
 

@@ -65,6 +65,8 @@ export function toItemSnapshot(row: Item): ItemSnapshot {
     archivedAt: toIso(row.archivedAt),
     createdAt: toIso(row.createdAt)!,
     updatedAt: toIso(row.updatedAt)!,
+    kind: (row.kind ?? "todo") as ItemSnapshot["kind"],
+    parentItemId: row.parentItemId ?? null,
   };
 }
 

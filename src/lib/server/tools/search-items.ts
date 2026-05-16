@@ -27,12 +27,21 @@ export async function executeSearchItems(
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
-  const { query, include_done, include_archived, has_reminder, limit } =
-    parsed.data;
+  const {
+    query,
+    include_done,
+    include_archived,
+    has_reminder,
+    kind,
+    limit,
+  } = parsed.data;
 
   const conds = [eq(items.chatId, ctx.chatId)];
   if (!include_done) conds.push(eq(items.isDone, false));
   if (!include_archived) conds.push(isNull(items.archivedAt));
+  // 'any' opts out of the filter entirely; the default 'todo' keeps
+  // pre-Phase-17b call sites returning the same rows as before.
+  if (kind !== "any") conds.push(eq(items.kind, kind));
 
   if (query.trim().length > 0) {
     const pattern = `%${escapeLike(query.trim())}%`;

@@ -27,7 +27,7 @@ export async function executeSetItemAttributes(
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
-  const { item_id, status, priority, tags } = parsed.data;
+  const { item_id, status, priority, tags, kind } = parsed.data;
 
   return await db.transaction(async (tx) => {
     const [current] = await tx
@@ -36,8 +36,17 @@ export async function executeSetItemAttributes(
       .where(and(eq(items.id, item_id), eq(items.chatId, ctx.chatId)))
       .limit(1);
     if (!current) return err(ERR.not_found, "Item not found.");
+    if (kind !== undefined && current.kind === "secret") {
+      // Secrets are bound to the /şifre flow — refuse silent
+      // re-kinding so a credential never accidentally surfaces in
+      // the /items view.
+      return err(
+        "protected",
+        "Secrets are managed only via the /şifre flow.",
+      );
+    }
 
-    const changes: Array<"status" | "priority" | "tags"> = [];
+    const changes: Array<"status" | "priority" | "tags" | "kind"> = [];
     const patch: Partial<typeof items.$inferInsert> = {
       updatedAt: new Date(),
     };
@@ -81,6 +90,10 @@ export async function executeSetItemAttributes(
       }
       patch.tags = normalized;
       changes.push("tags");
+    }
+    if (kind !== undefined && kind !== current.kind) {
+      patch.kind = kind;
+      changes.push("kind");
     }
 
     if (changes.length === 0) {

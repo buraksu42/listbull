@@ -218,6 +218,13 @@
       "when": 1778891500000,
       "tag": "0030_item_reminders_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1778891600000,
+      "tag": "0031_memory_mode",
+      "breakpoints": true
     }
   ]
 }

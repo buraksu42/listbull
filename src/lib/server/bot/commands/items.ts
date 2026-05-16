@@ -52,10 +52,19 @@ export async function buildItemsView(
   locale: "tr" | "en",
   offset: number,
 ): Promise<{ text: string; keyboard: InlineKeyboard }> {
+  // /items renders to-dos only — memory items have their own /memory
+  // surface (Phase 17b). The kind filter keeps the existing UX exactly
+  // the same for any pre-existing rows since the default is 'todo'.
   const rows = await db
     .select()
     .from(items)
-    .where(and(eq(items.chatId, chatId), isNull(items.archivedAt)))
+    .where(
+      and(
+        eq(items.chatId, chatId),
+        eq(items.kind, "todo"),
+        isNull(items.archivedAt),
+      ),
+    )
     .orderBy(asc(items.isDone), asc(items.position), asc(items.createdAt))
     .limit(PAGE_SIZE + 1)
     .offset(offset);
@@ -66,7 +75,13 @@ export async function buildItemsView(
   const totalRow = await db
     .select({ id: items.id })
     .from(items)
-    .where(and(eq(items.chatId, chatId), isNull(items.archivedAt)));
+    .where(
+      and(
+        eq(items.chatId, chatId),
+        eq(items.kind, "todo"),
+        isNull(items.archivedAt),
+      ),
+    );
   const total = totalRow.length;
 
   // One-shot attachment count for the visible page so we can render

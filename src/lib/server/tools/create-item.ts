@@ -8,6 +8,8 @@
  */
 import "server-only";
 
+import { and, eq } from "drizzle-orm";
+
 import { db } from "@/lib/db/client";
 import { activityLog, itemReminders, items } from "@/lib/db/schema";
 import {
@@ -26,7 +28,14 @@ export async function executeCreateItem(
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
-  const { text, description, deadline_at, is_checkable } = parsed.data;
+  const {
+    text,
+    description,
+    deadline_at,
+    is_checkable,
+    kind,
+    parent_item_id,
+  } = parsed.data;
 
   const warnings: string[] = [];
   let deadlineDate: Date | null = null;
@@ -38,6 +47,24 @@ export async function executeCreateItem(
   }
 
   return await db.transaction(async (tx) => {
+    // Validate parent FK eagerly so the CHECK constraint on the DB
+    // doesn't surface as a generic 23514 error.
+    if (parent_item_id) {
+      const [parent] = await tx
+        .select({ id: items.id })
+        .from(items)
+        .where(
+          and(eq(items.id, parent_item_id), eq(items.chatId, ctx.chatId)),
+        )
+        .limit(1);
+      if (!parent) {
+        return err(
+          ERR.not_found,
+          `parent_item_id ${parent_item_id} not found in this chat.`,
+        );
+      }
+    }
+
     const [created] = await tx
       .insert(items)
       .values({
@@ -47,6 +74,8 @@ export async function executeCreateItem(
         isCheckable: is_checkable,
         deadlineAt: deadlineDate,
         createdBy: ctx.userId,
+        kind,
+        parentItemId: parent_item_id ?? null,
       })
       .returning();
     if (!created) throw new Error("create-item: insert returned no row");
