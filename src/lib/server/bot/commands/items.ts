@@ -101,10 +101,12 @@ export async function buildItemsView(
   );
   const attachmentCounts = new Map<string, number>();
   const reminderCounts = new Map<string, number>();
-  // Phase 17c: per-parent sub-item rollup. open = count of live,
-  // not-done children; total = all live children. Drives the
-  // 📂{open}/{total} body suffix + the "Alt-itemlar" inline button.
-  const childOpenCounts = new Map<string, number>();
+  // Phase 17c: per-parent sub-item rollup. done = count of live,
+  // completed children; total = all live children. Drives the
+  // 📂{done}/{total} body suffix + the "Alt-itemlar" inline button
+  // (done/total matches /done's existing convention; "7/7" reads as
+  // "all 7 done" — open/total had been confusingly inverted).
+  const childDoneCounts = new Map<string, number>();
   const childTotalCounts = new Map<string, number>();
   if (visibleIds.length > 0) {
     const aCounts = await db
@@ -135,7 +137,7 @@ export async function buildItemsView(
     const cCounts = await db
       .select({
         parentId: items.parentItemId,
-        open: sql<number>`count(*) FILTER (WHERE ${items.isDone} = false)::int`,
+        done: sql<number>`count(*) FILTER (WHERE ${items.isDone} = true)::int`,
         total: sql<number>`count(*)::int`,
       })
       .from(items)
@@ -148,7 +150,7 @@ export async function buildItemsView(
       .groupBy(items.parentItemId);
     for (const row of cCounts) {
       if (!row.parentId) continue;
-      childOpenCounts.set(row.parentId, row.open);
+      childDoneCounts.set(row.parentId, row.done);
       childTotalCounts.set(row.parentId, row.total);
     }
   }
@@ -208,8 +210,8 @@ export async function buildItemsView(
     const reminderCount = reminderCounts.get(it.id) ?? 0;
     const reminderSuffix = reminderCount > 0 ? " 🔔" : "";
     const childTotal = childTotalCounts.get(it.id) ?? 0;
-    const childOpen = childOpenCounts.get(it.id) ?? 0;
-    const childSuffix = childTotal > 0 ? ` 📂${childOpen}/${childTotal}` : "";
+    const childDone = childDoneCounts.get(it.id) ?? 0;
+    const childSuffix = childTotal > 0 ? ` 📂${childDone}/${childTotal}` : "";
     lines.push(
       `${num}. ${checkbox} ${priorityIcon}${statusIcon}${text}${deadlineSuffix}${reminderSuffix}${attachSuffix}${childSuffix}${tagSuffix}`,
     );
@@ -241,8 +243,8 @@ export async function buildItemsView(
     if (childTotal > 0) {
       const label =
         locale === "tr"
-          ? `📂 Alt-itemlar (${childOpen}/${childTotal})`
-          : `📂 Sub-items (${childOpen}/${childTotal})`;
+          ? `📂 Alt-itemlar (${childDone}/${childTotal})`
+          : `📂 Sub-items (${childDone}/${childTotal})`;
       keyboard.text(label, `item:children:${it.id}`).row();
     }
   }

@@ -98,7 +98,7 @@ export async function buildSubItemsView(
       ),
     );
   const total = totalRows.length;
-  const open = totalRows.filter((r) => !r.isDone).length;
+  const done = totalRows.filter((r) => r.isDone).length;
 
   const visibleIds = visible.map((r) => r.id);
   const attachmentCounts = new Map<string, number>();
@@ -132,10 +132,14 @@ export async function buildSubItemsView(
 
   const parentText =
     parent.text.length > 60 ? `${parent.text.slice(0, 60)}…` : parent.text;
+  // Auto-rollup flips parent.isDone when every live child is done.
+  // Surfacing that ✅ in the header is the only way the user sees
+  // the rollup happened — /items hides done parents.
+  const parentCheck = parent.isDone ? "✅ " : "";
   const header =
     locale === "tr"
-      ? `📂 ${parentText}\nAlt-itemlar (${open}/${total})`
-      : `📂 ${parentText}\nSub-items (${open}/${total})`;
+      ? `📂 ${parentCheck}${parentText}\nAlt-itemlar (${done}/${total})`
+      : `📂 ${parentCheck}${parentText}\nSub-items (${done}/${total})`;
 
   const keyboard = new InlineKeyboard();
 

@@ -77,12 +77,25 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  *   - Always called inside the same tx as the child write so the
  *     parent transition stays atomic with the trigger.
  */
+/**
+ * Result of an auto-rollup attempt. `flipped: true` means the parent's
+ * done state changed in this call; `parentId` + `parentNowDone` are
+ * populated when there was a parent to consider (regardless of flip).
+ * Callers use this to show feedback (e.g. a "✅ Checklist tamamlandı"
+ * callback-answer toast) without re-querying.
+ */
+export type RollupResult = {
+  parentId: string | null;
+  parentNowDone: boolean | null;
+  flipped: boolean;
+};
+
 export async function rollupParentDoneState(
   tx: Tx,
   childItemId: string,
   chatId: number,
   actorId: string,
-): Promise<void> {
+): Promise<RollupResult> {
   const [child] = await tx
     .select({
       parentItemId: items.parentItemId,
@@ -92,7 +105,7 @@ export async function rollupParentDoneState(
     .limit(1);
   if (!child || !child.parentItemId) {
     console.log("[rollup:skip]", { childItemId, reason: !child ? "child_missing" : "no_parent" });
-    return;
+    return { parentId: null, parentNowDone: null, flipped: false };
   }
 
   const [parent] = await tx
@@ -108,15 +121,15 @@ export async function rollupParentDoneState(
     .limit(1);
   if (!parent) {
     console.log("[rollup:skip]", { childItemId, parentId: child.parentItemId, reason: "parent_missing_or_archived" });
-    return;
+    return { parentId: child.parentItemId, parentNowDone: null, flipped: false };
   }
   if (parent.kind !== "todo") {
     console.log("[rollup:skip]", { parentId: parent.id, reason: "parent_kind", kind: parent.kind });
-    return;
+    return { parentId: parent.id, parentNowDone: parent.isDone, flipped: false };
   }
   if (parent.taskRecurrenceRule) {
     console.log("[rollup:skip]", { parentId: parent.id, reason: "rrule_parent" });
-    return;
+    return { parentId: parent.id, parentNowDone: parent.isDone, flipped: false };
   }
 
   const siblings = await tx
@@ -130,7 +143,7 @@ export async function rollupParentDoneState(
     );
   if (siblings.length === 0) {
     console.log("[rollup:skip]", { parentId: parent.id, reason: "no_siblings" });
-    return;
+    return { parentId: parent.id, parentNowDone: parent.isDone, flipped: false };
   }
 
   const doneCount = siblings.filter((s) => s.isDone === true).length;
@@ -143,7 +156,9 @@ export async function rollupParentDoneState(
     desired,
     willFlip: parent.isDone !== desired,
   });
-  if (parent.isDone === desired) return;
+  if (parent.isDone === desired) {
+    return { parentId: parent.id, parentNowDone: parent.isDone, flipped: false };
+  }
 
   const now = new Date();
   const [updated] = await tx
@@ -156,7 +171,10 @@ export async function rollupParentDoneState(
     })
     .where(eq(items.id, parent.id))
     .returning();
-  if (!updated) return;
+  if (!updated) {
+    console.log("[rollup:skip]", { parentId: parent.id, reason: "update_returned_no_row" });
+    return { parentId: parent.id, parentNowDone: parent.isDone, flipped: false };
+  }
 
   await tx.insert(activityLog).values({
     chatId,
@@ -170,6 +188,11 @@ export async function rollupParentDoneState(
       auto_rollup: true,
     },
   });
+  console.log("[rollup:flipped]", {
+    parentId: parent.id,
+    nowDone: desired,
+  });
+  return { parentId: parent.id, parentNowDone: desired, flipped: true };
 }
 
 /**

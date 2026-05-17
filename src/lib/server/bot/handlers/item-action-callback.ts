@@ -32,7 +32,7 @@ import { buildSubItemsView } from "@/lib/server/bot/views/sub-items";
 import { insertBotActionContext } from "@/lib/db/queries/bot-action-contexts";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
-import { rollupParentDoneState } from "@/lib/server/tools/_shared";
+import { rollupParentDoneState, type RollupResult } from "@/lib/server/tools/_shared";
 import { toItemSnapshot } from "@/lib/db/snapshots";
 
 export async function handleItemActionCallback(
@@ -473,6 +473,10 @@ export async function handleItemActionCallback(
     const itemId = data.slice("item:toggle:".length);
     console.log("[cb:toggle]", { chatId, itemId });
     let toggledParentId: string | null = null;
+    // Wrapped in an object to defeat TS's narrowing of `let` written
+    // only inside a closure (otherwise the post-tx access reads as
+    // `never`).
+    const captured: { rollup: RollupResult | null } = { rollup: null };
     await db.transaction(async (tx) => {
       const [current] = await tx
         .select()
@@ -505,9 +509,29 @@ export async function handleItemActionCallback(
       // Mirror complete_item executor: when the toggled row is a
       // checklist child, reconcile the parent's done state in the
       // same tx so the badge in the re-rendered view is correct.
-      await rollupParentDoneState(tx, updated.id, chatId, user.id);
+      captured.rollup = await rollupParentDoneState(
+        tx,
+        updated.id,
+        chatId,
+        user.id,
+      );
     });
-    await ctx.answerCallbackQuery();
+    const r = captured.rollup;
+    // Toast on rollup flip so the user sees the parent state change
+    // — the sub-items view header gains a ✅ on parent too, but a
+    // popup is unmissable.
+    const toast: string | undefined =
+      r && r.flipped && r.parentNowDone === true
+        ? locale === "tr"
+          ? "✅ Checklist tamamlandı"
+          : "✅ Checklist done"
+        : r && r.flipped && r.parentNowDone === false
+          ? locale === "tr"
+            ? "↩️ Checklist tekrar açık"
+            : "↩️ Checklist reopened"
+          : undefined;
+    if (toast) await ctx.answerCallbackQuery({ text: toast });
+    else await ctx.answerCallbackQuery();
     if (toggledParentId) {
       const view = await buildSubItemsView(
         toggledParentId,
