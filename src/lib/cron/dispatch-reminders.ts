@@ -71,10 +71,6 @@ function formatReminderBody(args: {
   return lines.join("\n");
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
 async function pickEligibleReminders(): Promise<ReminderJobItem[]> {
   const rows = await db.execute<{
     reminder_id: string;
@@ -161,14 +157,7 @@ export async function dispatchReminders(): Promise<{
   let failed = 0;
 
   for (const r of picked) {
-    const userTg = r.assigneeTelegramId ?? r.ownerTelegramId;
-    // Route to the chat the item lives in (group → group, DM → DM)
-    // instead of unconditionally piping to the user's DM. Group items
-    // surface their reminders in-context so everyone sees the ping;
-    // the targeted user is HTML-mentioned + force_reply selective so
-    // a tap-reply continues the conversation without re-@-mentioning.
-    const targetTg = r.chatId;
-    const isGroup = r.chatId < 0;
+    const targetTg = r.assigneeTelegramId ?? r.ownerTelegramId;
     const locale = pickLocale(r.assigneeLocale ?? r.ownerLocale);
     const timezone = r.assigneeTimezone ?? r.ownerTimezone;
     // Date/time format defaults pulled in via pickup query but kept
@@ -176,7 +165,7 @@ export async function dispatchReminders(): Promise<{
     const dateFormat = "DD.MM.YYYY";
     const timeFormat = "24h";
 
-    const rawBody = formatReminderBody({
+    const body = formatReminderBody({
       locale,
       itemText: r.text,
       remindAt: r.remindAt,
@@ -186,21 +175,8 @@ export async function dispatchReminders(): Promise<{
       timeFormat,
     });
 
-    const body = isGroup
-      ? `<a href="tg://user?id=${userTg}">🔔</a> ${escapeHtml(rawBody)}`
-      : rawBody;
-    const opts = isGroup
-      ? {
-          parse_mode: "HTML" as const,
-          reply_markup: {
-            force_reply: true as const,
-            selective: true as const,
-          },
-        }
-      : undefined;
-
     try {
-      await bot.api.sendMessage(targetTg, body, opts);
+      await bot.api.sendMessage(targetTg, body);
       await db.execute(sql`
         UPDATE item_reminders
            SET sent = true, sent_at = NOW()
