@@ -570,7 +570,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // actionMarker runs after attachment so it can layer the directive
   // on top while preserving attachment metadata for the LLM.
   if (actionMarker) {
-    const directive = buildActionDirective(actionMarker, effectiveText);
+    const directive = buildActionDirective(actionMarker, effectiveText, locale);
     llmContent = attachment
       ? `${directive}\n\n${formatAttachmentContext(attachment)}`
       : directive;
@@ -746,6 +746,7 @@ function toMessageRow(
 function buildActionDirective(
   marker: { action: string; itemId: string | null },
   userText: string,
+  locale: "tr" | "en",
 ): string {
   const trimmed = userText.trim();
   // Defense against quote-breakout / instruction injection inside
@@ -763,21 +764,38 @@ function buildActionDirective(
   // Use a fenced delimiter the user cannot include literally to
   // unambiguously frame the payload.
   const userBlock = `\n---USER REPLY---\n${safeBody}\n---END USER REPLY---`;
+  const localeReminder =
+    locale === "tr"
+      ? " Reply to the user in Turkish."
+      : " Reply to the user in English.";
+  // Intent-classification hint shared by per-item action directives.
+  // Force-reply prompts can be misused: the user clicks ✏️ then types
+  // "@X'e ata" (an assignment command, not new text). Earlier builds
+  // blindly fed that string into update_item.text and corrupted items.
+  const intentGuard =
+    " Before acting: re-read the user's reply and judge whether it" +
+    " actually matches the prompted intent. If it looks like a" +
+    " DIFFERENT action on the same item ('@X'e ata' = assign," +
+    " 'sil' / 'delete' = delete, 'yarın 18:00' alone = deadline," +
+    " 'X dk sonra' = reminder, 'tamam' / 'done' = complete," +
+    " 'tag #etiket' = set_item_attributes), call THAT tool on the" +
+    " same item_id instead of the prompted one. Don't overwrite the" +
+    " item's text with a command phrase.";
   switch (marker.action) {
     case "edit":
-      return `Update item ${marker.itemId} — change its text to the user reply below. Call update_item.${userBlock}`;
+      return `User clicked ✏️ on item ${marker.itemId} and you prompted for new text. Their reply is below. Default action: call update_item with text = user reply.${intentGuard}${localeReminder}${userBlock}`;
     case "deadline":
-      return `Set the deadline of item ${marker.itemId} from the user reply below. Call set_deadline. If the user said "remove" or "clear", clear the deadline by passing deadline_at: null.${userBlock}`;
+      return `User clicked 📅 on item ${marker.itemId} and you prompted for a deadline. Default action: call set_deadline. If the user said "remove" or "clear" / "kaldır" / "sil", pass deadline_at: null.${intentGuard}${localeReminder}${userBlock}`;
     case "reminder":
-      return `Add a reminder to item ${marker.itemId} from the user reply below. Call add_reminder — use offset_minutes when the user says "X before deadline", remind_at for absolute times.${userBlock}`;
+      return `User clicked ⏰ on item ${marker.itemId} and you prompted for a reminder. Default action: call add_reminder. Use offset_minutes when the user says "X before deadline", remind_at for absolute times.${intentGuard}${localeReminder}${userBlock}`;
     case "attach":
-      return `User is attaching a file to item ${marker.itemId}. Their accompanying note is below. Call attach_file_to_item with the attachment metadata from the latest message context.${userBlock}`;
+      return `User clicked 📎 on item ${marker.itemId} and is attaching a file. Their accompanying note is below. Call attach_file_to_item with the attachment metadata from the latest message context.${localeReminder}${userBlock}`;
     case "memory_add":
-      return `User wants a new MEMORY item (kind='memory') with the text below. Call create_item with kind='memory'. Memory items are permanent keepsakes (tickets, docs, receipts); never auto-archive. If an attachment is present in the message, also call attach_file_to_item against the returned item id.${userBlock}`;
+      return `User wants a new MEMORY item (kind='memory') with the text below. Call create_item with kind='memory'. Memory items are permanent keepsakes (tickets, docs, receipts); never auto-archive. If an attachment is present in the message, also call attach_file_to_item against the returned item id.${localeReminder}${userBlock}`;
     case "items_add":
-      return `User wants a new TODO item (kind='todo') with the text below. Call create_item with kind='todo'. Use the text verbatim as the item text — do not interpret it as a question or rephrase. If an attachment is present, also call attach_file_to_item against the returned item id.${userBlock}`;
+      return `User wants a new TODO item (kind='todo') with the text below. Call create_item with kind='todo'. Use the text verbatim as the item text — do not interpret it as a question or rephrase. If an attachment is present, also call attach_file_to_item against the returned item id.${localeReminder}${userBlock}`;
     case "add_child":
-      return `User wants a new SUB-ITEM under parent ${marker.itemId} with the text below. Call create_item with parent_item_id="${marker.itemId}" and kind='todo'. If the parent is a memory item the executor will reject — fall back to a plain create_item with kind='memory' and the same parent_item_id. Do NOT skip the parent_item_id; the user explicitly chose the parent via the "+ Alt-item ekle" button.${userBlock}`;
+      return `User wants a new SUB-ITEM under parent ${marker.itemId} with the text below. Call create_item with parent_item_id="${marker.itemId}" and kind='todo'. If the parent is a memory item the executor will reject — fall back to a plain create_item with kind='memory' and the same parent_item_id. Do NOT skip the parent_item_id; the user explicitly chose the parent via the "+ Alt-item ekle" button.${localeReminder}${userBlock}`;
     default:
       return safeBody;
   }
