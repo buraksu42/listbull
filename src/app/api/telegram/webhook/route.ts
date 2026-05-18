@@ -108,6 +108,26 @@ export async function POST(request: Request) {
     }
   }
 
+  // Diagnostic: enumerate which update fields are populated. Lets us
+  // tell from logs whether Telegram is delivering messages we expect
+  // (e.g. group @-mentions) or dropping them upstream due to privacy
+  // mode / allowed_updates.
+  const updateRecord = update as unknown as Record<string, unknown>;
+  const kinds = Object.keys(updateRecord).filter(
+    (k) => k !== "update_id" && updateRecord[k] !== undefined,
+  );
+  const m: { chat?: { id?: number; type?: string }; text?: string; entities?: Array<{ type?: string }>; reply_to_message?: { from?: { id?: number } } } | undefined =
+    (update as { message?: unknown }).message as typeof m;
+  console.log("[webhook]", {
+    updateId: update.update_id,
+    kinds,
+    chatId: m?.chat?.id,
+    chatType: m?.chat?.type,
+    textLen: typeof m?.text === "string" ? m.text.length : 0,
+    entityTypes: m?.entities?.map((e) => e.type) ?? null,
+    isReply: Boolean(m?.reply_to_message),
+  });
+
   const bot = await getBot();
 
   // Telegram retries on 5xx — never throw out of the handler.
