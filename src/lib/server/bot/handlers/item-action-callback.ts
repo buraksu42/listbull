@@ -434,19 +434,39 @@ export async function handleItemActionCallback(
     return;
   }
 
-  // list:add — force-reply prompt for new item text.
+  // items:add — force-reply prompt for new item text.
+  //
+  // In groups: drop `selective: true` (otherwise Telegram requires a
+  // mention/reply target which we don't have here — the popup wouldn't
+  // appear and the user would type a regular message that needs
+  // @-mention to be visible to the bot under privacy mode). Persist a
+  // bot_action_context so the reply path in handle-message routes it
+  // to create_item without needing the user to phrase the intent.
   if (data === "items:add") {
     await ctx.answerCallbackQuery();
-    await ctx.api.sendMessage(
+    const isGroup =
+      ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
+    const sent = await ctx.api.sendMessage(
       chatId,
       locale === "tr" ? "✨ Yeni item ne yazayım?" : "✨ What's the new item?",
       {
         reply_markup: {
           force_reply: true,
-          selective: true,
+          // Selective targets only @-mentioned users — in groups the
+          // popup hides if nobody is mentioned. DM only has one user
+          // anyway, so non-selective is harmless there too.
+          selective: !isGroup,
         },
       },
     );
+    await insertBotActionContext({
+      chatId,
+      messageId: sent.message_id,
+      action: "items_add",
+      itemId: null,
+      targetChatId: null,
+      metadata: null,
+    });
     return;
   }
 

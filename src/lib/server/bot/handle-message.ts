@@ -491,9 +491,12 @@ export async function handleMessage(ctx: Context): Promise<void> {
       }
 
       if (persisted && persisted.action !== "set_key") {
-        // memory_add has no itemId (we're creating one); per-item
-        // actions (edit/deadline/reminder/attach) require it.
-        const needsItemId = persisted.action !== "memory_add";
+        // memory_add and items_add have no itemId (we're creating
+        // one); per-item actions (edit/deadline/reminder/attach)
+        // require it.
+        const needsItemId =
+          persisted.action !== "memory_add" &&
+          persisted.action !== "items_add";
         if (!needsItemId || persisted.itemId) {
           actionMarker = {
             action: persisted.action,
@@ -741,6 +744,8 @@ function buildActionDirective(
       return `User is attaching a file to item ${marker.itemId}. Their accompanying note is below. Call attach_file_to_item with the attachment metadata from the latest message context.${userBlock}`;
     case "memory_add":
       return `User wants a new MEMORY item (kind='memory') with the text below. Call create_item with kind='memory'. Memory items are permanent keepsakes (tickets, docs, receipts); never auto-archive. If an attachment is present in the message, also call attach_file_to_item against the returned item id.${userBlock}`;
+    case "items_add":
+      return `User wants a new TODO item (kind='todo') with the text below. Call create_item with kind='todo'. Use the text verbatim as the item text — do not interpret it as a question or rephrase. If an attachment is present, also call attach_file_to_item against the returned item id.${userBlock}`;
     case "add_child":
       return `User wants a new SUB-ITEM under parent ${marker.itemId} with the text below. Call create_item with parent_item_id="${marker.itemId}" and kind='todo'. If the parent is a memory item the executor will reject — fall back to a plain create_item with kind='memory' and the same parent_item_id. Do NOT skip the parent_item_id; the user explicitly chose the parent via the "+ Alt-item ekle" button.${userBlock}`;
     default:
