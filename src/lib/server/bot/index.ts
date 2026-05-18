@@ -33,6 +33,43 @@ export async function getBot(): Promise<Bot> {
     const bot = new Bot(env.TELEGRAM_BOT_TOKEN);
     registerHandlers(bot);
     await bot.init();
+    // Standard procedure: every time someone adds the bot to a group,
+    // Telegram surfaces an admin-rights dialog with these boxes
+    // pre-checked. This buys us:
+    //   • `chat_member` event delivery — requires admin, lets us
+    //     auto-sync members on join/leave (so "ata Aysel'e" works
+    //     without waiting for Aysel to message first).
+    //   • can_delete_messages — needed to redact a pasted password
+    //     in group chats.
+    //   • can_invite_users — opens future share-link / invite flows.
+    // Idempotent on the Telegram side; safe to call on every cold
+    // start. Failure is logged but non-fatal.
+    try {
+      await bot.api.setMyDefaultAdministratorRights({
+        rights: {
+          is_anonymous: false,
+          can_manage_chat: true,
+          can_delete_messages: true,
+          can_invite_users: true,
+          can_manage_video_chats: false,
+          can_restrict_members: false,
+          can_promote_members: false,
+          can_change_info: false,
+          can_post_messages: false,
+          can_edit_messages: false,
+          can_pin_messages: false,
+          can_manage_topics: false,
+          can_post_stories: false,
+          can_edit_stories: false,
+          can_delete_stories: false,
+        },
+        for_channels: false,
+      });
+    } catch (e) {
+      console.warn("[bot] setMyDefaultAdministratorRights failed", {
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
     cached = bot;
     return bot;
   })();
