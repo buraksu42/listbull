@@ -108,7 +108,8 @@ export async function executeRevealSecret(
   // the message.
   const labelHtml = escapeHtml(row.text);
   const valueHtml = escapeHtml(value);
-  const safeBody = `🔒 <b>${labelHtml}</b>\n\n<code>${valueHtml}</code>\n\n⚠️ Tap → kopyala. Okuduktan sonra sil — Telegram'da kayıtlı kalır.`;
+  const safeBody = `🔒 <b>${labelHtml}</b>\n\n<code>${valueHtml}</code>\n\n⏱ Bu mesaj 15 saniye sonra otomatik silinecek. Hemen kopyala (uzun-bas → Kopyala).`;
+  let deliveredMessageId: number | null = null;
   try {
     const res = await fetch(
       `${TELEGRAM_API}/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
@@ -122,7 +123,11 @@ export async function executeRevealSecret(
         }),
       },
     );
-    const json = (await res.json()) as { ok: boolean; description?: string };
+    const json = (await res.json()) as {
+      ok: boolean;
+      description?: string;
+      result?: { message_id?: number };
+    };
     if (!json.ok) {
       console.error("[reveal_secret] sendMessage failed", {
         itemId: row.id,
@@ -133,6 +138,7 @@ export async function executeRevealSecret(
         "Couldn't deliver the secret to chat.",
       );
     }
+    deliveredMessageId = json.result?.message_id ?? null;
   } catch (e) {
     console.error("[reveal_secret] sendMessage threw", {
       itemId: row.id,
@@ -151,6 +157,34 @@ export async function executeRevealSecret(
     payloadBefore: null,
     payloadAfter: { label: row.text, suffix },
   });
+
+  // Schedule TTL deletion. Plaintext stays in Telegram for 15s max
+  // (best-effort: relies on this container staying up; if it crashes
+  // before the timer fires the user must delete manually). Telegram
+  // bots may delete their own messages without time restrictions.
+  if (deliveredMessageId !== null) {
+    const targetMsgId = deliveredMessageId;
+    setTimeout(() => {
+      void fetch(
+        `${TELEGRAM_API}/bot${env.TELEGRAM_BOT_TOKEN}/deleteMessage`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            chat_id: ctx.chatId,
+            message_id: targetMsgId,
+          }),
+        },
+      ).catch((e: unknown) => {
+        // User may have deleted it themselves first; ignore.
+        console.warn("[reveal_secret] deferred delete failed", {
+          itemId: row.id,
+          messageId: targetMsgId,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      });
+    }, 15_000);
+  }
 
   return ok({ label: row.text, suffix, delivered: true });
 }
