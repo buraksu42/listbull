@@ -71,14 +71,20 @@ function formatReminderBody(args: {
   return lines.join("\n");
 }
 
+function toIso(v: Date | string): string {
+  return v instanceof Date ? v.toISOString() : new Date(v).toISOString();
+}
+
 async function pickEligibleReminders(): Promise<ReminderJobItem[]> {
   const rows = await db.execute<{
     reminder_id: string;
     item_id: string;
     chat_id: number;
     text: string;
-    remind_at: Date;
-    deadline_at: Date | null;
+    // postgres-js returns timestamptz as strings, not Date objects.
+    // Coerce below before any .toISOString() call.
+    remind_at: Date | string;
+    deadline_at: Date | string | null;
     kind: string;
     offset_minutes: number | null;
     recurrence_rule: string | null;
@@ -130,8 +136,8 @@ async function pickEligibleReminders(): Promise<ReminderJobItem[]> {
     itemId: r.item_id,
     chatId: r.chat_id,
     text: r.text,
-    remindAt: r.remind_at.toISOString(),
-    deadlineAt: r.deadline_at ? r.deadline_at.toISOString() : null,
+    remindAt: toIso(r.remind_at),
+    deadlineAt: r.deadline_at ? toIso(r.deadline_at) : null,
     kind: r.kind as ItemReminderKind,
     offsetMinutes: r.offset_minutes,
     recurrenceRule: r.recurrence_rule,
