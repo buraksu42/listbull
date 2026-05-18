@@ -140,7 +140,13 @@ async function sendSecretList(
  * match, then drive the reveal_secret executor which side-channels the
  * plaintext to the chat. If multiple labels match, ask the user to be
  * more specific instead of guessing.
+ *
+ * Exported so handle-message's natural-language intercept ("X şifresi
+ * ne?") can route directly without the LLM in the loop — haiku has
+ * repeatedly hallucinated "bulamadım" without calling search_items.
  */
+export { revealByLabel as tryRevealSecretByLabel };
+
 async function revealByLabel(
   ctx: Context,
   chatId: number,

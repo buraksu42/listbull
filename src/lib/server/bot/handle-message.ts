@@ -48,6 +48,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { toItemSnapshot } from "@/lib/db/snapshots";
 import { createToolDispatcher } from "@/lib/server/tools/dispatcher";
 import { pickLocale } from "@/lib/server/bot/i18n";
+import { tryRevealSecretByLabel } from "@/lib/server/bot/commands/secret";
 import { executeSetChatApiKey } from "@/lib/server/tools/set-chat-api-key";
 import { upsertChatMember } from "@/lib/db/queries/chats";
 
@@ -341,6 +342,28 @@ export async function handleMessage(ctx: Context): Promise<void> {
     return;
   }
 
+  const isReplyToBot =
+    message.reply_to_message?.from?.id === ctx.me.id;
+
+  // ─── Secret READ intent intercept (DM-only, deterministic) ────────
+  // Pattern-matches "X şifresi ne?", "X şifremi göster", "what's the
+  // X password", etc. and drives reveal_secret directly — bypassing
+  // the LLM. Haiku has repeatedly hallucinated "bulamadım" without
+  // calling search_items once the conversation history accumulates
+  // similar past replies. The intercept is the only reliable path.
+  //
+  // Skipped on group chats (secrets are DM-only at the executor too)
+  // and on replies to bot prompts (those carry the /password
+  // secret_label / secret_value flow which must not be intercepted).
+  if (!isReplyToBot && message.chat.type === "private") {
+    const label = extractSecretReadLabel(effectiveText);
+    if (label) {
+      console.log("[secret:intercept]", { chatId, label });
+      await tryRevealSecretByLabel(ctx, chatId, user.id, label, locale);
+      return;
+    }
+  }
+
   // ─── Free-form credential pattern intercept ───────────────────────
   // Stops the messages-table + OpenRouter request from carrying a
   // plaintext password when the user types "şifrem ABC123" instead
@@ -349,8 +372,6 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // through to the secret_value handler). Tuned for the high-recall
   // side: matches credentials that follow a label (`password: ...`,
   // `pin: ...`, `şifrem ABC123`).
-  const isReplyToBot =
-    message.reply_to_message?.from?.id === ctx.me.id;
   if (!isReplyToBot) {
     const FREEFORM_SECRET_RE =
       /\b(?:password|passwd|pwd|pass|pin|şifre(?:m|n|si)?|sifre(?:m|n|si)?)\b[\s:=,'-]+([A-Za-z0-9!@#$%^&*_+=.,/\\-]{6,})/i;
@@ -975,4 +996,67 @@ async function ensureSecretParent(
     .returning({ id: items.id });
   if (!created) throw new Error("ensureSecretParent: insert returned no row");
   return { id: created.id };
+}
+
+/**
+ * Detect a secret READ intent in free-form text and return the label
+ * keyword (the part before "şifre" / "password"). Returns null if the
+ * text doesn't look like a read request — caller falls through to the
+ * normal LLM path.
+ *
+ * Forms covered:
+ *   • "<label> şifresi ne / nedir / neydi / hangisi / nerede"
+ *   • "<label> şifresini söyle / göster / yolla / ver / aç"
+ *   • "<label> şifremi göster / yolla / ver / söyle"
+ *   • "what's the <label> password" / "what is my <label> password"
+ *   • "show / tell / send (me) (the/my) <label> password"
+ *   • "<label> password" (bare)
+ *
+ * Designed for HIGH PRECISION over recall — we'd rather miss a few
+ * exotic phrasings (LLM picks them up) than mis-route a non-secret
+ * question that happens to contain "şifre".
+ */
+export function extractSecretReadLabel(text: string): string | null {
+  let trimmed = text.trim();
+  if (trimmed.length === 0 || trimmed.length > 100) return null;
+  trimmed = trimmed.replace(/[?!.]+$/, "").trim();
+
+  let m: RegExpMatchArray | null;
+
+  // TR: "<label> şifre(si|sini|m|mi|emi) ne|nedir|neydi|göster|söyle|yolla|ver|hangisi|nerede|aç"
+  m = trimmed.match(
+    /^(.{1,40}?)\s+(?:şifre|sifre)(?:si|sini|m|mi|emi|n)?\s+(?:ne|nedir|neydi|göster|söyle|yolla|ver|hangisi|nerede|aç|paylaş)$/i,
+  );
+  if (m && m[1]) return cleanSecretLabel(m[1]);
+
+  // TR bare: "<label> şifresi" (rare; relies on user terseness)
+  // Skip — too ambiguous (could be statement, not question).
+
+  // EN: "what's the X password" / "what is my X password"
+  m = trimmed.match(
+    /^what(?:'?s| is)\s+(?:my\s+|the\s+)?(.{1,40}?)\s+password$/i,
+  );
+  if (m && m[1]) return cleanSecretLabel(m[1]);
+
+  // EN: "(show|tell|send|give) me (the|my) X password"
+  m = trimmed.match(
+    /^(?:show|tell|send|give|reveal)\s+(?:me\s+)?(?:my\s+|the\s+)?(.{1,40}?)\s+password$/i,
+  );
+  if (m && m[1]) return cleanSecretLabel(m[1]);
+
+  return null;
+}
+
+function cleanSecretLabel(raw: string): string | null {
+  // Strip Turkish genitive / accusative suffixes attached with apostrophe
+  // ("Gmail'in", "Netflix'i", "Wi-Fi'nin"). Leave the bare label so
+  // ilike has something to match.
+  const stripped = raw
+    .replace(/[''`].*$/, "")
+    .replace(/^["']|["']$/g, "")
+    .trim();
+  if (stripped.length === 0 || stripped.length > 40) return null;
+  // Reject pure stopwords / verbs accidentally captured.
+  if (/^(?:bir|bu|şu|o|the|a|an|my|your)$/i.test(stripped)) return null;
+  return stripped;
 }
