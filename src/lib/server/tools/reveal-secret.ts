@@ -29,6 +29,13 @@ import type { ExecResult } from "./_shared";
 
 const TELEGRAM_API = "https://api.telegram.org";
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 export async function executeRevealSecret(
   input: unknown,
   ctx: { userId: string; chatId: number },
@@ -92,7 +99,16 @@ export async function executeRevealSecret(
   // it never enters the LLM context. We use raw fetch (same as
   // send_item_attachments) to avoid threading a grammy Context
   // through the dispatcher.
-  const safeBody = `🔒 ${row.text}\n\n${value}\n\n⚠️ Bu mesajı okuduktan sonra sil — Telegram'da kayıtlı kalır.`;
+  //
+  // HTML <code> wraps the value so Telegram renders it as a
+  // monospaced inline span — tap-to-copy on mobile, click-select
+  // on desktop. Closest the Bot API gets to "auto clipboard".
+  // Both label and value are HTML-escaped because the user controls
+  // them; an "<script>" or "&" in either would otherwise corrupt
+  // the message.
+  const labelHtml = escapeHtml(row.text);
+  const valueHtml = escapeHtml(value);
+  const safeBody = `🔒 <b>${labelHtml}</b>\n\n<code>${valueHtml}</code>\n\n⚠️ Tap → kopyala. Okuduktan sonra sil — Telegram'da kayıtlı kalır.`;
   try {
     const res = await fetch(
       `${TELEGRAM_API}/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
@@ -102,6 +118,7 @@ export async function executeRevealSecret(
         body: JSON.stringify({
           chat_id: ctx.chatId,
           text: safeBody,
+          parse_mode: "HTML",
         }),
       },
     );
