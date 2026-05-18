@@ -59,6 +59,16 @@ export async function handleItemActionCallback(
     await ctx.answerCallbackQuery("No chat context.");
     return;
   }
+  // `selective: true` on force_reply requires Telegram to know which
+  // user to pop the reply UI for — either via @-mention or a
+  // reply-to. Our prompts ("✏️ X — yeni metni yaz") don't include a
+  // user mention, so in groups Telegram opens the popup for NOBODY,
+  // and the user's typed reply isn't auto-linked. Drop selective in
+  // groups so the popup opens for everyone in the group (the one who
+  // tapped will see it first). DM is single-user so selective is
+  // moot there.
+  const isGroup =
+    ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
 
   const user = await getUserByTelegramId(cb.from.id);
   if (!user) {
@@ -84,7 +94,7 @@ export async function handleItemActionCallback(
       locale === "tr"
         ? "📁 Hafızaya ne ekleyeyim?"
         : "📁 What should I keep in memory?",
-      { reply_markup: { force_reply: true, selective: true } },
+      { reply_markup: { force_reply: true, selective: !isGroup } },
     );
     await insertBotActionContext({
       chatId,
@@ -421,7 +431,7 @@ export async function handleItemActionCallback(
         : `📂 What to add under "${title}"?`;
     await ctx.answerCallbackQuery();
     const sent = await ctx.api.sendMessage(chatId, body, {
-      reply_markup: { force_reply: true, selective: true },
+      reply_markup: { force_reply: true, selective: !isGroup },
     });
     await insertBotActionContext({
       chatId,
@@ -689,7 +699,7 @@ export async function handleItemActionCallback(
           ? `📎 "${title}" — bu mesaja fotoğraf, dosya veya ses göndererek ekle.`
           : `📎 "${title}" — reply to this message with a photo, file, or voice note to attach.`;
       const sent = await ctx.api.sendMessage(chatId, body, {
-        reply_markup: { force_reply: true, selective: true },
+        reply_markup: { force_reply: true, selective: !isGroup },
       });
       await insertBotActionContext({
         chatId,
@@ -754,7 +764,7 @@ export async function handleItemActionCallback(
         : `📎 "${title}" — reply to this message with a photo, file, or voice note to attach.`;
     await ctx.answerCallbackQuery();
     const sent = await ctx.api.sendMessage(chatId, body, {
-      reply_markup: { force_reply: true, selective: true },
+      reply_markup: { force_reply: true, selective: !isGroup },
     });
     await insertBotActionContext({
       chatId,
@@ -882,7 +892,7 @@ export async function handleItemActionCallback(
       const sent = await ctx.api.sendMessage(chatId, body, {
         reply_markup: {
           force_reply: true,
-          selective: true,
+          selective: !isGroup,
         },
       });
       // Persist the action context keyed by the sent message_id so
