@@ -29,7 +29,24 @@ export type EnsureChatInput = {
  */
 export async function ensureChat(input: EnsureChatInput): Promise<Chat> {
   const existing = await getChatById(input.chatId);
-  if (existing) return existing;
+  if (existing) {
+    // Kick → re-add cycle leaves archivedAt set from my_chat_member.
+    // On re-entry, clear it so cron + LLM treat the chat as live
+    // again. Title may have changed too; refresh while we're here.
+    if (existing.archivedAt !== null || existing.title !== input.title) {
+      await db
+        .update(chats)
+        .set({
+          archivedAt: null,
+          title: input.title,
+          updatedAt: new Date(),
+        })
+        .where(eq(chats.chatId, input.chatId));
+      const refreshed = await getChatById(input.chatId);
+      if (refreshed) return refreshed;
+    }
+    return existing;
+  }
 
   await db.transaction(async (tx) => {
     await tx

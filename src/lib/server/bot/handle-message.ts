@@ -33,7 +33,7 @@ import {
 } from "@/lib/db/queries/bot-action-contexts";
 import { ensureChat } from "@/lib/db/queries/chats";
 import { getRecentMessages, insertMessages } from "@/lib/db/queries/messages";
-import { getUserByTelegramId } from "@/lib/db/queries/users";
+import { getUserByTelegramId, upsertUserFromTelegram } from "@/lib/db/queries/users";
 import { enforceRateLimit } from "@/lib/server/middleware/rate-limit";
 import { sliceForContext } from "@/lib/ai/conversation";
 import {
@@ -238,6 +238,36 @@ export async function handleMessage(ctx: Context): Promise<void> {
     ownerUserId: user.id,
   });
   await upsertChatMember(chatId, user.id);
+
+  // Lazy-sync any users mentioned via Telegram's @-suggestion popup
+  // (entity type `text_mention`, which carries a full user object —
+  // unlike plain `mention` which is just text). Lets the owner
+  // introduce a new group member to the bot in privacy-enabled
+  // groups: typing "@aysel" via the popup creates a text_mention,
+  // we upsert Aysel into users + chat_members so the next
+  // `assign_item` resolves her.
+  if (isGroupContext && Array.isArray(message.entities)) {
+    for (const ent of message.entities) {
+      if (ent.type !== "text_mention" || !ent.user) continue;
+      const tu = ent.user;
+      try {
+        const mentioned = await upsertUserFromTelegram({
+          telegramId: tu.id,
+          telegramUsername: tu.username ?? null,
+          telegramFirstName: tu.first_name,
+          telegramLastName: tu.last_name ?? null,
+          telegramPhotoUrl: null,
+          languageCode: tu.language_code ?? null,
+        });
+        await upsertChatMember(chatId, mentioned.id);
+      } catch (e) {
+        console.warn("[handle-message] text_mention upsert failed", {
+          mentionedTgId: tu.id,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+  }
 
   // Group privacy filter: only act on @-mentions or replies to bot.
   if (isGroupContext && !attachment) {
