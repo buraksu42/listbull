@@ -20,6 +20,7 @@ import { handleMessage } from "@/lib/server/bot/handle-message";
 import { handleChatMemberUpdate } from "@/lib/server/bot/handlers/chat-member-update";
 import { handleItemActionCallback } from "@/lib/server/bot/handlers/item-action-callback";
 import { handleMyChatMember } from "@/lib/server/bot/handlers/my-chat-member";
+import { groupReplyMiddleware } from "@/lib/server/bot/middleware/group-reply";
 import { env } from "@/lib/env";
 
 let cached: Bot | null = null;
@@ -43,6 +44,10 @@ export async function getBot(): Promise<Bot> {
 }
 
 function registerHandlers(bot: Bot): void {
+  // Auto-quote user message in groups (must run before any handler
+  // that calls ctx.reply so the wrap is in place).
+  bot.use(groupReplyMiddleware);
+
   bot.command("start", handleStart);
   bot.command("help", handleHelp);
   bot.command("reset", handleReset);
