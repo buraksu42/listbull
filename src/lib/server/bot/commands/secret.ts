@@ -21,7 +21,7 @@
  * Group chats refuse with a "DM'ime gel" nudge.
  */
 import type { Context } from "grammy";
-import { and, asc, eq, ilike, isNotNull } from "drizzle-orm";
+import { and, asc, eq, ilike, isNotNull, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { items } from "@/lib/db/schema";
@@ -107,6 +107,7 @@ async function sendSecretList(
         eq(items.chatId, chatId),
         eq(items.kind, "secret"),
         isNotNull(items.secretEncrypted),
+        isNull(items.archivedAt),
       ),
     )
     .orderBy(asc(items.text));
@@ -155,6 +156,7 @@ async function revealByLabel(
         eq(items.chatId, chatId),
         eq(items.kind, "secret"),
         isNotNull(items.secretEncrypted),
+        isNull(items.archivedAt),
         ilike(items.text, `%${label.replace(/[%_]/g, "\\$&")}%`),
       ),
     )

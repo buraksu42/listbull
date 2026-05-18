@@ -13,7 +13,7 @@
  */
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { activityLog, chats, items } from "@/lib/db/schema";
@@ -71,6 +71,7 @@ export async function executeRevealSecret(
       and(
         eq(items.id, parsed.data.item_id),
         eq(items.chatId, ctx.chatId),
+        isNull(items.archivedAt),
       ),
     )
     .limit(1);
