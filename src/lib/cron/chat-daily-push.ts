@@ -22,7 +22,12 @@ type DuePush = {
   title: string | null;
   ownerLocale: string;
   ownerTimezone: string;
+  ownerTelegramId: number;
 };
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 export async function dispatchChatDailyPush(): Promise<{
   picked: number;
@@ -35,8 +40,9 @@ export async function dispatchChatDailyPush(): Promise<{
     title: string | null;
     owner_locale: string;
     owner_timezone: string;
+    owner_telegram_id: number;
   }>(sql`
-    SELECT c.chat_id, c.title, u.locale AS owner_locale, u.timezone AS owner_timezone
+    SELECT c.chat_id, c.title, u.locale AS owner_locale, u.timezone AS owner_timezone, u.telegram_id AS owner_telegram_id
     FROM ${chats} c
     INNER JOIN ${users} u ON u.id = c.owner_user_id
     WHERE c.archived_at IS NULL
@@ -51,6 +57,7 @@ export async function dispatchChatDailyPush(): Promise<{
     title: r.title,
     ownerLocale: r.owner_locale,
     ownerTimezone: r.owner_timezone,
+    ownerTelegramId: r.owner_telegram_id,
   }));
 
   if (due.length === 0) {
@@ -106,7 +113,28 @@ export async function dispatchChatDailyPush(): Promise<{
       for (const r of itemRows) {
         lines.push(`• ${r.text}`);
       }
-      await bot.api.sendMessage(chat.chatId, lines.join("\n"));
+      // Match dispatch-reminders: in groups, fire with a selective
+      // force_reply so the chat owner gets the auto-reply UI and can
+      // tap-to-respond without re-typing the @-mention.
+      const isGroup = chat.chatId < 0;
+      const opts = isGroup
+        ? {
+            reply_markup: {
+              force_reply: true as const,
+              selective: true as const,
+            },
+          }
+        : undefined;
+      // Selective targeting in groups uses message text mentions; the
+      // header line above is plain text so selective wouldn't pin to
+      // anyone. Mention the owner via HTML at the top when grouped.
+      const body = isGroup
+        ? `<a href="tg://user?id=${chat.ownerTelegramId}">📅</a> ${escapeHtml(lines.join("\n"))}`
+        : lines.join("\n");
+      const groupOpts = isGroup
+        ? { ...opts, parse_mode: "HTML" as const }
+        : opts;
+      await bot.api.sendMessage(chat.chatId, body, groupOpts);
       sent++;
     } catch (e) {
       console.error("[chat-daily-push] failed", {
