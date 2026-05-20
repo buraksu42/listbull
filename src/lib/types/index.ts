@@ -69,8 +69,6 @@ export type ActivityAction =
   | "item_uncompleted"
   | "item_edited"
   | "item_deleted"
-  | "item_assigned"
-  | "item_unassigned"
   | "item_deadline_set"
   | "item_deadline_cleared"
   | "item_reminder_added"
