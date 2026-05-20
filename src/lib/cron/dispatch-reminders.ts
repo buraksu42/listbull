@@ -145,7 +145,11 @@ export async function dispatchReminders(): Promise<{
   let failed = 0;
 
   for (const r of picked) {
-    const targetTg = r.ownerTelegramId;
+    // Route to the item's own chat: a group item's reminder fires in
+    // the GROUP (everyone sees it); a DM item's reminder fires in the
+    // DM. For DM items r.chatId already equals the owner's Telegram
+    // id, so this is a no-op there.
+    const targetTg = r.chatId;
     const locale = pickLocale(r.ownerLocale);
     const timezone = r.ownerTimezone;
     const dateFormat = "DD.MM.YYYY";
