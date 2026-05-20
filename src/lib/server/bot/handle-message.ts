@@ -271,7 +271,11 @@ export async function handleMessage(ctx: Context): Promise<void> {
   }
 
   // Group privacy filter: only act on @-mentions or replies to bot.
-  if (isGroupContext && !attachment) {
+  // Applies to attachment messages too — without this, every file
+  // anyone uploads in the group would reach the LLM and burn tokens.
+  // An attachment only proceeds when its caption @-mentions the bot
+  // OR it's a reply to a bot prompt.
+  if (isGroupContext) {
     const botUsername = ctx.me.username;
     const mentionsBot =
       effectiveText.includes(`@${botUsername}`) ||
@@ -280,7 +284,13 @@ export async function handleMessage(ctx: Context): Promise<void> {
     effectiveText = effectiveText
       .replace(new RegExp(`@${botUsername}\\b`, "gi"), "")
       .trim();
-    if (effectiveText.length === 0 && !message.reply_to_message?.text) {
+    // Bail only when there's nothing actionable left: no text, no
+    // attachment, no reply context.
+    if (
+      effectiveText.length === 0 &&
+      !attachment &&
+      !message.reply_to_message?.text
+    ) {
       return;
     }
   }
