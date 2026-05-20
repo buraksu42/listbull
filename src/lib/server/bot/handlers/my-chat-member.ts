@@ -12,7 +12,7 @@ import { db } from "@/lib/db/client";
 import { chats } from "@/lib/db/schema";
 import { insertBotActionContext } from "@/lib/db/queries/bot-action-contexts";
 import { ensureChat, upsertChatMember } from "@/lib/db/queries/chats";
-import { getUserByTelegramId, upsertUserFromTelegram } from "@/lib/db/queries/users";
+import { upsertUserFromTelegram } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
 import type { ChatType } from "@/lib/types";
 

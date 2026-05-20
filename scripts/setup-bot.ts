@@ -128,8 +128,11 @@ async function main(): Promise<void> {
   console.log(`  2. /setjoingroups   @${botUsername} → Enable`);
   console.log(`                       (lets users add the bot to groups)`);
   console.log(`  3. /setprivacy      @${botUsername} → Disable`);
-  console.log(`                       (chat-only model needs to see all`);
-  console.log(`                        group messages, not just @mentions)`);
+  console.log(`                       (group voice notes can't @-mention`);
+  console.log(`                        the bot; privacy-off lets them reach`);
+  console.log(`                        the webhook. The bot's own code still`);
+  console.log(`                        only acts on @mentions, replies, and`);
+  console.log(`                        voice — no token waste on chatter.)`);
   console.log("");
 }
 

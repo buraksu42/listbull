@@ -392,9 +392,9 @@ export const botActionContexts = pgTable(
   {
     chatId: bigint("chat_id", { mode: "number" }).notNull(),
     messageId: bigint("message_id", { mode: "number" }).notNull(),
-    /** 'edit' | 'deadline' | 'reminder' | 'attach' | 'set_key' | 'memory_add' | 'secret_label' | 'secret_value' */
+    /** 'edit' | 'deadline' | 'reminder' | 'attach' | 'set_key' | 'memory_add' | 'items_add' | 'add_child' | 'secret_label' | 'secret_username' | 'secret_value' */
     action: text("action").notNull(),
-    /** item UUID for item:* actions; null for set_key/memory_add/secret_label. */
+    /** item UUID for per-item actions; null for set_key/memory_add/items_add/secret_*. */
     itemId: uuid("item_id"),
     /** target chat for set_key (group routing); null for item:* actions. */
     targetChatId: bigint("target_chat_id", { mode: "number" }),

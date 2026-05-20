@@ -84,8 +84,3 @@ export async function executeSearchItems(
     total_matched: rows.length,
   });
 }
-
-// Reference unused user_id so tree-shake doesn't strip in test stubs.
-export function __chatContext(_userId: string, _chatId: number): void {
-  // Intentionally empty.
-}

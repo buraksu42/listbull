@@ -42,14 +42,13 @@ export async function handleItemActionCallback(
   if (!cb || typeof cb.data !== "string") return;
   let data = cb.data;
   // Prefixes we own: `item:*` and `items:*` (todos), `memory:*`
-  // (memory-mode actions), `done:*` (completed view). Old `list:`
-  // kept as tolerant alias for legacy keyboards.
+  // (memory-mode actions), `done:*` (completed view). These match
+  // the prefix set the index.ts callback router forwards here.
   if (
     !data.startsWith("item:") &&
     !data.startsWith("items:") &&
     !data.startsWith("memory:") &&
-    !data.startsWith("done:") &&
-    !data.startsWith("list:")
+    !data.startsWith("done:")
   ) {
     return;
   }

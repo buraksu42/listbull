@@ -9,7 +9,7 @@ import "server-only";
 import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { chatMembers, items, users } from "@/lib/db/schema";
+import { chatMembers, items } from "@/lib/db/schema";
 import { getBot } from "@/lib/server/bot";
 import { pickLocale } from "@/lib/server/bot/i18n";
 

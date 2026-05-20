@@ -2,20 +2,20 @@
  * Reminder dispatcher (Phase 17 chat-only).
  *
  * Runs every 60 s in the Dokploy cron container. Pickup query:
- *   SELECT reminder + item + chat owner + assignee
+ *   SELECT reminder + item + chat owner
  *   FROM item_reminders
- *   JOIN items     ON items.id = item_reminders.item_id
- *   JOIN chats     ON chats.chat_id = items.chat_id
- *   JOIN users owner   ON owner.id = chats.owner_user_id
- *   LEFT JOIN users assignee ON assignee.id = items.assignee_id
+ *   JOIN items   ON items.id = item_reminders.item_id
+ *   JOIN chats   ON chats.chat_id = items.chat_id
+ *   JOIN users owner ON owner.id = chats.owner_user_id
  *   WHERE reminders.sent = false
  *     AND reminders.remind_at <= NOW()
  *     AND items.archived_at IS NULL
  *
- * For each: DM target (assignee fallback to owner) via the default
- * platform bot. Mark sent=true ONLY on success (Inv-11 idempotency).
- * Recurring reminders advance to next occurrence instead of permanent
- * sent.
+ * Each reminder fires in the item's own chat (`items.chat_id`): a
+ * group item's reminder lands in the group, a DM item's in the DM.
+ * Owner locale/timezone format the body. Mark sent=true ONLY on
+ * success (Inv-11 idempotency). Recurring reminders advance to the
+ * next occurrence instead of a permanent sent.
  */
 import "server-only";
 

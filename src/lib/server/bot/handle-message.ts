@@ -244,10 +244,9 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // Lazy-sync any users mentioned via Telegram's @-suggestion popup
   // (entity type `text_mention`, which carries a full user object —
   // unlike plain `mention` which is just text). Lets the owner
-  // introduce a new group member to the bot in privacy-enabled
-  // groups: typing "@aysel" via the popup creates a text_mention,
-  // we upsert Aysel into users + chat_members so the next
-  // `assign_item` resolves her.
+  // introduce a new group member to the bot: typing "@aysel" via the
+  // popup creates a text_mention; we upsert that user into users +
+  // chat_members so list_chat_members and #tag flows see them.
   if (isGroupContext && Array.isArray(message.entities)) {
     for (const ent of message.entities) {
       if (ent.type !== "text_mention" || !ent.user) continue;
@@ -492,6 +491,29 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // conversation model still does the tool routing.
   let groupVoiceAmbient = false;
   if (isVoiceInput && rawAttachment) {
+    // Refuse voice inside the /password flow. A spoken password
+    // would otherwise be transcribed through the STT model (a path
+    // the typed flow deliberately avoids) and STT mangles random
+    // credential strings anyway. Detect a reply to a secret_* prompt.
+    if (message.reply_to_message?.from?.id === ctx.me.id) {
+      const sctx = await getBotActionContext(
+        chatId,
+        message.reply_to_message.message_id,
+      );
+      if (
+        sctx &&
+        (sctx.action === "secret_label" ||
+          sctx.action === "secret_username" ||
+          sctx.action === "secret_value")
+      ) {
+        await ctx.reply(
+          locale === "tr"
+            ? "🔒 Şifre akışında sesli mesaj kabul edilmiyor — yazıyla gönder."
+            : "🔒 Voice isn't accepted in the password flow — type it instead.",
+        );
+        return;
+      }
+    }
     const transcript = await transcribeVoice({
       fileId: rawAttachment.fileId,
       kind: rawAttachment.kind,
@@ -880,9 +902,6 @@ function emptyTextFallback(toolNames: string[], locale: "tr" | "en"): string {
         break;
       case "remove_reminder":
         lines.push(locale === "tr" ? "🔕 Hatırlatıcı kaldırıldı." : "🔕 Reminder removed.");
-        break;
-      case "assign_item":
-        lines.push(locale === "tr" ? "👤 Atandı." : "👤 Assigned.");
         break;
       case "set_item_attributes":
         lines.push(locale === "tr" ? "🏷️ Güncellendi." : "🏷️ Updated.");
