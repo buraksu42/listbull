@@ -36,6 +36,11 @@ export async function executeSetChatApiKey(
     .limit(1);
   if (!chat) return err(ERR.not_found, "Chat not found.");
   if (chat.ownerUserId !== ctx.userId) {
+    console.warn("[set_chat_api_key] owner mismatch", {
+      chatId: ctx.chatId,
+      chatOwnerUserId: chat.ownerUserId,
+      callerUserId: ctx.userId,
+    });
     return err(
       ERR.forbidden,
       "Only the chat owner can set the OpenRouter API key.",
