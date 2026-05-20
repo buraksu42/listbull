@@ -376,17 +376,19 @@ export async function handleMessage(ctx: Context): Promise<void> {
   const isReplyToBot =
     message.reply_to_message?.from?.id === ctx.me.id;
 
-  // ─── Secret READ intent intercept (DM-only, deterministic) ────────
+  // ─── Secret READ intent intercept (deterministic) ─────────────────
   // Pattern-matches "X şifresi ne?", "X şifremi göster", "what's the
   // X password", etc. and drives reveal_secret directly — bypassing
   // the LLM. Haiku has repeatedly hallucinated "bulamadım" without
   // calling search_items once the conversation history accumulates
   // similar past replies. The intercept is the only reliable path.
   //
-  // Skipped on group chats (secrets are DM-only at the executor too)
-  // and on replies to bot prompts (those carry the /password
-  // secret_label / secret_value flow which must not be intercepted).
-  if (!isReplyToBot && message.chat.type === "private") {
+  // Runs in DM AND groups: a group-scoped secret reveals in its
+  // group (tryRevealSecretByLabel scopes the lookup to chatId, so a
+  // group only ever surfaces its own secrets). Skipped on replies to
+  // bot prompts — those carry the /password force-reply flow which
+  // must not be intercepted.
+  if (!isReplyToBot) {
     const label = extractSecretReadLabel(effectiveText);
     if (label) {
       console.log("[secret:intercept]", { chatId, label });
@@ -923,12 +925,22 @@ async function handleSecretStep(
   input: {
     chatId: number;
     userId: string;
-    persisted: { action: string; metadata: string | null; itemId: string | null };
+    persisted: {
+      action: string;
+      metadata: string | null;
+      itemId: string | null;
+      targetChatId: number | null;
+    };
     replyText: string;
     locale: "tr" | "en";
   },
 ): Promise<void> {
   const { chatId, userId, persisted, replyText, locale } = input;
+  // The chat the finished secret belongs to: the group it was started
+  // from (targetChatId), or the DM itself when started in DM. Carried
+  // across all three force-reply steps.
+  const targetChatId = persisted.targetChatId;
+  const secretChatId = targetChatId ?? chatId;
 
   // ── Step 1: label → ask for username ──────────────────────────────
   if (persisted.action === "secret_label") {
@@ -954,7 +966,7 @@ async function handleSecretStep(
       messageId: sent.message_id,
       action: "secret_username",
       itemId: null,
-      targetChatId: null,
+      targetChatId,
       metadata: label,
     });
     try {
@@ -987,7 +999,7 @@ async function handleSecretStep(
       messageId: sent.message_id,
       action: "secret_value",
       itemId: null,
-      targetChatId: null,
+      targetChatId,
       metadata: JSON.stringify({ label, username }),
     });
     // Username may be an email — mildly sensitive; delete it from the
@@ -1033,16 +1045,16 @@ async function handleSecretStep(
   );
   const suffix = value.length >= 4 ? value.slice(-4) : value;
 
-  // Ensure a single parent memory "📁 Şifreler" per chat so /memory
-  // groups credentials together and the CHECK constraint (secret
-  // must have a parent) is satisfied.
-  const parent = await ensureSecretParent(chatId, userId);
+  // Ensure a single parent memory "📁 Şifreler" in the SECRET's chat
+  // (the group when group-scoped, the DM otherwise) so /memory groups
+  // credentials together and the parent CHECK constraint is satisfied.
+  const parent = await ensureSecretParent(secretChatId, userId);
 
   await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(items)
       .values({
-        chatId,
+        chatId: secretChatId,
         text: label,
         kind: "secret",
         parentItemId: parent.id,
@@ -1052,7 +1064,7 @@ async function handleSecretStep(
       .returning();
     if (!created) throw new Error("secret insert returned no row");
     await tx.insert(activityLog).values({
-      chatId,
+      chatId: secretChatId,
       entityType: "item",
       entityId: created.id,
       action: "secret_created",
@@ -1067,7 +1079,8 @@ async function handleSecretStep(
     });
   });
 
-  // Auto-delete the pasted password message.
+  // Auto-delete the pasted password message (in the DM where the
+  // save flow runs — `chatId`, not the group `secretChatId`).
   try {
     await ctx.api.deleteMessage(chatId, message.message_id);
   } catch {
@@ -1079,10 +1092,16 @@ async function handleSecretStep(
       ? ` Kullanıcı: ${username}.`
       : ` Username: ${username}.`
     : "";
+  const scopeLine =
+    targetChatId !== null
+      ? locale === "tr"
+        ? " Grupta görünür."
+        : " Visible in the group."
+      : "";
   await ctx.reply(
     locale === "tr"
-      ? `🔒 "${label}" kaydedildi (…${suffix}).${userLine} Görmek için: "${label} şifresi ne?"`
-      : `🔒 "${label}" saved (…${suffix}).${userLine} To view: "what's the ${label} password?"`,
+      ? `🔒 "${label}" kaydedildi (…${suffix}).${userLine}${scopeLine} Görmek için: "${label} şifresi ne?"`
+      : `🔒 "${label}" saved (…${suffix}).${userLine}${scopeLine} To view: "what's the ${label} password?"`,
   );
 }
 

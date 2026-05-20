@@ -1,24 +1,22 @@
 /**
- * /sifre (or /secret) — DM-only encrypted credential storage.
+ * /password (alias /sifre) — encrypted credential storage.
  *
- * Flow (handled across this command + handle-message intercepts):
- *   1. User: /sifre (in DM)
- *   2. Bot: "Şifrenin etiketi ne? (örn. Gmail, Wi-Fi)"
- *           + force-reply, action context = 'secret_label'
- *   3. User replies: "Gmail"
- *   4. handle-message picks up the secret_label reply, sends:
- *      "Şimdi şifreyi yapıştır. Mesajını otomatik sileceğim."
- *           + force-reply, action context = 'secret_value', metadata = "Gmail"
- *   5. User replies with the password value.
- *   6. handle-message picks up the secret_value reply, encrypts with
- *      ENV_KEY, ensures a parent memory item "📁 Şifreler", inserts
- *      a kind='secret' child carrying secret_encrypted, deletes the
- *      user's pasted message, confirms.
+ * SAVE flow always runs in the user's DM (plaintext never lands in a
+ * group thread). Three steps: label → username → password — handled
+ * across this command + handle-message intercepts.
  *
- * The LLM is NEVER invoked for steps 4–6 — plaintext stays out of
- * the messages table and the OpenRouter request payload.
+ *   • /password in DM   → secret scoped to the DM (targetChatId null).
+ *   • /password in group → bot DMs the flow; the secret is scoped to
+ *     the GROUP (targetChatId = group chat id), so any group member
+ *     can later reveal it in the group.
  *
- * Group chats refuse with a "DM'ime gel" nudge.
+ * READ surfaces (`/password list`, `/password view <label>`, and the
+ * natural-language "X şifresi ne?" intercept) work in groups too —
+ * a group-scoped secret reveals in its group, where the bot deletes
+ * its own 15s-TTL side-channel message.
+ *
+ * The LLM is NEVER invoked for the save steps — plaintext stays out
+ * of the messages table and the OpenRouter request payload.
  */
 import type { Context } from "grammy";
 import { and, asc, eq, ilike, isNotNull, isNull } from "drizzle-orm";
@@ -42,27 +40,17 @@ export async function handleSecret(ctx: Context): Promise<void> {
   }
   const locale = pickLocale(user.locale);
   const chatId = message.chat.id;
-
-  if (message.chat.type !== "private") {
-    await ctx.reply(
-      locale === "tr"
-        ? "🔒 Şifre saklama güvenlik nedeniyle sadece DM'de çalışır. DM'ime gel ve /password yaz."
-        : "🔒 Password storage is DM-only. Message me privately and run /password.",
-    );
-    return;
-  }
+  const isGroup = message.chat.type !== "private";
 
   // Sub-command parsing: `/password`, `/password list`, `/password view <label>`.
-  // Anything after the command name is treated as args. The original message
-  // text still starts with `/password` (or `/sifre`) — strip it and trim.
   const raw = (message.text ?? "").trim();
   const args = raw.replace(/^\/(?:password|sifre)(?:@\w+)?\s*/i, "").trim();
 
+  // READ surfaces work in groups too — scoped to the current chat.
   if (/^list$/i.test(args)) {
     await sendSecretList(ctx, chatId, user.id, locale);
     return;
   }
-
   const viewMatch = args.match(/^view\s+(.+)$/i);
   if (viewMatch) {
     const label = viewMatch[1]!.trim();
@@ -70,22 +58,53 @@ export async function handleSecret(ctx: Context): Promise<void> {
     return;
   }
 
-  // No args (or unknown args) → original save flow.
-  const prompt =
-    locale === "tr"
+  // SAVE flow. Always runs in the user's DM. In a group, the secret
+  // is scoped to that group via targetChatId; in DM, targetChatId
+  // stays null (DM-scoped).
+  const targetChatId = isGroup ? chatId : null;
+  const groupTitle =
+    isGroup && "title" in message.chat
+      ? (message.chat as { title?: string }).title ?? null
+      : null;
+  const prompt = isGroup
+    ? locale === "tr"
+      ? `🔒 "${groupTitle ?? "bu grup"}" için şifre kaydı.\n\nEtiket ne olsun? (örn. Ofis Wi-Fi, Netflix)`
+      : `🔒 Password entry for "${groupTitle ?? "this group"}".\n\nWhat's the label? (e.g. Office Wi-Fi, Netflix)`
+    : locale === "tr"
       ? "🔒 Yeni şifre kaydı.\n\nEtiket ne olsun? (örn. Gmail, Netflix, Ev Wi-Fi)"
       : "🔒 New password entry.\n\nWhat's the label? (e.g. Gmail, Netflix, Home Wi-Fi)";
-  const sent = await ctx.api.sendMessage(chatId, prompt, {
-    reply_markup: { force_reply: true, selective: true },
-  });
-  await insertBotActionContext({
-    chatId,
-    messageId: sent.message_id,
-    action: "secret_label",
-    itemId: null,
-    targetChatId: null,
-    metadata: null,
-  });
+
+  // The save flow's force-reply prompt always goes to the user's DM
+  // (their Telegram id == their DM chat id).
+  try {
+    const sent = await ctx.api.sendMessage(from.id, prompt, {
+      reply_markup: { force_reply: true, selective: true },
+    });
+    await insertBotActionContext({
+      chatId: from.id,
+      messageId: sent.message_id,
+      action: "secret_label",
+      itemId: null,
+      targetChatId,
+      metadata: null,
+    });
+  } catch {
+    // Bot can't DM the user (they never /start'ed the DM).
+    await ctx.reply(
+      locale === "tr"
+        ? "🔒 Şifre kaydı DM'de yapılır ama sana yazamıyorum. Önce bana DM'den /start yaz, sonra tekrar dene."
+        : "🔒 Password setup happens in DM but I can't message you. Send me /start in DM first, then retry.",
+    );
+    return;
+  }
+
+  if (isGroup) {
+    await ctx.reply(
+      locale === "tr"
+        ? "📩 Şifreyi DM'den kuralım — sana özelden yazdım, oradan devam et."
+        : "📩 Let's set the password in DM — I've messaged you privately, continue there.",
+    );
+  }
 }
 
 /**

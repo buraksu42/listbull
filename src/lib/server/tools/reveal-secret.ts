@@ -8,15 +8,17 @@
  * only metadata (label + last-4 suffix + delivered flag) to the
  * dispatcher. The LLM never sees the plaintext.
  *
- * DM-only at the chat layer too — the chats row must be type
- * 'private'. Groups are refused with a friendly nudge.
+ * Chat-scoped: a secret reveals only in the chat it belongs to. DM
+ * secrets reveal in DMs; group-scoped secrets reveal in their group
+ * (the 15s-TTL side-channel message is the bot's own and is
+ * deletable in groups without admin).
  */
 import "server-only";
 
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { activityLog, chats, items } from "@/lib/db/schema";
+import { activityLog, items } from "@/lib/db/schema";
 import {
   revealSecretInputSchema,
   type RevealSecretOutput,
@@ -46,20 +48,11 @@ export async function executeRevealSecret(
     return err(ERR.invalid_input, parsed.error.message);
   }
 
-  // DM-only guard. Groups never get to see credentials even if the
-  // LLM somehow tries to call this.
-  const [chat] = await db
-    .select({ type: chats.type })
-    .from(chats)
-    .where(eq(chats.chatId, ctx.chatId))
-    .limit(1);
-  if (!chat || chat.type !== "private") {
-    return err(
-      "forbidden",
-      "Secrets can only be revealed in DM. Reply: '🔒 Bu chat'te güvenli değil. DM'imde sor.'",
-    );
-  }
-
+  // Chat-scoped: a secret is revealable only in the chat it belongs
+  // to (the id+chatId filter below). DM secrets stay in DMs; a
+  // group-scoped secret (saved via /password run inside that group)
+  // reveals in that group. The 15s-TTL side-channel message is the
+  // bot's own → deletable in groups without admin.
   const [row] = await db
     .select({
       id: items.id,
