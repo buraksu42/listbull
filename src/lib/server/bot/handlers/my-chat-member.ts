@@ -11,7 +11,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { chats } from "@/lib/db/schema";
 import { insertBotActionContext } from "@/lib/db/queries/bot-action-contexts";
-import { ensureChat } from "@/lib/db/queries/chats";
+import { ensureChat, upsertChatMember } from "@/lib/db/queries/chats";
 import { getUserByTelegramId, upsertUserFromTelegram } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
 import type { ChatType } from "@/lib/types";
@@ -68,6 +68,17 @@ export async function handleMyChatMember(ctx: Context): Promise<void> {
       title: groupLabel,
       ownerUserId: owner.id,
     });
+    // ensureChat only sets owner on INSERT. A kick → re-add cycle hits
+    // an existing row and would keep a stale owner — but the bot's DM
+    // below tells THIS inviter "you're the owner", so the set_key
+    // executor's owner check must accept them. Force the owner to the
+    // current inviter on every (re-)add. Also seed their chat_members
+    // row so list_chat_members / assign see them immediately.
+    await db
+      .update(chats)
+      .set({ ownerUserId: owner.id, updatedAt: new Date() })
+      .where(eq(chats.chatId, chat.id));
+    await upsertChatMember(chat.id, owner.id);
 
     const locale = pickLocale(owner.locale ?? inviter.language_code ?? null);
     // No inline marker — the action context (action=set_key,
