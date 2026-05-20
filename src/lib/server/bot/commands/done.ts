@@ -137,14 +137,14 @@ export async function buildDoneView(
     const completedStr = it.completedAt
       ? ` — ${fmt.format(it.completedAt)}`
       : "";
-    const text = it.text.length > 50 ? `${it.text.slice(0, 50)}…` : it.text;
+    const text = it.text.length > 200 ? `${it.text.slice(0, 200)}…` : it.text;
     const childTotal = childTotalCounts.get(it.id) ?? 0;
     const childDone = childDoneCounts.get(it.id) ?? 0;
     const childSuffix = childTotal > 0 ? ` 📂${childDone}/${childTotal}` : "";
     lines.push(`${num}. ✅ ${text}${childSuffix}${completedStr}`);
     // Row A — wide numbered label (no action; visual anchor)
     const labelText =
-      it.text.length > 100 ? `${it.text.slice(0, 100)}…` : it.text;
+      it.text.length > 40 ? `${it.text.slice(0, 40)}…` : it.text;
     keyboard.text(`${num}. ✅ ${labelText}`, `done:noop:${it.id}`).row();
     // Row B — re-open + archive
     keyboard

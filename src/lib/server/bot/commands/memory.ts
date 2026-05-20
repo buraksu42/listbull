@@ -180,7 +180,7 @@ export async function buildMemoryView(
     const childCount = childCounts.get(it.id) ?? 0;
     const childSuffix = childCount > 0 ? ` 📂${childCount}` : "";
     const text =
-      it.text.length > 50 ? `${it.text.slice(0, 50)}…` : it.text;
+      it.text.length > 200 ? `${it.text.slice(0, 200)}…` : it.text;
     lines.push(
       `${num}. 📌 ${priorityIcon}${text}${deadlineSuffix}${reminderSuffix}${attachSuffix}${childSuffix}${tagSuffix}`,
     );
@@ -189,7 +189,7 @@ export async function buildMemoryView(
     // bounces a small CB answer so the user sees they tapped on the
     // right row.
     const labelText =
-      it.text.length > 100 ? `${it.text.slice(0, 100)}…` : it.text;
+      it.text.length > 40 ? `${it.text.slice(0, 40)}…` : it.text;
     keyboard
       .text(`${num}. 📌 ${labelText}`, `memory:toggle:${it.id}`)
       .row();

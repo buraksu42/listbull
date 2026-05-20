@@ -184,7 +184,7 @@ export async function buildSubItemsView(
       else deadlineSuffix = " 📅";
     }
     const text =
-      it.text.length > 50 ? `${it.text.slice(0, 50)}…` : it.text;
+      it.text.length > 200 ? `${it.text.slice(0, 200)}…` : it.text;
     const attachCount = attachmentCounts.get(it.id) ?? 0;
     const attachSuffix = attachCount > 0 ? ` 📎${attachCount}` : "";
     const reminderCount = reminderCounts.get(it.id) ?? 0;
@@ -193,7 +193,7 @@ export async function buildSubItemsView(
       `${num}. ${checkbox} ${priorityIcon}${statusIcon}${text}${deadlineSuffix}${reminderSuffix}${attachSuffix}${tagSuffix}`,
     );
     const labelText =
-      it.text.length > 100 ? `${it.text.slice(0, 100)}…` : it.text;
+      it.text.length > 40 ? `${it.text.slice(0, 40)}…` : it.text;
     keyboard
       .text(`${num}. ${checkbox} ${labelText}`, `item:toggle:${it.id}`)
       .row();

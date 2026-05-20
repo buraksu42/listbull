@@ -204,7 +204,7 @@ export async function buildItemsView(
       }
     }
     const text =
-      it.text.length > 50 ? `${it.text.slice(0, 50)}…` : it.text;
+      it.text.length > 200 ? `${it.text.slice(0, 200)}…` : it.text;
     const attachCount = attachmentCounts.get(it.id) ?? 0;
     const attachSuffix = attachCount > 0 ? ` 📎${attachCount}` : "";
     const reminderCount = reminderCounts.get(it.id) ?? 0;
@@ -219,7 +219,7 @@ export async function buildItemsView(
     // "which item does this button belong to?" ambiguity when the
     // keyboard scrolls past its header.
     const labelText =
-      it.text.length > 100 ? `${it.text.slice(0, 100)}…` : it.text;
+      it.text.length > 40 ? `${it.text.slice(0, 40)}…` : it.text;
     keyboard
       .text(
         `${num}. ${checkbox} ${labelText}`,
