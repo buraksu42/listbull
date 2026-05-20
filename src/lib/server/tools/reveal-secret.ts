@@ -22,6 +22,7 @@ import {
   type RevealSecretOutput,
 } from "@/lib/ai/tools";
 import { decrypt } from "@/lib/server/encryption";
+import { decodeSecretPayload } from "@/lib/server/secret-payload";
 import { env } from "@/lib/env";
 import { ERR, err, ok } from "./_shared";
 
@@ -80,9 +81,9 @@ export async function executeRevealSecret(
     return err(ERR.not_found, "Item is not a secret.");
   }
 
-  let value: string;
+  let decrypted: string;
   try {
-    value = decrypt(row.secretEncrypted);
+    decrypted = decrypt(row.secretEncrypted);
   } catch (e) {
     console.error("[reveal_secret] decrypt failed", {
       itemId: row.id,
@@ -94,22 +95,28 @@ export async function executeRevealSecret(
     );
   }
 
-  const suffix = value.length >= 4 ? value.slice(-4) : value;
+  // Decode the {username,password} payload. Legacy entries (raw
+  // password string, no JSON marker) come back as username:null.
+  const payload = decodeSecretPayload(decrypted);
+  const suffix =
+    payload.password.length >= 4
+      ? payload.password.slice(-4)
+      : payload.password;
 
   // Side-channel: deliver the value as its own Telegram message so
   // it never enters the LLM context. We use raw fetch (same as
   // send_item_attachments) to avoid threading a grammy Context
   // through the dispatcher.
   //
-  // HTML <code> wraps the value so Telegram renders it as a
-  // monospaced inline span — tap-to-copy on mobile, click-select
-  // on desktop. Closest the Bot API gets to "auto clipboard".
-  // Both label and value are HTML-escaped because the user controls
-  // them; an "<script>" or "&" in either would otherwise corrupt
-  // the message.
+  // HTML <code> wraps each value so Telegram renders it as a
+  // monospaced tap-to-copy span. Label + username + password are all
+  // HTML-escaped because the user controls them.
   const labelHtml = escapeHtml(row.text);
-  const valueHtml = escapeHtml(value);
-  const safeBody = `🔒 <b>${labelHtml}</b>\n\n<code>${valueHtml}</code>\n\n⏱ Bu mesaj 15 saniye sonra otomatik silinecek. Hemen kopyala (uzun-bas → Kopyala).`;
+  const passwordHtml = escapeHtml(payload.password);
+  const usernameLine = payload.username
+    ? `\n👤 <code>${escapeHtml(payload.username)}</code>`
+    : "";
+  const safeBody = `🔒 <b>${labelHtml}</b>${usernameLine}\n🔑 <code>${passwordHtml}</code>\n\n⏱ Bu mesaj 15 saniye sonra otomatik silinecek. Hemen kopyala (uzun-bas → Kopyala).`;
   let deliveredMessageId: number | null = null;
   try {
     const res = await fetch(

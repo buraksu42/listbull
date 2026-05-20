@@ -26,6 +26,7 @@ export type BotActionContext = {
     | "set_key"
     | "memory_add"
     | "secret_label"
+    | "secret_username"
     | "secret_value"
     | "add_child"
     | "items_add";

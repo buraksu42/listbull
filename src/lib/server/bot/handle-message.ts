@@ -42,6 +42,7 @@ import {
   respond,
 } from "@/lib/ai/respond";
 import { decrypt, encrypt } from "@/lib/server/encryption";
+import { encodeSecretPayload } from "@/lib/server/secret-payload";
 import { db } from "@/lib/db/client";
 import { activityLog, chats, items } from "@/lib/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
@@ -495,11 +496,12 @@ export async function handleMessage(ctx: Context): Promise<void> {
         itemId: persisted?.itemId ?? null,
       });
 
-      // /şifre two-step flow lives outside the LLM. Intercept here
+      // /şifre multi-step flow lives outside the LLM. Intercept here
       // so plaintext never reaches OpenRouter or the messages table.
       if (
         persisted &&
         (persisted.action === "secret_label" ||
+          persisted.action === "secret_username" ||
           persisted.action === "secret_value")
       ) {
         if (message.chat.type !== "private") {
@@ -899,15 +901,22 @@ async function sendChunked(ctx: Context, text: string): Promise<void> {
   }
 }
 
-// ─── /şifre two-step flow (DM-only, LLM bypass) ────────────────────
+// ─── /şifre three-step flow (DM-only, LLM bypass) ──────────────────
 //
-// Step 1 (secret_label): user just replied with the label (e.g. "Gmail").
-//   Send a second force-reply asking for the value, persist metadata=label.
-// Step 2 (secret_value): user just replied with the password value.
-//   Encrypt, ensure parent "Şifreler" memory item, insert kind='secret'
-//   child, delete the user's pasted message, confirm with last-4 hint.
+// Step 1 (secret_label):    user replied with the label ("Gmail").
+//   → prompt for username, persist metadata=label.
+// Step 2 (secret_username): user replied with the username/email
+//   ("-" or "yok" → no username). → prompt for the password,
+//   persist metadata=JSON{label,username}.
+// Step 3 (secret_value):    user replied with the password.
+//   → encrypt {username,password} JSON, ensure parent "📁 Şifreler"
+//   memory item, insert kind='secret' child, delete the pasted
+//   message, confirm with last-4 hint.
 
 const SECRET_PARENT_TEXT = "📁 Şifreler";
+
+/** "no username" tokens — case-insensitive, trimmed. */
+const NO_USERNAME_TOKENS = new Set(["-", "yok", "none", "skip", "geç", "atla"]);
 
 async function handleSecretStep(
   ctx: Context,
@@ -921,6 +930,7 @@ async function handleSecretStep(
 ): Promise<void> {
   const { chatId, userId, persisted, replyText, locale } = input;
 
+  // ── Step 1: label → ask for username ──────────────────────────────
   if (persisted.action === "secret_label") {
     const label = replyText.trim();
     if (label.length === 0 || label.length > 100) {
@@ -932,10 +942,43 @@ async function handleSecretStep(
       return;
     }
     const message = ctx.message!;
+    const usernamePromptText =
+      locale === "tr"
+        ? `🔒 Etiket: ${label}\n\nKullanıcı adı / e-posta? Bu mesaja yanıt olarak gönder. Kullanıcı adı yoksa "-" yaz.`
+        : `🔒 Label: ${label}\n\nUsername / email? Reply to this message. If there's no username, send "-".`;
+    const sent = await ctx.api.sendMessage(chatId, usernamePromptText, {
+      reply_markup: { force_reply: true, selective: true },
+    });
+    await insertBotActionContext({
+      chatId,
+      messageId: sent.message_id,
+      action: "secret_username",
+      itemId: null,
+      targetChatId: null,
+      metadata: label,
+    });
+    try {
+      await ctx.api.deleteMessage(chatId, message.message_id);
+    } catch {
+      // ignore best-effort delete failures
+    }
+    return;
+  }
+
+  // ── Step 2: username → ask for password ───────────────────────────
+  if (persisted.action === "secret_username") {
+    const label = persisted.metadata?.trim() || "(label missing)";
+    const raw = replyText.trim();
+    const username = NO_USERNAME_TOKENS.has(raw.toLowerCase())
+      ? null
+      : raw.length > 0 && raw.length <= 200
+        ? raw
+        : null;
+    const message = ctx.message!;
     const valuePromptText =
       locale === "tr"
-        ? `🔒 Etiket: ${label}\n\nŞimdi şifreyi yapıştır — bu mesaja yanıt olarak gönder. Yapıştırdığın mesajı güvenlik için sileceğim.`
-        : `🔒 Label: ${label}\n\nNow paste the password — reply to this message. I'll auto-delete your pasted message for safety.`;
+        ? `🔒 ${label}${username ? ` — ${username}` : ""}\n\nŞimdi şifreyi yapıştır — bu mesaja yanıt olarak gönder. Yapıştırdığın mesajı güvenlik için sileceğim.`
+        : `🔒 ${label}${username ? ` — ${username}` : ""}\n\nNow paste the password — reply to this message. I'll auto-delete your pasted message for safety.`;
     const sent = await ctx.api.sendMessage(chatId, valuePromptText, {
       reply_markup: { force_reply: true, selective: true },
     });
@@ -945,10 +988,10 @@ async function handleSecretStep(
       action: "secret_value",
       itemId: null,
       targetChatId: null,
-      metadata: label,
+      metadata: JSON.stringify({ label, username }),
     });
-    // Delete the user's label message too — labels are not secrets
-    // but trimming the chat history keeps the credential flow tidy.
+    // Username may be an email — mildly sensitive; delete it from the
+    // visible thread like the label and (later) the password.
     try {
       await ctx.api.deleteMessage(chatId, message.message_id);
     } catch {
@@ -957,8 +1000,23 @@ async function handleSecretStep(
     return;
   }
 
-  // secret_value path
-  const label = persisted.metadata?.trim() || "(label missing)";
+  // ── Step 3: password → encrypt + store ────────────────────────────
+  // metadata is JSON {label,username} (from step 2). Fall back to
+  // treating it as a bare label string for any in-flight legacy
+  // context created before the username step shipped.
+  let label = "(label missing)";
+  let username: string | null = null;
+  const rawMeta = persisted.metadata?.trim() ?? "";
+  try {
+    const parsed: unknown = JSON.parse(rawMeta);
+    if (parsed && typeof parsed === "object") {
+      const o = parsed as { label?: unknown; username?: unknown };
+      if (typeof o.label === "string") label = o.label;
+      if (typeof o.username === "string") username = o.username;
+    }
+  } catch {
+    if (rawMeta.length > 0) label = rawMeta;
+  }
   const value = replyText.trim();
   const message = ctx.message!;
   if (value.length === 0 || value.length > 2000) {
@@ -970,7 +1028,9 @@ async function handleSecretStep(
     return;
   }
 
-  const encrypted = encrypt(value);
+  const encrypted = encrypt(
+    encodeSecretPayload({ username, password: value }),
+  );
   const suffix = value.length >= 4 ? value.slice(-4) : value;
 
   // Ensure a single parent memory "📁 Şifreler" per chat so /memory
@@ -1014,10 +1074,15 @@ async function handleSecretStep(
     // ignore
   }
 
+  const userLine = username
+    ? locale === "tr"
+      ? ` Kullanıcı: ${username}.`
+      : ` Username: ${username}.`
+    : "";
   await ctx.reply(
     locale === "tr"
-      ? `🔒 "${label}" kaydedildi (…${suffix}). Görmek için: "${label} şifresi ne?"`
-      : `🔒 "${label}" saved (…${suffix}). To view: "what's the ${label} password?"`,
+      ? `🔒 "${label}" kaydedildi (…${suffix}).${userLine} Görmek için: "${label} şifresi ne?"`
+      : `🔒 "${label}" saved (…${suffix}).${userLine} To view: "what's the ${label} password?"`,
   );
 }
 
