@@ -219,7 +219,7 @@ export async function buildItemsView(
     // "which item does this button belong to?" ambiguity when the
     // keyboard scrolls past its header.
     const labelText =
-      it.text.length > 26 ? `${it.text.slice(0, 26)}…` : it.text;
+      it.text.length > 100 ? `${it.text.slice(0, 100)}…` : it.text;
     keyboard
       .text(
         `${num}. ${checkbox} ${labelText}`,

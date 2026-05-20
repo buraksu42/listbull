@@ -193,7 +193,7 @@ export async function buildSubItemsView(
       `${num}. ${checkbox} ${priorityIcon}${statusIcon}${text}${deadlineSuffix}${reminderSuffix}${attachSuffix}${tagSuffix}`,
     );
     const labelText =
-      it.text.length > 26 ? `${it.text.slice(0, 26)}…` : it.text;
+      it.text.length > 100 ? `${it.text.slice(0, 100)}…` : it.text;
     keyboard
       .text(`${num}. ${checkbox} ${labelText}`, `item:toggle:${it.id}`)
       .row();

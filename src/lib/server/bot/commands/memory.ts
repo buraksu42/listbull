@@ -189,7 +189,7 @@ export async function buildMemoryView(
     // bounces a small CB answer so the user sees they tapped on the
     // right row.
     const labelText =
-      it.text.length > 26 ? `${it.text.slice(0, 26)}…` : it.text;
+      it.text.length > 100 ? `${it.text.slice(0, 100)}…` : it.text;
     keyboard
       .text(`${num}. 📌 ${labelText}`, `memory:toggle:${it.id}`)
       .row();

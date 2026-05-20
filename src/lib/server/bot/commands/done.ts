@@ -144,7 +144,7 @@ export async function buildDoneView(
     lines.push(`${num}. ✅ ${text}${childSuffix}${completedStr}`);
     // Row A — wide numbered label (no action; visual anchor)
     const labelText =
-      it.text.length > 26 ? `${it.text.slice(0, 26)}…` : it.text;
+      it.text.length > 100 ? `${it.text.slice(0, 100)}…` : it.text;
     keyboard.text(`${num}. ✅ ${labelText}`, `done:noop:${it.id}`).row();
     // Row B — re-open + archive
     keyboard
