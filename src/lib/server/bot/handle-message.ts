@@ -276,7 +276,13 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // anyone uploads in the group would reach the LLM and burn tokens.
   // An attachment only proceeds when its caption @-mentions the bot
   // OR it's a reply to a bot prompt.
-  if (isGroupContext) {
+  //
+  // EXCEPTION — voice notes: a voice note can't @-mention the bot
+  // (no text). Per product decision, every voice note posted in a
+  // group IS processed: transcribe it, extract any to-do items, and
+  // stay silent if there's nothing actionable (see the ambient-voice
+  // directive further down).
+  if (isGroupContext && !isVoiceInput) {
     const botUsername = ctx.me.username;
     const mentionsBot =
       effectiveText.includes(`@${botUsername}`) ||
@@ -484,6 +490,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // Voice / audio → transcribe via an OpenRouter audio model, then
   // continue as if the user had typed the transcript. The chat's own
   // conversation model still does the tool routing.
+  let groupVoiceAmbient = false;
   if (isVoiceInput && rawAttachment) {
     const transcript = await transcribeVoice({
       fileId: rawAttachment.fileId,
@@ -499,6 +506,10 @@ export async function handleMessage(ctx: Context): Promise<void> {
     // The transcript replaces the (empty) effectiveText; the rest of
     // the pipeline treats it as the user's typed message.
     effectiveText = transcript;
+    // A voice note in a group is "ambient" — it may or may not be
+    // addressed to the bot. The directive (built below) tells the LLM
+    // to extract any to-do items and otherwise stay silent.
+    if (isGroupContext) groupVoiceAmbient = true;
   }
 
   // ─── Reply-to context ─────────────────────────────────────────────
@@ -602,6 +613,17 @@ export async function handleMessage(ctx: Context): Promise<void> {
       ? `${directive}\n\n${formatAttachmentContext(attachment)}`
       : directive;
     if (!persistedContent) persistedContent = "(empty)";
+  } else if (groupVoiceAmbient) {
+    // Ambient group voice note: extract to-dos, else stay silent.
+    // The empty-text + no-tools path below sends nothing.
+    const safeTranscript = effectiveText
+      .replace(/[\r\n\t]+/g, " ")
+      .slice(0, 2000);
+    llmContent =
+      `AMBIENT GROUP VOICE NOTE (transcribed). Posted in a group; it is NOT necessarily addressed to you. ` +
+      `If the transcript contains concrete to-do items or things to remember, call create_item for EACH and reply with one short ${locale === "tr" ? "Turkish" : "English"} confirmation line. ` +
+      `If it is just conversation with nothing actionable, produce an EMPTY response and call NO tools — stay completely silent (no greeting, no explanation).` +
+      `\n---TRANSCRIPT---\n${safeTranscript}\n---END TRANSCRIPT---`;
   }
 
   const userMessageRow: NewMessage = {
