@@ -50,6 +50,7 @@ import { toItemSnapshot } from "@/lib/db/snapshots";
 import { createToolDispatcher } from "@/lib/server/tools/dispatcher";
 import { pickLocale } from "@/lib/server/bot/i18n";
 import { tryRevealSecretByLabel } from "@/lib/server/bot/commands/secret";
+import { transcribeVoice } from "@/lib/server/bot/voice-stt";
 import { executeSetChatApiKey } from "@/lib/server/tools/set-chat-api-key";
 import { upsertChatMember } from "@/lib/db/queries/chats";
 
@@ -73,7 +74,7 @@ const COPY = {
     rateLimited:
       "⏳ Saatlik mesaj limitin doldu — biraz dinlen, sonra tekrar yaz.",
     voiceUnsupported:
-      "🎤 Sesli mesaj şu an desteklenmiyor — yazılı mesaj at.",
+      "🎤 Sesi anlayamadım — tekrar dener misin, ya da yazılı yaz.",
   },
   en: {
     noKey:
@@ -84,7 +85,7 @@ const COPY = {
     rateLimited:
       "⏳ Hourly message limit hit — take a breather, then try again.",
     voiceUnsupported:
-      "🎤 Voice messages aren't supported right now — type a message.",
+      "🎤 Couldn't make out the audio — try again, or type it instead.",
   },
 } as const;
 
@@ -480,12 +481,24 @@ export async function handleMessage(ctx: Context): Promise<void> {
     return;
   }
 
-  // Voice STT removed in Phase 17. Voice/audio messages are treated
-  // as a no-op for now (no transcription path). Re-introduce in a
-  // future phase if needed.
-  if (isVoiceInput) {
-    await ctx.reply(copy.voiceUnsupported);
-    return;
+  // Voice / audio → transcribe via an OpenRouter audio model, then
+  // continue as if the user had typed the transcript. The chat's own
+  // conversation model still does the tool routing.
+  if (isVoiceInput && rawAttachment) {
+    const transcript = await transcribeVoice({
+      fileId: rawAttachment.fileId,
+      kind: rawAttachment.kind,
+      mimeType: rawAttachment.mimeType,
+      apiKey,
+    });
+    if (!transcript) {
+      await ctx.reply(copy.voiceUnsupported);
+      return;
+    }
+    console.log("[voice-stt] ok", { chatId, len: transcript.length });
+    // The transcript replaces the (empty) effectiveText; the rest of
+    // the pipeline treats it as the user's typed message.
+    effectiveText = transcript;
   }
 
   // ─── Reply-to context ─────────────────────────────────────────────
