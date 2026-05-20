@@ -5,7 +5,7 @@
  * synced from Telegram `chat_member` updates; we keep our own row so
  * the assignee picker + activity feed don't round-trip Telegram.
  */
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { chatMembers, chats, users } from "@/lib/db/schema";
@@ -97,7 +97,7 @@ export async function removeChatMember(
 
 /**
  * Enumerate the chat's members joined with user profile info. Used by
- * the assignee picker + `list_chat_members` tool.
+ * the `list_chat_members` tool ("kim bu chat'te?").
  */
 export async function listChatMembers(chatId: number): Promise<
   Array<{
@@ -119,32 +119,4 @@ export async function listChatMembers(chatId: number): Promise<
     .where(eq(chatMembers.chatId, chatId))
     .orderBy(desc(chatMembers.joinedAt));
   return rows;
-}
-
-/** Resolve an assignee user_id from a Telegram username, scoped to chat membership. */
-export async function findChatMemberByUsername(
-  chatId: number,
-  username: string,
-): Promise<
-  | { userId: string; telegramUsername: string | null; telegramFirstName: string }
-  | null
-> {
-  const normalized = username.replace(/^@/, "").trim().toLowerCase();
-  if (normalized.length === 0) return null;
-  const [row] = await db
-    .select({
-      userId: users.id,
-      telegramUsername: users.telegramUsername,
-      telegramFirstName: users.telegramFirstName,
-    })
-    .from(chatMembers)
-    .innerJoin(users, eq(users.id, chatMembers.userId))
-    .where(
-      and(
-        eq(chatMembers.chatId, chatId),
-        sql`lower(${users.telegramUsername}) = ${normalized}`,
-      ),
-    )
-    .limit(1);
-  return row ?? null;
 }

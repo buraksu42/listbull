@@ -6,7 +6,7 @@
  */
 import { Bot } from "grammy";
 
-import { handleAssigned } from "@/lib/server/bot/commands/assigned";
+import { handleTag } from "@/lib/server/bot/commands/tag";
 import { handleDone } from "@/lib/server/bot/commands/done";
 import { handleHelp } from "@/lib/server/bot/commands/help";
 import { handleItems } from "@/lib/server/bot/commands/items";
@@ -68,7 +68,7 @@ function registerHandlers(bot: Bot): void {
   // replies are still localized (TR/EN) based on users.locale.
   bot.command("today", handleToday);
   bot.command("thisweek", handleWeek);
-  bot.command("assigned", handleAssigned);
+  bot.command("tag", handleTag);
   bot.command("reminders", handleReminders);
 
   // Inline-keyboard callbacks for /items + /memory views.

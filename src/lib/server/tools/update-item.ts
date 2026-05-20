@@ -2,9 +2,9 @@
  * Executor: `update_item` (Phase 17 chat-only).
  *
  * Mutates text / description / deadline_at / position / pinned /
- * task_recurrence_rule / assignee_id. Cross-chat moves no longer
- * exist; the chat is implicit. Reminder recompute on deadline change
- * via recomputeOffsetReminders.
+ * task_recurrence_rule. Cross-chat moves no longer exist; the chat
+ * is implicit. Reminder recompute on deadline change via
+ * recomputeOffsetReminders.
  */
 import "server-only";
 
@@ -47,7 +47,6 @@ export async function executeUpdateItem(
     position,
     pinned,
     task_recurrence_rule,
-    assignee_id,
   } = parsed.data;
 
   return await db.transaction(async (tx) => {
@@ -65,7 +64,6 @@ export async function executeUpdateItem(
       | "position"
       | "pinned"
       | "task_recurrence_rule"
-      | "assignee_id"
     > = [];
     const patch: Partial<typeof items.$inferInsert> = {
       updatedAt: new Date(),
@@ -111,10 +109,6 @@ export async function executeUpdateItem(
         changes.push("task_recurrence_rule");
       }
     }
-    if (assignee_id !== undefined && assignee_id !== current.assigneeId) {
-      patch.assigneeId = assignee_id;
-      changes.push("assignee_id");
-    }
 
     if (changes.length === 0) {
       return ok({
@@ -143,11 +137,7 @@ export async function executeUpdateItem(
       chatId: ctx.chatId,
       entityType: "item",
       entityId: updated.id,
-      action: changes.includes("assignee_id")
-        ? assignee_id === null
-          ? "item_unassigned"
-          : "item_assigned"
-        : "item_edited",
+      action: "item_edited",
       actorId: ctx.userId,
       payloadBefore: toItemSnapshot(current),
       payloadAfter: toItemSnapshot(updated),

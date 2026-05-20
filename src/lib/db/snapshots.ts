@@ -55,7 +55,6 @@ export function toItemSnapshot(row: Item): ItemSnapshot {
     status: row.status,
     priority: row.priority,
     tags: row.tags ?? [],
-    assigneeId: row.assigneeId,
     deadlineAt: toIso(row.deadlineAt),
     pinnedAt: toIso(row.pinnedAt),
     taskRecurrenceRule: row.taskRecurrenceRule ?? null,

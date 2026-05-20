@@ -60,7 +60,6 @@ export const updateItemBodySchema = z
     tags: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
     pinned: z.boolean().optional(),
     taskRecurrenceRule: z.string().trim().min(1).max(500).nullable().optional(),
-    assigneeId: z.string().uuid().nullable().optional(),
   })
   .refine(
     (v) =>
@@ -73,11 +72,10 @@ export const updateItemBodySchema = z
       v.priority !== undefined ||
       v.tags !== undefined ||
       v.pinned !== undefined ||
-      v.taskRecurrenceRule !== undefined ||
-      v.assigneeId !== undefined,
+      v.taskRecurrenceRule !== undefined,
     {
       message:
-        "at least one of text, description, isDone, position, deadlineAt, status, priority, tags, pinned, taskRecurrenceRule, assigneeId must be supplied",
+        "at least one of text, description, isDone, position, deadlineAt, status, priority, tags, pinned, taskRecurrenceRule must be supplied",
     },
   );
 

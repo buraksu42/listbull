@@ -129,7 +129,6 @@ export type ItemSnapshot = {
   status: string;
   priority: string;
   tags: string[];
-  assigneeId: string | null;
   deadlineAt: string | null;
   pinnedAt: string | null;
   taskRecurrenceRule: string | null;
@@ -178,8 +177,8 @@ export type AttachmentSnapshot = {
 // ─── Cron reminder dispatcher pickup row ────────────────────────────
 //
 // Phase 17: chat-scoped. items.chat_id → chats.owner_user_id resolves
-// the bot DM target when the assignee falls back. White-label bots
-// dropped; default platform bot serves all reminders.
+// the bot DM target. White-label bots dropped; default platform bot
+// serves all reminders.
 export type ReminderJobItem = {
   reminderId: string;
   itemId: string;
@@ -190,13 +189,10 @@ export type ReminderJobItem = {
   kind: ItemReminderKind;
   offsetMinutes: number | null;
   recurrenceRule: string | null;
-  /** Chat owner's Telegram ID — fallback target when assignee is null. */
+  /** Chat owner's Telegram ID — the reminder DM target. */
   ownerTelegramId: number;
   ownerLocale: string;
   ownerTimezone: string;
-  assigneeTelegramId: number | null;
-  assigneeLocale: string | null;
-  assigneeTimezone: string | null;
 };
 
 /** Sentinel for next-intl message catalogs. */

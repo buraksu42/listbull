@@ -192,9 +192,6 @@ export const items = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
-    assigneeId: uuid("assignee_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
     /**
      * The moment the item is due. Distinct from reminders — reminders
      * are scheduled in the sibling `item_reminders` table. May be null
@@ -223,7 +220,6 @@ export const items = pgTable(
     index("items_deadline_at_idx")
       .on(t.deadlineAt)
       .where(sql`${t.deadlineAt} is not null and ${t.archivedAt} is null`),
-    index("items_assignee_idx").on(t.assigneeId, t.isDone),
     index("items_status_idx").on(t.chatId, t.status),
     index("items_tags_gin").using("gin", t.tags),
     index("items_kind_idx").on(

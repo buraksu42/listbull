@@ -88,7 +88,7 @@ async function main(): Promise<void> {
       { command: "password", description: "Save / view passwords 🔒 (DM-only)" },
       { command: "today", description: "Today's items 📅" },
       { command: "thisweek", description: "This week's items 🗓" },
-      { command: "assigned", description: "Assigned items 👤" },
+      { command: "tag", description: "Items by tag 🏷️ (e.g. /tag burak)" },
       { command: "reminders", description: "Pending reminders 🔔" },
       { command: "reset", description: "Clear conversation" },
     ],

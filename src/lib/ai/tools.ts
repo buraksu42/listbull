@@ -35,7 +35,6 @@ export const itemSnapshotSchema = z.object({
   status: z.string(),
   priority: z.string(),
   tags: z.array(z.string()),
-  assigneeId: z.string().uuid().nullable(),
   deadlineAt: z.string().datetime({ offset: true }).nullable(),
   pinnedAt: z.string().datetime({ offset: true }).nullable(),
   taskRecurrenceRule: z.string().nullable(),
@@ -193,13 +192,6 @@ export const updateItemInputSchema = z
     position: z.number().int().nonnegative().optional(),
     pinned: z.boolean().optional(),
     task_recurrence_rule: z.string().trim().min(1).max(500).nullable().optional(),
-    /**
-     * Direct assignee assignment. Pass the target user's UUID; pass
-     * null to clear. The user MUST be a chat member (Inv-12). Bot
-     * path uses `assign_item({assignee_username})` which resolves
-     * usernames to IDs; this skips that step.
-     */
-    assignee_id: z.string().uuid().nullable().optional(),
   })
   .refine(
     (v) =>
@@ -208,10 +200,9 @@ export const updateItemInputSchema = z
       v.deadline_at !== undefined ||
       v.position !== undefined ||
       v.pinned !== undefined ||
-      v.task_recurrence_rule !== undefined ||
-      v.assignee_id !== undefined,
+      v.task_recurrence_rule !== undefined,
     {
-      message: "at least one of text/description/deadline_at/position/pinned/task_recurrence_rule/assignee_id must be supplied",
+      message: "at least one of text/description/deadline_at/position/pinned/task_recurrence_rule must be supplied",
     },
   );
 
@@ -225,7 +216,6 @@ export const updateItemOutputSchema = z.object({
       "position",
       "pinned",
       "task_recurrence_rule",
-      "assignee_id",
     ]),
   ),
   reminders: z.array(itemReminderSnapshotSchema).optional(),
@@ -348,32 +338,7 @@ export type RemoveReminderInput = z.infer<typeof removeReminderInputSchema>;
 export type RemoveReminderOutput = z.infer<typeof removeReminderOutputSchema>;
 
 // ═══════════════════════════════════════════════════════════════════
-// 9. assign_item
-// ═══════════════════════════════════════════════════════════════════
-
-export const assignItemInputSchema = z.object({
-  item_id: z.string().uuid(),
-  /** Telegram username (with or without leading @). Null to clear. */
-  assignee_username: z.string().trim().max(64).nullable(),
-});
-
-export const assignItemOutputSchema = z.object({
-  item: itemSnapshotSchema,
-  /** Null when cleared. */
-  assignee: z
-    .object({
-      user_id: z.string().uuid(),
-      telegram_username: z.string().nullable(),
-      telegram_first_name: z.string(),
-    })
-    .nullable(),
-});
-
-export type AssignItemInput = z.infer<typeof assignItemInputSchema>;
-export type AssignItemOutput = z.infer<typeof assignItemOutputSchema>;
-
-// ═══════════════════════════════════════════════════════════════════
-// 10. set_item_attributes
+// 9. set_item_attributes
 // ═══════════════════════════════════════════════════════════════════
 //
 // Status / priority / tags. Tag limit: 20 unique tags per chat.
@@ -551,8 +516,8 @@ export type SetChatApiKeyOutput = z.infer<typeof setChatApiKeyOutputSchema>;
 // 16. list_chat_members (Phase 17)
 // ═══════════════════════════════════════════════════════════════════
 //
-// Read-only enumeration of the chat's members. Powers the assignee
-// picker + "kim bu chat'te?" answers. DM chat returns one row (the
+// Read-only enumeration of the chat's members. Powers "kim bu
+// chat'te?" answers. DM chat returns one row (the
 // owner); group chat returns every member synced from Telegram
 // chat_member updates.
 
@@ -669,7 +634,6 @@ export const TOOL_NAMES = [
   "set_deadline",
   "add_reminder",
   "remove_reminder",
-  "assign_item",
   "set_item_attributes",
   "update_settings",
   "attach_file_to_item",
@@ -728,10 +692,9 @@ export const tools = [
       "Mutate an existing item. `item_id` is required. Mutable fields: `text`, `description` " +
       "(string|null), `deadline_at` (ISO 8601|null — null clears deadline AND drops before_deadline " +
       "reminders), `position` (drag-reorder), `pinned` (top-pin toggle), `task_recurrence_rule` " +
-      "(RFC 5545 RRULE|null — non-null = auto-resurrect on complete), `assignee_id` (UUID|null — " +
-      "user must be a chat member). At least one mutable field is required. Reminders are managed " +
-      "via set_deadline / add_reminder / remove_reminder; this tool does NOT manipulate them " +
-      "(beyond the auto-drop on deadline=null).",
+      "(RFC 5545 RRULE|null — non-null = auto-resurrect on complete). At least one mutable field " +
+      "is required. Reminders are managed via set_deadline / add_reminder / remove_reminder; this " +
+      "tool does NOT manipulate them (beyond the auto-drop on deadline=null).",
     inputSchema: updateItemInputSchema,
     outputSchema: updateItemOutputSchema,
   },
@@ -809,23 +772,17 @@ export const tools = [
     outputSchema: removeReminderOutputSchema,
   },
   {
-    name: "assign_item",
-    description:
-      "Assign an item to a chat member by Telegram username. `assignee_username: '@ali'` or " +
-      "'ali' (case-insensitive, @ stripped). Pass null to unassign. User must be a chat member " +
-      "(call list_chat_members first if disambiguation needed). Reminders fire to the assignee " +
-      "DM, falling back to the chat owner when the assignee has no bot DM yet.",
-    inputSchema: assignItemInputSchema,
-    outputSchema: assignItemOutputSchema,
-  },
-  {
     name: "set_item_attributes",
     description:
       "Set status ('open'|'in_progress'|'blocked'|'done'), priority ('low'|'normal'|'high'), " +
       "and/or tags (replaces existing tags; pass [] to clear). At least one field required. " +
       "Tag limit: 20 unique tags per chat (executor rejects with `tag_limit_exceeded`). Status " +
       "='done' is equivalent to complete_item but also lets the LLM set status='in_progress' / " +
-      "'blocked' which complete_item can't.",
+      "'blocked' which complete_item can't. " +
+      "**Person assignment via tags**: there is no separate assignee field — to 'assign' an item " +
+      "to someone, add a person tag (their name, lowercased, no spaces: 'burak', 'ayse'). " +
+      "'ekmek işini Burak'a ata' → set_item_attributes({tags:[...existing, 'burak']}). The user " +
+      "lists a person's items with the /tag <name> slash command.",
     inputSchema: setItemAttributesInputSchema,
     outputSchema: setItemAttributesOutputSchema,
   },
@@ -871,8 +828,7 @@ export const tools = [
     description:
       "Read-only enumeration of the current chat's members. DM returns one row (the user " +
       "themselves); group returns every member synced from Telegram's chat_member updates. " +
-      "Use when the user says 'kim var bu chat'te?' OR before assign_item to disambiguate " +
-      "usernames OR to phrase 'X'in işleri' / 'X has 3 open items'.",
+      "Use when the user says 'kim var bu chat'te?'.",
     inputSchema: listChatMembersInputSchema,
     outputSchema: listChatMembersOutputSchema,
   },

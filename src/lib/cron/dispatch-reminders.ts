@@ -91,13 +91,6 @@ async function pickEligibleReminders(): Promise<ReminderJobItem[]> {
     owner_telegram_id: number;
     owner_locale: string;
     owner_timezone: string;
-    owner_date_format: string;
-    owner_time_format: string;
-    assignee_telegram_id: number | null;
-    assignee_locale: string | null;
-    assignee_timezone: string | null;
-    assignee_date_format: string | null;
-    assignee_time_format: string | null;
   }>(sql`
     SELECT
       r.id AS reminder_id,
@@ -111,19 +104,11 @@ async function pickEligibleReminders(): Promise<ReminderJobItem[]> {
       r.recurrence_rule,
       owner.telegram_id AS owner_telegram_id,
       owner.locale AS owner_locale,
-      owner.timezone AS owner_timezone,
-      owner.date_format AS owner_date_format,
-      owner.time_format AS owner_time_format,
-      assignee.telegram_id AS assignee_telegram_id,
-      assignee.locale AS assignee_locale,
-      assignee.timezone AS assignee_timezone,
-      assignee.date_format AS assignee_date_format,
-      assignee.time_format AS assignee_time_format
+      owner.timezone AS owner_timezone
     FROM ${itemReminders} r
     INNER JOIN ${items} i ON i.id = r.item_id
     INNER JOIN ${chats} c ON c.chat_id = i.chat_id
     INNER JOIN ${users} owner ON owner.id = c.owner_user_id
-    LEFT JOIN ${users} assignee ON assignee.id = i.assignee_id
     WHERE r.sent = false
       AND r.remind_at <= NOW()
       AND i.archived_at IS NULL
@@ -144,9 +129,6 @@ async function pickEligibleReminders(): Promise<ReminderJobItem[]> {
     ownerTelegramId: r.owner_telegram_id,
     ownerLocale: r.owner_locale,
     ownerTimezone: r.owner_timezone,
-    assigneeTelegramId: r.assignee_telegram_id,
-    assigneeLocale: r.assignee_locale,
-    assigneeTimezone: r.assignee_timezone,
   }));
 }
 
@@ -163,11 +145,9 @@ export async function dispatchReminders(): Promise<{
   let failed = 0;
 
   for (const r of picked) {
-    const targetTg = r.assigneeTelegramId ?? r.ownerTelegramId;
-    const locale = pickLocale(r.assigneeLocale ?? r.ownerLocale);
-    const timezone = r.assigneeTimezone ?? r.ownerTimezone;
-    // Date/time format defaults pulled in via pickup query but kept
-    // simple here — assignee's preferences override owner's when set.
+    const targetTg = r.ownerTelegramId;
+    const locale = pickLocale(r.ownerLocale);
+    const timezone = r.ownerTimezone;
     const dateFormat = "DD.MM.YYYY";
     const timeFormat = "24h";
 

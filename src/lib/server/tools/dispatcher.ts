@@ -16,7 +16,6 @@ import type { ToolDispatcher } from "@/lib/ai/types";
 import type { ToolName } from "@/lib/ai/tools";
 
 import { executeAddReminder } from "./add-reminder";
-import { executeAssignItem } from "./assign-item";
 import { executeAttachFileToItem } from "./attach-file-to-item";
 import { executeCompleteItem } from "./complete-item";
 import { executeCreateItem } from "./create-item";
@@ -94,8 +93,6 @@ async function routeCall(
       return await executeAddReminder(input, ctx);
     case "remove_reminder":
       return await executeRemoveReminder(input, ctx);
-    case "assign_item":
-      return await executeAssignItem(input, ctx);
     case "set_item_attributes":
       return await executeSetItemAttributes(input, ctx);
     case "update_settings":
@@ -132,7 +129,6 @@ const KNOWN_TOOLS = [
   "set_deadline",
   "add_reminder",
   "remove_reminder",
-  "assign_item",
   "set_item_attributes",
   "update_settings",
   "attach_file_to_item",
