@@ -87,8 +87,8 @@ export async function handleMyChatMember(ctx: Context): Promise<void> {
     // reply_to_message.message_id alone.
     const msg =
       locale === "tr"
-        ? `👥 Beni "${groupLabel}" grubuna eklediğin için sağol! Bu grubu çalıştırmam için bir OpenRouter API key gerek (chat sahibi sensin):\n\n🔑 Adımlar:\n  1. openrouter.ai/keys → Sign in → Create Key\n  2. Key'i (sk-or-v1-… ile başlar) BU MESAJI YANITLAYARAK gönder → grup'a özel kaydederim + DM mesajını güvenlik için silerim.\n\n✨ Sonra grup'ta @${ctx.me.username} ile mesaj atan herkes liste kullanabilir.`
-        : `👥 Thanks for adding me to "${groupLabel}"! I need an OpenRouter API key to run this group (you're the owner):\n\n🔑 Steps:\n  1. openrouter.ai/keys → Sign in → Create Key\n  2. REPLY to this message with the key (sk-or-v1-…) → I save it for the group and delete your DM for safety.\n\n✨ Then anyone who mentions @${ctx.me.username} in the group can use the list.`;
+        ? `👥 Beni "${groupLabel}" grubuna eklediğin için sağol! Grup şu an **ücretsiz modelle** hemen çalışıyor — @${ctx.me.username} ile yazan herkes listeyi kullanabilir.\n\n🔑 İstersen kendi OpenRouter key'ini ekle (chat sahibi sensin) — daha güçlü modeller + sesli mesaj açılır:\n  1. openrouter.ai/keys → Sign in → Create Key\n  2. Key'i (sk-or-v1-… ile başlar) BU MESAJI YANITLAYARAK gönder → grup'a özel kaydederim + DM mesajını güvenlik için silerim.\n\nKey eklemek zorunlu değil; sonra /settings'ten de ekleyebilirsin.`
+        : `👥 Thanks for adding me to "${groupLabel}"! The group already works on a **free model** — anyone who mentions @${ctx.me.username} can use the list.\n\n🔑 Optionally add your own OpenRouter key (you're the owner) for stronger models + voice messages:\n  1. openrouter.ai/keys → Sign in → Create Key\n  2. REPLY to this message with the key (sk-or-v1-…) → I save it for the group and delete your DM for safety.\n\nA key isn't required; you can also add one later via /settings.`;
 
     try {
       const sent = await ctx.api.sendMessage(inviter.id, msg, {
