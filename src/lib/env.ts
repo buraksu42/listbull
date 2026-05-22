@@ -25,6 +25,18 @@ const serverSchema = z.object({
     .default(0),
   LISTBULL_HEARTBEAT_URL: z.string().url().optional(),
 
+  // Shared free-tier fallback: when a chat has no OpenRouter key of
+  // its own, the bot uses this operator key with a free model
+  // (LISTBULL_FREE_MODEL). Lets group members use the bot in their
+  // DM without setting up their own key. Optional — when unset, a
+  // keyless chat falls back to the "set your key" prompt.
+  LISTBULL_SHARED_OPENROUTER_KEY: z.string().optional(),
+  // Model used for free-tier (keyless) chats. Should be an OpenRouter
+  // `:free` model so the shared key incurs no token cost.
+  LISTBULL_FREE_MODEL: z
+    .string()
+    .default("deepseek/deepseek-chat-v3:free"),
+
   // Phase 4 · D2 (Inv-18): optional dedicated HMAC key for snapshot
   // URLs. When unset we fall back to BETTER_AUTH_SECRET.
   SNAPSHOT_SIGNING_KEY: z.string().min(32).optional(),

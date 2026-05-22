@@ -75,6 +75,10 @@ const COPY = {
       "⏳ Saatlik mesaj limitin doldu — biraz dinlen, sonra tekrar yaz.",
     voiceUnsupported:
       "🎤 Sesi anlayamadım — tekrar dener misin, ya da yazılı yaz.",
+    voiceNeedsKey:
+      "🎤 Sesli mesaj ücretsiz modda kapalı. Kendi OpenRouter key'ini girersen ses de açılır — openrouter.ai/keys'ten key alıp buraya yapıştır.",
+    freeTierNudge:
+      "💡 Şu an ücretsiz modelle çalışıyorsun — kalite sınırlı olabilir, bazı özellikler beklenildiği gibi çalışmayabilir. Kendi OpenRouter key'ini girersen (openrouter.ai/keys) daha güçlü modellerle kullanırsın; key'i buraya yapıştırman yeterli.",
   },
   en: {
     noKey:
@@ -86,6 +90,10 @@ const COPY = {
       "⏳ Hourly message limit hit — take a breather, then try again.",
     voiceUnsupported:
       "🎤 Couldn't make out the audio — try again, or type it instead.",
+    voiceNeedsKey:
+      "🎤 Voice is off on the free tier. Add your own OpenRouter key to enable it — grab one at openrouter.ai/keys and paste it here.",
+    freeTierNudge:
+      "💡 You're on a free model right now — quality is limited and some features may not work as expected. Add your own OpenRouter key (openrouter.ai/keys) for stronger models; just paste the key here.",
   },
 } as const;
 
@@ -479,11 +487,23 @@ export async function handleMessage(ctx: Context): Promise<void> {
     }
   }
 
+  // Free-tier fallback: a chat with no key of its own runs on the
+  // shared operator key + a free model. Lets group members use the
+  // bot in their DM without setting up OpenRouter. usingFreeKey
+  // gates the model choice, disables voice, and shows an upgrade
+  // nudge.
+  let usingFreeKey = false;
   if (apiKey === null) {
-    await ctx.reply(copy.noKey, {
-      link_preview_options: { is_disabled: true },
-    });
-    return;
+    const sharedKey = env.LISTBULL_SHARED_OPENROUTER_KEY;
+    if (sharedKey && sharedKey.length > 0) {
+      apiKey = sharedKey;
+      usingFreeKey = true;
+    } else {
+      await ctx.reply(copy.noKey, {
+        link_preview_options: { is_disabled: true },
+      });
+      return;
+    }
   }
 
   // Voice / audio → transcribe via an OpenRouter audio model, then
@@ -491,6 +511,12 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // conversation model still does the tool routing.
   let groupVoiceAmbient = false;
   if (isVoiceInput && rawAttachment) {
+    // Free tier: voice STT needs a PAID audio model, so it's
+    // disabled on the shared key. Nudge the user to bring their own.
+    if (usingFreeKey) {
+      await ctx.reply(copy.voiceNeedsKey);
+      return;
+    }
     // Refuse voice inside the /password flow. A spoken password
     // would otherwise be transcribed through the STT model (a path
     // the typed flow deliberately avoids) and STT mangles random
@@ -669,10 +695,21 @@ export async function handleMessage(ctx: Context): Promise<void> {
 
   const dispatcher = createToolDispatcher({ userId: user.id, chatId });
 
+  // Free-tier chats run the shared key on a free model; keyed chats
+  // keep their configured model.
+  const llmModel = usingFreeKey
+    ? env.LISTBULL_FREE_MODEL
+    : chatRow?.llmModel ?? user.llmModel;
+  // Show the "you're on the free tier, add a key" nudge only on the
+  // first few turns of a keyless chat (recent is the pre-message
+  // history) — enough to be seen, not enough to nag.
+  const showFreeNudge = usingFreeKey && recent.length <= 6;
+
   const llmStartedAt = Date.now();
   console.log("[llm] call", {
     chatId,
-    model: chatRow?.llmModel ?? user.llmModel,
+    model: llmModel,
+    freeKey: usingFreeKey,
     msgs: messagesForLlm.length,
     hadActionMarker: actionMarker !== null,
     action: actionMarker?.action ?? null,
@@ -681,7 +718,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
   try {
     const response = await respond({
       apiKey,
-      model: chatRow?.llmModel ?? user.llmModel,
+      model: llmModel,
       messages: messagesForLlm,
       user: {
         locale: user.locale,
@@ -734,6 +771,10 @@ export async function handleMessage(ctx: Context): Promise<void> {
       await insertMessages(rowsToInsert);
     }
 
+    // Free-tier upgrade nudge, appended to the bot's reply on the
+    // first few turns of a keyless chat.
+    const nudge = showFreeNudge ? `\n\n${copy.freeTierNudge}` : "";
+
     if (safeAssistantText.trim().length === 0) {
       // Haiku sometimes finishes a tool round-trip without composing
       // a final text. From the user's side that's "the bot ignored
@@ -746,11 +787,15 @@ export async function handleMessage(ctx: Context): Promise<void> {
         )
         .flat();
       if (toolNames.length > 0) {
-        await ctx.reply(emptyTextFallback(toolNames, locale));
+        await ctx.reply(emptyTextFallback(toolNames, locale) + nudge);
+      } else if (nudge) {
+        // No tools, no text — but a keyless newcomer should still see
+        // the nudge at least once.
+        await ctx.reply(copy.freeTierNudge);
       }
       return;
     }
-    await sendChunked(ctx, safeAssistantText);
+    await sendChunked(ctx, safeAssistantText + nudge);
   } catch (err) {
     console.error("[handle-message] LLM error", err);
     // OpenRouter 402 → user's own funds problem, not infra — surface
