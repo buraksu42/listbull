@@ -14,6 +14,10 @@ import { handleMemory } from "@/lib/server/bot/commands/memory";
 import { handleReminders } from "@/lib/server/bot/commands/reminders";
 import { handleReset } from "@/lib/server/bot/commands/reset";
 import { handleSecret } from "@/lib/server/bot/commands/secret";
+import {
+  handleSettings,
+  handleSettingsCallback,
+} from "@/lib/server/bot/commands/settings";
 import { handleStart } from "@/lib/server/bot/commands/start";
 import { handleToday, handleWeek } from "@/lib/server/bot/commands/today";
 import { handleMessage } from "@/lib/server/bot/handle-message";
@@ -33,13 +37,30 @@ export async function getBot(): Promise<Bot> {
     const bot = new Bot(env.TELEGRAM_BOT_TOKEN);
     registerHandlers(bot);
     await bot.init();
-    // Standard procedure: bot is NON-ADMIN in groups with privacy
-    // mode ON (set in BotFather). Telegram's admin status overrides
-    // privacy mode — making the bot admin would force it to read
-    // every message in the group, defeating the privacy goal. Member
-    // sync therefore falls back to text_mention entity extraction
-    // (see handle-message.ts) when the owner introduces a new user
-    // via the @-suggestion popup.
+    // Sync the Telegram slash-command menu on every cold start so it
+    // always matches the registered commands. Without this the menu
+    // only changed when scripts/setup-bot.ts was re-run by hand —
+    // stale entries (e.g. the removed /assigned) lingered. Idempotent;
+    // failure is non-fatal.
+    try {
+      await bot.api.setMyCommands([
+        { command: "items", description: "📋 Açık to-do'lar" },
+        { command: "done", description: "✅ Tamamlananlar" },
+        { command: "memory", description: "📁 Hafıza" },
+        { command: "tag", description: "🏷️ Etikete göre işler (örn. /tag burak)" },
+        { command: "today", description: "📅 Bugünkü işler" },
+        { command: "thisweek", description: "🗓 Bu haftaki işler" },
+        { command: "reminders", description: "🔔 Bekleyen hatırlatıcılar" },
+        { command: "password", description: "🔒 Şifre sakla / görüntüle" },
+        { command: "settings", description: "⚙️ Ayarlar" },
+        { command: "help", description: "❓ Yardım" },
+        { command: "reset", description: "🧹 Konuşmayı sıfırla" },
+      ]);
+    } catch (e) {
+      console.warn("[bot] setMyCommands failed", {
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
     cached = bot;
     return bot;
   })();
@@ -70,8 +91,9 @@ function registerHandlers(bot: Bot): void {
   bot.command("thisweek", handleWeek);
   bot.command("tag", handleTag);
   bot.command("reminders", handleReminders);
+  bot.command("settings", handleSettings);
 
-  // Inline-keyboard callbacks for /items + /memory views.
+  // Inline-keyboard callbacks.
   bot.on("callback_query:data", async (ctx, next) => {
     const data = ctx.callbackQuery.data ?? "";
     if (
@@ -81,6 +103,10 @@ function registerHandlers(bot: Bot): void {
       data.startsWith("done:")
     ) {
       await handleItemActionCallback(ctx);
+      return;
+    }
+    if (data.startsWith("settings:")) {
+      await handleSettingsCallback(ctx);
       return;
     }
     await next();
