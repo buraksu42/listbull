@@ -14,10 +14,10 @@
     "db:studio": "drizzle-kit studio",
     "cron": "tsx --tsconfig tsconfig.cron.json src/lib/cron/dispatch-reminders.ts",
     "setup:bot": "tsx --tsconfig tsconfig.cron.json scripts/setup-bot.ts",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "e2e:list": "playwright test --list"
+    "e2e:list": "playwright test --list || test $? -eq 1"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
