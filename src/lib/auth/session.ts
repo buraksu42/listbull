@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { cookies } from "next/headers";
 
 import { SESSION_COOKIE_NAME } from "@/lib/auth/cookie";
-import { env } from "@/lib/env";
+import { env, getHmacSecret } from "@/lib/env";
 
 /**
  * Phase 1: minimal HMAC-signed session cookie.
@@ -24,7 +24,7 @@ type SessionPayload = {
 
 function sign(payload: string): string {
   return crypto
-    .createHmac("sha256", env.BETTER_AUTH_SECRET)
+    .createHmac("sha256", getHmacSecret())
     .update(payload)
     .digest("base64url");
 }
