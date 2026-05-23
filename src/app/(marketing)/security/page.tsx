@@ -14,7 +14,10 @@ type Claim = {
   link?: { label: string; href: string };
 };
 
-const REPO = "https://github.com/buraksu42/listbull/blob/main";
+// Permalinks pin to the `dev` branch — all current code lives
+// there; `main` is the initial scaffold. Swap to a specific commit
+// SHA or to `main` once the merge happens.
+const REPO = "https://github.com/buraksu42/listbull/blob/dev";
 
 const SECTIONS: { heading: string; lead: string; claims: Claim[] }[] = [
   {
@@ -155,7 +158,7 @@ export default function SecurityPage() {
         <p className="mt-6 text-sm" style={{ color: "var(--lb-muted-fg)" }}>
           Full write-up:{" "}
           <a
-            href={`${REPO}/SECURITY.md`}
+            href={`https://github.com/buraksu42/listbull/blob/dev/SECURITY.md`}
             target="_blank"
             rel="noopener noreferrer"
             className="underline-offset-4 hover:underline"
