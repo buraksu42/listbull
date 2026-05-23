@@ -700,10 +700,12 @@ export async function handleMessage(ctx: Context): Promise<void> {
   const llmModel = usingFreeKey
     ? env.LISTBULL_FREE_MODEL
     : chatRow?.llmModel ?? user.llmModel;
-  // Show the "you're on the free tier, add a key" nudge only on the
-  // first few turns of a keyless chat (recent is the pre-message
-  // history) — enough to be seen, not enough to nag.
-  const showFreeNudge = usingFreeKey && recent.length <= 6;
+  // Show the "you're on the free tier, add a key" nudge ONCE per
+  // conversation — only when this is the user's very first message
+  // (recent is the pre-message history, so length=0 means no prior
+  // turns). /reset clears history and the nudge fires again, which
+  // is fine — reset is an explicit fresh start.
+  const showFreeNudge = usingFreeKey && recent.length === 0;
 
   const llmStartedAt = Date.now();
   console.log("[llm] call", {
