@@ -74,7 +74,6 @@ jobs:
           # Staging secrets (Phase 5):
           TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_BOT_TOKEN }}
           TELEGRAM_WEBHOOK_SECRET: ${{ secrets.E2E_WEBHOOK_SECRET }}
-          TELEGRAM_BOT_USERNAME: listbull_test_bot
           ENV_KEY: ${{ secrets.E2E_ENV_KEY }}
           NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
           NEXT_PUBLIC_ENV: test
