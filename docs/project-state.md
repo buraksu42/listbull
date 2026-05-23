@@ -1,123 +1,91 @@
-# listbull — project state
+# Project state
 
-> Single-page summary of every phase. Updated 2026-05-06.
-> For technical details see `architecture-overview.md` + the
-> phase-specific architect-pass docs.
+> Last refreshed: 2026-05-23 (Phase 17 hygiene pass).
 
-## Status: shipped through Phase 12
+## What ships today
 
-| Phase | Title | Status | Commit landmark |
-|---|---|---|---|
-| 1 | Foundation | Complete | (pre-Phase-4.5) |
-| 2 | Core LLM + tools | Complete | architect-pass-phase-2.md |
-| 3 | Sharing + reminders + assignments | Complete | architect-pass-phase-3.md |
-| 4 | OSS quality polish | Complete | architect-pass-phase-4.md |
-| 4.5 | Workspace + billing + multi-bot pivot | Complete | `22b3a2c` BLOCKER 0 |
-| 5 | SaaS launch + billing + multi-bot wiring | Complete | `35d94cb` handoff |
-| 5.5 | Org-key + workspace invitations + bot LRU | Complete | `882f025` |
-| 6 | Self-host JWT license + admin dashboard | Complete | `bc6a012` |
-| 6.5 | Activity timeline + email + auto-issuance + bulk restore | Complete | `16fc18b` |
-| 7 | Item filters + LLM telemetry + Upstash KV | Complete | `22663af` |
-| 8 | Cost extraction + sparkline + member caps | Complete | `32512e3` |
-| 9 | Cost projection + provider cost + i18n | Complete | `1056986` |
-| 10 | Bot rate limit + cleanup cron + extended health | Complete | `1fa2128` |
-| 11 | README refresh + architecture overview | Complete | `daee607` |
-| 12 | Public-ready repo + this doc | Complete | this commit |
+listbull is a **Telegram-native AI to-do bot**. One Telegram chat
+(DM or group) maps to one to-do context — items, reminders, memory,
+secrets, activity log are all scoped to that chat.
 
-## Numbers at end of Phase 12
+### Surfaces
 
-- **18 tables** (7 from Phase 1 + 11 added across Phases 4.5–8)
-- **24 LLM tools** (9 from Phase 1–3 + 15 added across Phases 3–4.5)
-- **6 Drizzle migrations** (`0001_nebulous_revanche` →
-  `0006_late_valeria_richards`)
-- **2 cron jobs** (reminders, cleanup-stale)
-- **2 system prompts versioned** (v3 + v4); v1, v2, v3 retained for rollback
-- **5 billing/license env keypairs** (Stripe, Iyzico, Upstash, Resend,
-  License keypair) — all optional with safe-default no-ops
-- **78 unit tests** (Vitest), 1 skipped
-- **CI surface**: lint + tsc + Vitest + Playwright + gitleaks, all green
+- **Telegram bot** — primary surface; webhook-driven, grammY-based.
+- **Marketing landing** at `https://prod.listbull.org` — public
+  product info, command reference, self-host pointer.
+- **Security page** at `https://prod.listbull.org/security` —
+  encryption + isolation guarantees with source permalinks.
 
-## Surfaces
+There is no Mini App. The `(app)` route group was deleted in the
+Phase 17 chat-only pivot; the project's product surface is the bot.
 
-### Bot (Telegram)
-- Default platform `@listbull_bot` + Workspace-tier white-label bots
-- 5 slash commands: `/start`, `/lists`, `/share`, `/snapshot`,
-  `/help`, `/reset`
-- Inline mode `@listbull_bot <query>` (Phase 4)
-- Forwarded message extraction (Phase 4)
-- 24-tool LLM router via system.v4 prompt
-- Per-user hourly rate limit (Phase 10)
+### Slash commands (12)
 
-### Mini App (Telegram WebApp)
-- `/lists` — list-of-lists with workspace switcher header
-- `/lists/[id]` — items with status badge / priority dot / tag chips
-  + filter chips (Phase 7)
-- `/lists/[id]/activity` — per-list activity feed (Phase 3)
-- `/lists/[id]/audit` — owner-only restore (Phase 4)
-- `/views/today` — workspace-scoped due-today aggregate (Phase 4.5)
-- `/workspace/settings` — Plan card, members, custom bot, org-key
-- `/workspace/admin` — Workspace-tier admin: usage stats, spend +
-  sparkline, caps, activity timeline, bulk restore
-- `/workspace/new` — create workspace
-- `/billing/success` — post-checkout landing
-- `/invites/[token]` — per-list invite accept (Phase 3)
-- `/workspace-invites/[token]` — workspace invite accept (Phase 5.5)
-- `/settings` — BYOK key, locale, timezone, model, notifications,
-  30-day usage badge, workspace cap visibility (Phase 9)
+Order matches `setMyCommands` in `src/lib/server/bot/index.ts`:
 
-### API routes
-- `/api/auth/telegram` — Mini App initData verification
-- `/api/telegram/webhook[/botId]` — bot updates (default + per-bot)
-- `/api/lists/*` — list/item CRUD
-- `/api/workspaces/*` — workspace CRUD + members + bots + caps + activity
-- `/api/billing/{checkout,portal,subscription}` — Stripe + Iyzico
-- `/api/webhooks/{stripe,iyzico}` — provider lifecycle
-- `/api/admin/licenses[/[id]]` — license issuance + revoke (operator-token)
-- `/api/license-revocations` — public newline-separated revoked IDs
-- `/api/health` — db + bot required, redis + stripe optional
+| Command       | Purpose                                                         |
+|---------------|-----------------------------------------------------------------|
+| `/items`      | Open to-dos                                                     |
+| `/done`       | Completed items (reopen / archive)                              |
+| `/memory`     | Memory keepsakes (tickets, docs — never auto-deleted)           |
+| `/tag <name>` | Items filtered by tag (e.g. `/tag burak`)                       |
+| `/today`      | Today's items                                                   |
+| `/thisweek`   | Items due this week                                             |
+| `/reminders`  | Pending reminders                                               |
+| `/password`   | Store / reveal passwords (DM-only save, group-aware reveal)     |
+| `/settings`   | Language, notifications, formats, OpenRouter key                |
+| `/onboarding` | Interactive 8-step walkthrough                                  |
+| `/help`       | This message                                                    |
+| `/reset`      | Clear conversation history                                      |
 
-## Operator handoff index
+Implicit `/start` welcomes new users and offers the onboarding button.
 
-| Doc | Phase | Topic |
-|---|---|---|
-| `phase-5-handoff.md` | 5 | SaaS launch operator runbook (Stripe + Iyzico keys, BotFather, repo public, prod cutover) |
-| `phase-6-handoff.md` | 6 | Self-host license keypair + admin endpoints + revocation list |
-| `architecture-pass-phase-4.5.md` | 4.5 | Workspace pivot schema + types + migration runbook |
-| `review-phase-4.5.md` | 4.5 | Reviewer strict-gate findings |
-| `architecture-overview.md` | All | Top-level surface map + invariants |
+### Capabilities beyond commands
 
-## What's NOT shipped (intentional)
+- **Natural-language to-dos** — "süt al", "yarın 18'de fatura öde".
+- **Checklist** — parent + sub-items. Parent completion is **gated**
+  (cannot close while children are open); deletion cascade-archives
+  children with explicit count confirmation.
+- **Reminders** — natural language or button. Fire to the originating
+  chat (group items → group; DM items → DM). Cron polls every 60s.
+- **Voice notes** — transcribed via OpenRouter (Gemini 2.5 Flash);
+  in DMs they go through the same item-capture path. In groups the
+  bot listens ambiently — if a voice note contains a to-do, it's
+  added; if not, the bot stays silent.
+- **`/password`** — 3-step DM save (label → username → password),
+  AES-256-GCM encrypted at rest. Reveal sends a 15-second self-
+  destruct message with HTML `<code>` for tap-to-copy.
+- **Memory** — long-lived keepsakes that never auto-archive (require
+  explicit deletion).
+- **Tag-based "assignment"** — `@buraksu42 raporu yap` creates an
+  item tagged `#buraksu42`; `/tag buraksu42` filters to those.
+- **BYOK + free-tier fallback** — users can paste their own
+  OpenRouter key via `/settings`; if the operator has set
+  `LISTBULL_SHARED_OPENROUTER_KEY`, keyless chats fall back to that
+  with a free model (zero token cost).
 
-These are out of scope per the project's "Telegram-native AI list
-assistant" wedge — listed here so contributors know not to PR them:
+## Stack
 
-- **Project management features** — Gantt, dependencies, custom
-  fields, multi-assignee, custom workflows, time tracking
-- **Real-time chat** — Slack/Discord-style; we route through Telegram
-- **iOS/Android native apps** — Mini App + Telegram covers mobile
-- **Email digests** — license email is the only Resend usage
-- **OpenRouter alternatives** — model providers stay BYOK via
-  OpenRouter routing
-- **Live phone-home license verification** — privacy-first;
-  revocation list is the offline mechanism
+- Next.js 16 (App Router, Turbopack, TS strict)
+- grammY (Telegram bot framework)
+- Postgres 16 + Drizzle ORM
+- OpenRouter via Anthropic SDK `baseURL` swap
+- `next-intl` for TR/EN bot replies
+- Tailwind v4 for the landing surface
 
-## Maintenance mode
+Deployment: Dokploy on Hetzner; cron container runs `npm run cron`
+every 60s.
 
-After Phase 12 the project enters maintenance:
+## Active docs
 
-- Bug fixes welcome via PR
-- Feature requests gated by anti-list (issue template enforces)
-- Security reports → mburaksu@gmail.com
-- License key rotation: see `phase-6-handoff.md` § "Rotation"
-- Database backups: hourly Postgres backup pipeline (per global
-  CLAUDE.md monitoring stack)
+- [`features.md`](./features.md) — feature reference
+- [`self-host.md`](./self-host.md) — install runbook
+- [`SMOKE_TEST.md`](./SMOKE_TEST.md) — e2e test matrix
+- [`backlog.md`](./backlog.md) — future work
 
-## Project closure
+## Historical context
 
-Phase 12 closes the build phase. Production deployment, customer
-onboarding, support runbooks, and pricing iteration are operator
-work — see the handoff docs above.
-
-🤖 Built with Claude Code over 30+ commits across Phases 4.5–12.
-Phase 1–4 predate the multi-phase commit log; see git log for the
-full history.
+The pre-Phase-17 architecture (workspaces, lists, Mini App, Better
+Auth, multi-bot, assignees) is preserved in
+[`docs/archive/`](./archive/). Those documents do not reflect the
+current implementation.
