@@ -1,85 +1,38 @@
-import Link from "next/link";
+import { CommandList } from "@/components/marketing/CommandList";
+import { DemoGif } from "@/components/marketing/DemoGif";
+import { FeatureGrid } from "@/components/marketing/FeatureGrid";
+import { Footer } from "@/components/marketing/Footer";
+import { Hero } from "@/components/marketing/Hero";
+import { ScreenshotMosaic } from "@/components/marketing/ScreenshotMosaic";
+import { TestimonialsPlaceholder } from "@/components/marketing/TestimonialsPlaceholder";
 
 export const metadata = {
-  title: "listbull — Telegram-native to-do bot",
+  title: "listbull — Telegram-native AI to-do bot",
   description:
-    "Open-source. Self-host in 15 minutes. Chat with the bot — that's the whole interface.",
+    "Open-source Telegram bot for to-dos, reminders, voice notes, and encrypted passwords. Self-host in 15 minutes; BYOK or free tier.",
 };
 
 /**
- * Marketing homepage (Phase 17 chat-only).
+ * Marketing landing (Phase 17 chat-only).
  *
- * Mini App development is frozen; everything happens via Telegram
- * chat. The page is intentionally sparse during the pivot — full
- * marketing surface comes back when chat UX stabilizes.
+ * Sections compose top-to-bottom: hero CTA → demo loop → feature
+ * grid → screenshot mosaic → slash-command reference → testimonials
+ * placeholder → footer. Light-only (parent layout sets data-theme).
  */
 export default function MarketingHome() {
   return (
     <main
-      style={{
-        minHeight: "100dvh",
-        background: "var(--lb-bg)",
-        color: "var(--lb-fg)",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "var(--lb-sp-6)",
-        textAlign: "center",
-      }}
+      id="lb-main"
+      className="flex min-h-dvh flex-col"
+      style={{ background: "var(--lb-bg)", color: "var(--lb-fg)" }}
     >
-      <h1
-        style={{
-          fontSize: "clamp(2rem, 5vw, 3.5rem)",
-          fontWeight: 700,
-          letterSpacing: "var(--lb-tracking-title)",
-          marginBottom: "var(--lb-sp-3)",
-        }}
-      >
-        listbull
-      </h1>
-      <p
-        style={{
-          fontSize: "var(--lb-fs-lg)",
-          color: "var(--lb-muted-fg)",
-          maxWidth: 560,
-          marginBottom: "var(--lb-sp-6)",
-          lineHeight: 1.5,
-        }}
-      >
-        Telegram-native to-do bot. Every chat is its own list — the bot
-        handles everything via chat. Open source, self-host in 15
-        minutes, BYOK via OpenRouter.
-      </p>
-      <div style={{ display: "flex", gap: "var(--lb-sp-3)" }}>
-        <a
-          href="https://github.com/buraksu42/listbull"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            padding: "var(--lb-sp-3) var(--lb-sp-6)",
-            border: "1px solid var(--lb-border)",
-            borderRadius: "var(--lb-r-full)",
-            color: "var(--lb-fg)",
-            textDecoration: "none",
-          }}
-        >
-          GitHub
-        </a>
-        <Link
-          href="/use-the-bot"
-          style={{
-            padding: "var(--lb-sp-3) var(--lb-sp-6)",
-            background: "var(--lb-accent)",
-            color: "var(--lb-accent-fg)",
-            borderRadius: "var(--lb-r-full)",
-            textDecoration: "none",
-            fontWeight: 600,
-          }}
-        >
-          Try the bot →
-        </Link>
-      </div>
+      <Hero />
+      <DemoGif />
+      <FeatureGrid />
+      <ScreenshotMosaic />
+      <CommandList />
+      <TestimonialsPlaceholder />
+      <Footer />
     </main>
   );
 }
