@@ -1,148 +1,133 @@
+/**
+ * Bot factory + handler registration (Phase 17 chat-only).
+ *
+ * Single default platform bot — white-label per-workspace bots
+ * dropped. The env token is the only token; there's no `bots` table.
+ */
 import { Bot } from "grammy";
-import { eq } from "drizzle-orm";
 
+import { handleTag } from "@/lib/server/bot/commands/tag";
+import { handleDone } from "@/lib/server/bot/commands/done";
 import { handleHelp } from "@/lib/server/bot/commands/help";
-import { handleLists } from "@/lib/server/bot/commands/lists";
+import { handleItems } from "@/lib/server/bot/commands/items";
+import { handleMemory } from "@/lib/server/bot/commands/memory";
+import { handleReminders } from "@/lib/server/bot/commands/reminders";
 import { handleReset } from "@/lib/server/bot/commands/reset";
-import { handleShare } from "@/lib/server/bot/commands/share";
-import { handleSnapshot } from "@/lib/server/bot/commands/snapshot";
+import { handleSecret } from "@/lib/server/bot/commands/secret";
+import {
+  handleSettings,
+  handleSettingsCallback,
+} from "@/lib/server/bot/commands/settings";
 import { handleStart } from "@/lib/server/bot/commands/start";
+import { handleToday, handleWeek } from "@/lib/server/bot/commands/today";
+import {
+  handleOnboarding,
+  handleOnboardingCallback,
+} from "@/lib/server/bot/commands/onboarding";
 import { handleMessage } from "@/lib/server/bot/handle-message";
-import { handleInlineQuery } from "@/lib/server/bot/handlers/inline-query";
-import { db } from "@/lib/db/client";
-import { bots } from "@/lib/db/schema";
-import { decrypt } from "@/lib/server/encryption";
+import { handleChatMemberUpdate } from "@/lib/server/bot/handlers/chat-member-update";
+import { handleItemActionCallback } from "@/lib/server/bot/handlers/item-action-callback";
+import { handleMyChatMember } from "@/lib/server/bot/handlers/my-chat-member";
+import { groupReplyMiddleware } from "@/lib/server/bot/middleware/group-reply";
 import { env } from "@/lib/env";
 
-/**
- * Bot instance pool with LRU eviction (Phase 5.5).
- *
- * Lookup keys:
- *   - "default" → platform bot (env.TELEGRAM_BOT_TOKEN). Pinned —
- *     never evicted; it's the highest-traffic instance.
- *   - <bot_id_uuid> → white-label bot from the `bots` table
- *
- * Each grammY instance holds ~5MB. With LRU bounded at 50 hot
- * instances, peak memory ~250MB regardless of how many white-label
- * bots exist. Cold bots get re-initialized lazily on the next
- * webhook hit (init = single getMe round-trip, ~50ms).
- *
- * Map iteration follows insertion order; we re-insert on access to
- * bump entries to MRU position. The oldest non-default key is the
- * eviction candidate when we hit POOL_CAP.
- *
- * Order matters in handler registration: slash commands FIRST, then
- * the catch-all `message:text`. grammY's `bot.command()` filter
- * takes priority over `bot.on("message:text", ...)`.
- */
-const POOL_CAP = 50;
+let cached: Bot | null = null;
+let initPromise: Promise<Bot> | null = null;
 
-const cached = new Map<string, Bot>();
-const initPromises = new Map<string, Promise<Bot>>();
-
-function bumpLru(key: string): void {
-  const v = cached.get(key);
-  if (v === undefined) return;
-  // Re-insert moves to MRU position.
-  cached.delete(key);
-  cached.set(key, v);
-}
-
-function evictOldest(): void {
-  for (const key of cached.keys()) {
-    if (key === "default") continue;
-    cached.delete(key);
-    return;
-  }
-}
-
-/**
- * Get the default platform bot (env-token). Maintained as the legacy
- * call signature so existing call sites (cron dispatcher, share-list
- * invite DM) keep working unchanged.
- */
 export async function getBot(): Promise<Bot> {
-  return getBotByKey("default");
-}
-
-/**
- * Get a registered Telegram bot by its `bots.id` UUID. Phase 5
- * webhook router calls this with the bot ID extracted from the URL
- * path (`/api/telegram/webhook/[botId]`). Returns null when the
- * bot row is missing or the token can't be decrypted.
- */
-export async function getBotById(botId: string): Promise<Bot | null> {
-  try {
-    return await getBotByKey(botId);
-  } catch (err) {
-    console.warn("[bot pool] init failed for", botId, err);
-    return null;
-  }
-}
-
-async function getBotByKey(key: string): Promise<Bot> {
-  const existing = cached.get(key);
-  if (existing) {
-    bumpLru(key);
-    return existing;
-  }
-  const inFlight = initPromises.get(key);
-  if (inFlight) return inFlight;
-
-  const promise = (async () => {
-    const token = await resolveToken(key);
-    const bot = new Bot(token);
+  if (cached) return cached;
+  if (initPromise) return initPromise;
+  initPromise = (async () => {
+    const bot = new Bot(env.TELEGRAM_BOT_TOKEN);
     registerHandlers(bot);
     await bot.init();
-    if (cached.size >= POOL_CAP) evictOldest();
-    cached.set(key, bot);
+    // Sync the Telegram slash-command menu on every cold start so it
+    // always matches the registered commands. Without this the menu
+    // only changed when scripts/setup-bot.ts was re-run by hand —
+    // stale entries (e.g. the removed /assigned) lingered. Idempotent;
+    // failure is non-fatal.
+    try {
+      await bot.api.setMyCommands([
+        { command: "items", description: "📋 Açık to-do'lar" },
+        { command: "done", description: "✅ Tamamlananlar" },
+        { command: "memory", description: "📁 Hafıza" },
+        { command: "tag", description: "🏷️ Etikete göre işler (örn. /tag burak)" },
+        { command: "today", description: "📅 Bugünkü işler" },
+        { command: "thisweek", description: "🗓 Bu haftaki işler" },
+        { command: "reminders", description: "🔔 Bekleyen hatırlatıcılar" },
+        { command: "password", description: "🔒 Şifre sakla / görüntüle" },
+        { command: "settings", description: "⚙️ Ayarlar" },
+        { command: "onboarding", description: "🎯 Hızlı tur (yeni misin?)" },
+        { command: "help", description: "❓ Yardım" },
+        { command: "reset", description: "🧹 Konuşmayı sıfırla" },
+      ]);
+    } catch (e) {
+      console.warn("[bot] setMyCommands failed", {
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+    cached = bot;
     return bot;
   })();
-
-  initPromises.set(key, promise);
   try {
-    return await promise;
+    return await initPromise;
   } finally {
-    initPromises.delete(key);
+    initPromise = null;
   }
-}
-
-async function resolveToken(key: string): Promise<string> {
-  if (key === "default") return env.TELEGRAM_BOT_TOKEN;
-
-  const [row] = await db
-    .select({ tokenEncrypted: bots.telegramBotTokenEncrypted })
-    .from(bots)
-    .where(eq(bots.id, key))
-    .limit(1);
-  if (!row) {
-    throw new Error(`bot pool: no bots row with id ${key}`);
-  }
-  return decrypt(row.tokenEncrypted);
 }
 
 function registerHandlers(bot: Bot): void {
+  // Auto-quote user message in groups (must run before any handler
+  // that calls ctx.reply so the wrap is in place).
+  bot.use(groupReplyMiddleware);
+
   bot.command("start", handleStart);
   bot.command("help", handleHelp);
-  bot.command("lists", handleLists);
-  bot.command("share", handleShare);
   bot.command("reset", handleReset);
-  bot.command("snapshot", handleSnapshot);
-  bot.on("inline_query", handleInlineQuery);
-  // Phase 14b: register on `message` (not `message:text`) so photos /
-  // videos / documents / audio / voice / video_note also flow into
-  // handleMessage. Slash commands stay routed via `bot.command()`
-  // because grammY filters those before this catch-all.
-  bot.on("message", handleMessage);
-}
+  bot.command("items", handleItems);
+  bot.command("done", handleDone);
+  bot.command("memory", handleMemory);
+  // English-only slash menu (user preference); /sifre kept as a
+  // tolerant alias for anyone with the old command in muscle memory.
+  bot.command(["password", "sifre"], handleSecret);
+  // Slash commands are English-only by user preference — the bot
+  // replies are still localized (TR/EN) based on users.locale.
+  bot.command("today", handleToday);
+  bot.command("thisweek", handleWeek);
+  bot.command("tag", handleTag);
+  bot.command("reminders", handleReminders);
+  bot.command("settings", handleSettings);
+  bot.command("onboarding", handleOnboarding);
 
-/**
- * Test / admin helper: drop a cached bot instance so the next
- * request rebuilds it from the DB. Called from the workspace
- * settings revoke endpoint after the operator removes a custom
- * bot's token.
- */
-export function evictBotFromPool(key: string): void {
-  cached.delete(key);
-  initPromises.delete(key);
+  // Inline-keyboard callbacks.
+  bot.on("callback_query:data", async (ctx, next) => {
+    const data = ctx.callbackQuery.data ?? "";
+    if (
+      data.startsWith("item:") ||
+      data.startsWith("items:") ||
+      data.startsWith("memory:") ||
+      data.startsWith("done:")
+    ) {
+      await handleItemActionCallback(ctx);
+      return;
+    }
+    if (data.startsWith("settings:")) {
+      await handleSettingsCallback(ctx);
+      return;
+    }
+    if (data.startsWith("onboarding:")) {
+      await handleOnboardingCallback(ctx);
+      return;
+    }
+    await next();
+  });
+
+  // Bot added to / removed from a chat.
+  bot.on("my_chat_member", handleMyChatMember);
+
+  // Another user's membership in a group changed.
+  bot.on("chat_member", handleChatMemberUpdate);
+
+  // Catch-all: free-form message → LLM router.
+  bot.on("message", handleMessage);
 }

@@ -1,6 +1,9 @@
 /**
- * Bot-side i18n. Phase 1 ships TR + EN strings inline (no next-intl on the bot path).
- * Mini App uses next-intl with messages/{tr,en}.json — those are wired in Phase 4.
+ * Bot-side i18n (Phase 17 chat-only).
+ *
+ * Command order in `help` MUST match `setMyCommands` in
+ * `src/lib/server/bot/index.ts` — drift confuses users hitting the
+ * Telegram menu and then asking `/help`.
  */
 
 type Locale = "tr" | "en";
@@ -8,19 +11,13 @@ type Locale = "tr" | "en";
 const dict = {
   tr: {
     welcome: (name: string, timezone: string) =>
-      `Merhaba ${name}! Ben listbull. 📥 Inbox listesini senin için oluşturdum.\n\n⏰ Saat dilimini ${timezone} olarak ayarladım. Yanlışsa bana "saat dilimi <şehir>" diye yaz (örn. "saat dilimi İstanbul"), ya da Mini App → Settings'ten değiştir.\n\nMini App'i aç, listelerini gör; ya da bana doğrudan yaz: "süt al" gibi bir mesajla bir item oluştururum.\n\nKomutlar için /help yaz.`,
-    help: `Komutlar:\n/lists — listelerini göster\n/share [liste] — bir listeyi başkasıyla paylaş\n/reset — konuşma geçmişini sil\n/help — bu mesaj\n\nDoğrudan yazarsan AI ile listenle çalışırım. (OpenRouter key'i workspace sahibi tarafından Mini App → Workspace ayarları'ndan tanımlanır.)`,
-    listsHeader: "Listelerin:",
-    noLists: "Henüz listen yok. /start ile başla.",
-    inboxLabel: "Inbox",
+      `Merhaba ${name}! Ben listbull.\n\n📋 Bu chat = bir to-do listesi. Bana doğal dilde yaz, ben işini görüyorum:\n• "süt al"\n• "Ali'ye toplantı notlarını gönder, yarın 14:00'da hatırlat"\n• "/items" → tüm item'ları göster\n• "/onboarding" → 3 dk'lık hızlı tur\n\n⏰ Saat dilimin ${timezone}. Yanlışsa "saat dilimi <şehir>" yaz.\n\n🆓 Ücretsiz başlayabilirsin — operatör shared key ile çalışıyorsan kendi anahtarına gerek yok. Daha kaliteli modeller için kendi OpenRouter key'ini /settings → 🔑 ile ekleyebilirsin.`,
+    help: `Komutlar:\n📋 /items — açık to-do'lar\n✅ /done — tamamlananlar (geri açabilir veya arşivleyebilirsin)\n📁 /memory — hafıza (biletler, dökümanlar — silinmez)\n🏷️ /tag <etiket> — etikete göre işler (örn. /tag burak)\n📅 /today — bugün için planlananlar\n🗓 /thisweek — bu haftaki işler\n🔔 /reminders — bekleyen hatırlatıcılar\n🔒 /password — şifre sakla / görüntüle (DM)\n⚙️ /settings — dil, bildirim, biçim, OpenRouter key\n🎯 /onboarding — hızlı tur (yeni misin?)\n❓ /help — bu mesaj\n🧹 /reset — konuşma geçmişini sil\n\nİkon rehberi:\n📅 ileride deadline   ⏳ deadline 24 saat içinde   ⚠️ deadline geçmiş\n🔔 aktif hatırlatıcı var   📎 dosya/foto eki   📌 memory marker\n📂 checklist (parent + alt-item'lar)   🔥 yüksek öncelik   💤 düşük öncelik   ⏸️ blokta   ✅ tamamlandı\n\nButonlar: ✏️ düzenle · 📅 deadline kur · ⏰ hatırlatıcı kur · 📎 dosya · 🗑️ sil · 📂 alt-item'lar\n\nSesli not gönderebilirsin — transkripte edip listeye eklerim. Gruplarda da dinlerim, içinde to-do varsa düşer.`,
   },
   en: {
     welcome: (name: string, timezone: string) =>
-      `Hi ${name}! I'm listbull. I've created your 📥 Inbox list.\n\n⏰ I've set your timezone to ${timezone}. If that's wrong, message me "saat dilimi <city>" (e.g. "timezone Berlin"), or change it in Mini App → Settings.\n\nOpen the Mini App to see your lists, or just message me: "buy milk" creates an item.\n\nType /help for commands.`,
-    help: `Commands:\n/lists — show your lists\n/share [list] — share a list with someone\n/reset — clear conversation history\n/help — this message\n\nMessage me directly and I'll work with your lists via AI. (The workspace owner sets the OpenRouter key in Mini App → Workspace settings.)`,
-    listsHeader: "Your lists:",
-    noLists: "No lists yet. Run /start.",
-    inboxLabel: "Inbox",
+      `Hi ${name}! I'm listbull.\n\n📋 This chat = a to-do list. Talk naturally:\n• "buy milk"\n• "send meeting notes to @ali, remind me tomorrow 2pm"\n• "/items" → show all items\n• "/onboarding" → 3-minute quick walkthrough\n\n⏰ Your timezone is ${timezone}. Wrong? Say "timezone <city>".\n\n🆓 Free to start — if the operator runs a shared key you don't need your own. For better models, add your OpenRouter key via /settings → 🔑.`,
+    help: `Commands:\n📋 /items — open to-dos\n✅ /done — completed items (reopen or archive)\n📁 /memory — memory keepsakes (tickets, docs — never auto-deleted)\n🏷️ /tag <name> — items by tag (e.g. /tag burak)\n📅 /today — what's on for today\n🗓 /thisweek — items due this week\n🔔 /reminders — pending reminders\n🔒 /password — store / reveal passwords (DM)\n⚙️ /settings — language, notifications, formats, OpenRouter key\n🎯 /onboarding — quick walkthrough (new here?)\n❓ /help — this message\n🧹 /reset — clear conversation history\n\nIcon legend:\n📅 future deadline   ⏳ deadline within 24h   ⚠️ overdue\n🔔 has active reminder   📎 attachment   📌 memory marker\n📂 checklist (parent + sub-items)   🔥 high priority   💤 low priority   ⏸️ blocked   ✅ done\n\nButtons: ✏️ edit · 📅 set deadline · ⏰ set reminder · 📎 attach · 🗑️ delete · 📂 sub-items\n\nVoice notes work — I transcribe and add what's actionable. In groups I listen ambiently; only to-dos surface.`,
   },
 } as const;
 

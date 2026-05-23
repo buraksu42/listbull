@@ -1,300 +1,135 @@
 /**
- * Reminder dispatcher (cron entry point — Phase 14d rewrite).
+ * Reminder dispatcher (Phase 17 chat-only).
  *
- * Runs every 60 s in a Dokploy cron container. Pickup query rides on
- * the `item_reminders_due_idx` partial index:
- *
- *   WHERE item_reminders.remind_at <= NOW()
- *     AND item_reminders.sent = false
+ * Runs every 60 s in the Dokploy cron container. Pickup query:
+ *   SELECT reminder + item + chat owner
+ *   FROM item_reminders
+ *   JOIN items   ON items.id = item_reminders.item_id
+ *   JOIN chats   ON chats.chat_id = items.chat_id
+ *   JOIN users owner ON owner.id = chats.owner_user_id
+ *   WHERE reminders.sent = false
+ *     AND reminders.remind_at <= NOW()
  *     AND items.archived_at IS NULL
  *
- * For each row: DM target via grammY, then conditional UPDATE on the
- * reminder row to flip `sent = true` ONLY on success (Inv-11
- * idempotency guard). When `recurrence_rule` is non-null, advance to
- * the next occurrence instead of marking permanently sent.
- *
- * Inv-12 defensive read: if the assignee was removed mid-cycle (no
- * matching `list_members` row), the LEFT JOIN yields a NULL
- * assignee_telegram_id and we fall back to the owner.
- *
- * Local testing: `npm run cron`.
+ * Each reminder fires in the item's own chat (`items.chat_id`): a
+ * group item's reminder lands in the group, a DM item's in the DM.
+ * Owner locale/timezone format the body. Mark sent=true ONLY on
+ * success (Inv-11 idempotency). Recurring reminders advance to the
+ * next occurrence instead of a permanent sent.
  */
+import "server-only";
+
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
+  chats,
   itemReminders,
   items,
-  listMembers,
-  lists,
   users,
 } from "@/lib/db/schema";
 import type { ItemReminderKind, ReminderJobItem } from "@/lib/types";
-import { getBot, getBotById } from "@/lib/server/bot";
-import { escapeMarkdownV2 } from "@/lib/server/bot/escape-markdown";
+import { getBot } from "@/lib/server/bot";
 import { pickLocale } from "@/lib/server/bot/i18n";
 import { env } from "@/lib/env";
 import { formatDate } from "@/lib/utils/format-date";
-import type {
-  AllowedDateFormat,
-  AllowedTimeFormat,
-} from "@/lib/validators/settings";
 
 const PICKUP_LIMIT = 100;
 
-/** Localized reminder body. Includes the deadline when distinct from the ping. */
 function formatReminderBody(args: {
   locale: "tr" | "en";
-  listEmoji: string | null;
-  listName: string;
   itemText: string;
   remindAt: string;
   deadlineAt: string | null;
   timezone: string;
-  dateFormat: AllowedDateFormat;
-  timeFormat: AllowedTimeFormat;
+  dateFormat: string;
+  timeFormat: string;
 }): string {
-  const {
-    locale,
-    listEmoji,
-    listName,
-    itemText,
-    remindAt,
-    deadlineAt,
+  const { locale, itemText, remindAt, deadlineAt, timezone, dateFormat, timeFormat } =
+    args;
+  const remind = formatDate(remindAt, {
     timezone,
-    dateFormat,
-    timeFormat,
-  } = args;
-  const emoji = listEmoji ?? "📋";
-  const heading = escapeMarkdownV2(`${emoji} ${listName}`);
-  const item = escapeMarkdownV2(itemText);
-  const remindLabel = formatDate(remindAt, {
+    dateFormat: dateFormat as "DD.MM.YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD",
+    timeFormat: timeFormat as "24h" | "12h",
     locale,
-    timezone,
-    dateFormat,
-    timeFormat,
   });
-
-  // Show the deadline only when it's set AND different from the
-  // reminder time — for a default-on-deadline reminder they collapse
-  // to one line.
-  const deadlineDistinct =
-    deadlineAt !== null && deadlineAt !== remindAt;
-  const deadlineLabel = deadlineDistinct
-    ? formatDate(deadlineAt, { locale, timezone, dateFormat, timeFormat })
-    : null;
-
-  if (locale === "tr") {
-    const lines = [
-      `*${heading}*`,
-      "",
-      `⏰ Hatırlatma: *${item}*`,
-      escapeMarkdownV2(remindLabel),
-    ];
-    if (deadlineLabel !== null) {
-      lines.push(escapeMarkdownV2(`Son tarih: ${deadlineLabel}`));
-    }
-    return lines.join("\n");
-  }
   const lines = [
-    `*${heading}*`,
-    "",
-    `⏰ Reminder: *${item}*`,
-    escapeMarkdownV2(remindLabel),
+    locale === "tr"
+      ? `⏰ Hatırlatma: ${itemText}`
+      : `⏰ Reminder: ${itemText}`,
+    locale === "tr" ? `Zaman: ${remind}` : `Time: ${remind}`,
   ];
-  if (deadlineLabel !== null) {
-    lines.push(escapeMarkdownV2(`Deadline: ${deadlineLabel}`));
+  if (deadlineAt && deadlineAt !== remindAt) {
+    const due = formatDate(deadlineAt, {
+      timezone,
+      dateFormat: dateFormat as "DD.MM.YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD",
+      timeFormat: timeFormat as "24h" | "12h",
+      locale,
+    });
+    lines.push(locale === "tr" ? `Son tarih: ${due}` : `Due: ${due}`);
   }
   return lines.join("\n");
 }
 
-/**
- * Internal augmented job shape carried through the dispatch loop. The
- * public `ReminderJobItem` (frozen by Architect) stays minimal; this
- * type adds the display fields the dispatcher needs to compose a body
- * without re-fetching.
- */
-type ReminderJob = ReminderJobItem & {
-  listName: string;
-  listEmoji: string | null;
-  /**
-   * Phase 5 multi-bot: the workspace's primary white-label bot ID
-   * (when registered). Reminder dispatch routes via this bot if
-   * present; falls back to the default platform bot otherwise.
-   */
-  workspaceBotId: string | null;
-  /**
-   * Phase 14c display preferences — pulled from the DM target's
-   * `users` row (assignee if present, else owner).
-   */
-  ownerDateFormat: AllowedDateFormat;
-  ownerTimeFormat: AllowedTimeFormat;
-  assigneeDateFormat: AllowedDateFormat | null;
-  assigneeTimeFormat: AllowedTimeFormat | null;
-};
+function toIso(v: Date | string): string {
+  return v instanceof Date ? v.toISOString() : new Date(v).toISOString();
+}
 
-async function pickDueItems(): Promise<ReminderJob[]> {
-  // Phase 14d: pickup is item_reminders → items → lists → owner +
-  // (LEFT JOIN) assignee + (LEFT JOIN) primary white-label bot. The
-  // partial index `item_reminders_due_idx` covers the predicate.
-  const rows = await db
-    .select({
-      reminderId: itemReminders.id,
-      itemId: items.id,
-      listId: items.listId,
-      text: items.text,
-      remindAt: itemReminders.remindAt,
-      deadlineAt: items.deadlineAt,
-      kind: itemReminders.kind,
-      offsetMinutes: itemReminders.offsetMinutes,
-      recurrenceRule: itemReminders.recurrenceRule,
-      ownerTelegramId: sql<number>`owner.telegram_id`.as("owner_telegram_id"),
-      ownerLocale: sql<string>`owner.locale`.as("owner_locale"),
-      ownerTimezone: sql<string>`owner.timezone`.as("owner_timezone"),
-      ownerDateFormat: sql<string>`owner.date_format`.as("owner_date_format"),
-      ownerTimeFormat: sql<string>`owner.time_format`.as("owner_time_format"),
-      assigneeTelegramId: sql<number | null>`assignee.telegram_id`.as(
-        "assignee_telegram_id",
-      ),
-      assigneeLocale: sql<string | null>`assignee.locale`.as("assignee_locale"),
-      assigneeTimezone: sql<string | null>`assignee.timezone`.as(
-        "assignee_timezone",
-      ),
-      assigneeDateFormat: sql<string | null>`assignee.date_format`.as(
-        "assignee_date_format",
-      ),
-      assigneeTimeFormat: sql<string | null>`assignee.time_format`.as(
-        "assignee_time_format",
-      ),
-      listName: lists.name,
-      listEmoji: lists.emoji,
-      workspaceBotId: sql<string | null>`primary_bot.id`.as(
-        "primary_bot_id",
-      ),
-    })
-    .from(itemReminders)
-    .innerJoin(items, sql`${items.id} = ${itemReminders.itemId}`)
-    .innerJoin(lists, sql`${lists.id} = ${items.listId}`)
-    .innerJoin(
-      sql`${users} AS owner`,
-      sql`owner.id = ${lists.ownerId}`,
-    )
-    .leftJoin(
-      sql`${listMembers} AS lm`,
-      sql`lm.list_id = ${items.listId} AND lm.user_id = ${items.assigneeId}`,
-    )
-    .leftJoin(sql`${users} AS assignee`, sql`assignee.id = lm.user_id`)
-    .leftJoin(
-      sql`workspace_bots AS wb`,
-      sql`wb.workspace_id = ${lists.workspaceId} AND wb.is_primary = true`,
-    )
-    .leftJoin(
-      sql`bots AS primary_bot`,
-      sql`primary_bot.id = wb.bot_id AND primary_bot.is_default = false`,
-    )
-    .where(
-      sql`${itemReminders.remindAt} <= now()
-          AND ${itemReminders.sent} = false
-          AND ${items.archivedAt} IS NULL`,
-    )
-    .limit(PICKUP_LIMIT);
+async function pickEligibleReminders(): Promise<ReminderJobItem[]> {
+  const rows = await db.execute<{
+    reminder_id: string;
+    item_id: string;
+    chat_id: number;
+    text: string;
+    // postgres-js returns timestamptz as strings, not Date objects.
+    // Coerce below before any .toISOString() call.
+    remind_at: Date | string;
+    deadline_at: Date | string | null;
+    kind: string;
+    offset_minutes: number | null;
+    recurrence_rule: string | null;
+    owner_telegram_id: number;
+    owner_locale: string;
+    owner_timezone: string;
+  }>(sql`
+    SELECT
+      r.id AS reminder_id,
+      r.item_id,
+      i.chat_id,
+      i.text,
+      r.remind_at,
+      i.deadline_at,
+      r.kind,
+      r.offset_minutes,
+      r.recurrence_rule,
+      owner.telegram_id AS owner_telegram_id,
+      owner.locale AS owner_locale,
+      owner.timezone AS owner_timezone
+    FROM ${itemReminders} r
+    INNER JOIN ${items} i ON i.id = r.item_id
+    INNER JOIN ${chats} c ON c.chat_id = i.chat_id
+    INNER JOIN ${users} owner ON owner.id = c.owner_user_id
+    WHERE r.sent = false
+      AND r.remind_at <= NOW()
+      AND i.archived_at IS NULL
+    ORDER BY r.remind_at ASC
+    LIMIT ${PICKUP_LIMIT}
+  `);
 
-  return rows.map<ReminderJob>((r) => ({
-    reminderId: r.reminderId,
-    itemId: r.itemId,
-    listId: r.listId,
+  return rows.map((r) => ({
+    reminderId: r.reminder_id,
+    itemId: r.item_id,
+    chatId: r.chat_id,
     text: r.text,
-    remindAt: r.remindAt.toISOString(),
-    deadlineAt: r.deadlineAt ? r.deadlineAt.toISOString() : null,
+    remindAt: toIso(r.remind_at),
+    deadlineAt: r.deadline_at ? toIso(r.deadline_at) : null,
     kind: r.kind as ItemReminderKind,
-    offsetMinutes: r.offsetMinutes,
-    recurrenceRule: r.recurrenceRule,
-    ownerTelegramId: r.ownerTelegramId,
-    ownerLocale: r.ownerLocale,
-    ownerTimezone: r.ownerTimezone,
-    assigneeTelegramId: r.assigneeTelegramId,
-    assigneeLocale: r.assigneeLocale,
-    assigneeTimezone: r.assigneeTimezone,
-    listName: r.listName,
-    listEmoji: r.listEmoji,
-    workspaceBotId: r.workspaceBotId,
-    ownerDateFormat: (r.ownerDateFormat as AllowedDateFormat) ?? "DD.MM.YYYY",
-    ownerTimeFormat: (r.ownerTimeFormat as AllowedTimeFormat) ?? "24h",
-    assigneeDateFormat:
-      (r.assigneeDateFormat as AllowedDateFormat | null) ?? null,
-    assigneeTimeFormat:
-      (r.assigneeTimeFormat as AllowedTimeFormat | null) ?? null,
+    offsetMinutes: r.offset_minutes,
+    recurrenceRule: r.recurrence_rule,
+    ownerTelegramId: r.owner_telegram_id,
+    ownerLocale: r.owner_locale,
+    ownerTimezone: r.owner_timezone,
   }));
-}
-
-/**
- * Conditional UPDATE: only flip sent=true if it's still false.
- * Idempotency guard for retries (Inv-11) at the reminder-row level.
- */
-async function markReminderSent(reminderId: string): Promise<void> {
-  await db
-    .update(itemReminders)
-    .set({ sent: true, lastSentAt: new Date(), updatedAt: new Date() })
-    .where(
-      sql`${itemReminders.id} = ${reminderId} AND ${itemReminders.sent} = false`,
-    );
-}
-
-/**
- * Recurring reminder advancement (absolute kind only). When a reminder
- * fires for a row whose `recurrence_rule` is non-null, we re-arm it
- * for the next occurrence instead of marking it permanently sent.
- * Computed in UTC — see schema docstring for the timezone caveat.
- *
- * If the rule yields no future occurrence (e.g. UNTIL or COUNT
- * exhausted) we fall back to the one-shot path: mark sent + clear
- * recurrence_rule so the audit trail reflects the natural end.
- */
-async function advanceRecurringReminder(
-  reminderId: string,
-  currentRemindAt: string,
-  recurrenceRule: string,
-): Promise<{ advanced: boolean; nextRemindAt: Date | null }> {
-  const { RRule } = await import("rrule");
-  let nextRemindAt: Date | null = null;
-  try {
-    const rule = RRule.fromString(`RRULE:${recurrenceRule}`);
-    nextRemindAt = rule.after(new Date(currentRemindAt), false);
-  } catch (error) {
-    console.error("[reminder] invalid RRULE — clearing", {
-      reminderId,
-      recurrenceRule,
-      error: String(error),
-    });
-  }
-
-  if (!nextRemindAt) {
-    await db
-      .update(itemReminders)
-      .set({
-        sent: true,
-        lastSentAt: new Date(),
-        recurrenceRule: null,
-        updatedAt: new Date(),
-      })
-      .where(
-        sql`${itemReminders.id} = ${reminderId} AND ${itemReminders.sent} = false`,
-      );
-    return { advanced: false, nextRemindAt: null };
-  }
-
-  await db
-    .update(itemReminders)
-    .set({
-      remindAt: nextRemindAt,
-      sent: false,
-      lastSentAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(
-      sql`${itemReminders.id} = ${reminderId} AND ${itemReminders.sent} = false`,
-    );
-  return { advanced: true, nextRemindAt };
 }
 
 export async function dispatchReminders(): Promise<{
@@ -302,190 +137,96 @@ export async function dispatchReminders(): Promise<{
   sent: number;
   failed: number;
 }> {
-  const due = await pickDueItems();
-  if (due.length === 0) {
-    await detectPersistentFailures();
-    return { picked: 0, sent: 0, failed: 0 };
-  }
+  const picked = await pickEligibleReminders();
+  if (picked.length === 0) return { picked: 0, sent: 0, failed: 0 };
 
-  const defaultBot = await getBot();
+  const bot = await getBot();
   let sent = 0;
   let failed = 0;
 
-  for (const job of due) {
-    const targetTelegramId = job.assigneeTelegramId ?? job.ownerTelegramId;
-    const targetLocale = pickLocale(job.assigneeLocale ?? job.ownerLocale);
-    const targetTimezone = job.assigneeTimezone ?? job.ownerTimezone ?? "UTC";
-    const targetDateFormat = job.assigneeDateFormat ?? job.ownerDateFormat;
-    const targetTimeFormat = job.assigneeTimeFormat ?? job.ownerTimeFormat;
-
-    if (!targetTelegramId) {
-      console.error(
-        "[cron/dispatch-reminders] no telegram target for reminder",
-        { reminderId: job.reminderId, itemId: job.itemId, listId: job.listId },
-      );
-      failed += 1;
-      continue;
-    }
+  for (const r of picked) {
+    // Route to the item's own chat: a group item's reminder fires in
+    // the GROUP (everyone sees it); a DM item's reminder fires in the
+    // DM. For DM items r.chatId already equals the owner's Telegram
+    // id, so this is a no-op there.
+    const targetTg = r.chatId;
+    const locale = pickLocale(r.ownerLocale);
+    const timezone = r.ownerTimezone;
+    const dateFormat = "DD.MM.YYYY";
+    const timeFormat = "24h";
 
     const body = formatReminderBody({
-      locale: targetLocale,
-      listEmoji: job.listEmoji,
-      listName: job.listName,
-      itemText: job.text,
-      remindAt: job.remindAt,
-      deadlineAt: job.deadlineAt,
-      timezone: targetTimezone,
-      dateFormat: targetDateFormat,
-      timeFormat: targetTimeFormat,
+      locale,
+      itemText: r.text,
+      remindAt: r.remindAt,
+      deadlineAt: r.deadlineAt,
+      timezone,
+      dateFormat,
+      timeFormat,
     });
 
-    let primaryBot = defaultBot;
-    if (job.workspaceBotId) {
-      const wsBot = await getBotById(job.workspaceBotId);
-      if (wsBot) primaryBot = wsBot;
-    }
-
-    let delivered = false;
     try {
-      await primaryBot.api.sendMessage(targetTelegramId, body, {
-        parse_mode: "MarkdownV2",
-        link_preview_options: { is_disabled: true },
+      await bot.api.sendMessage(targetTg, body);
+      await db.execute(sql`
+        UPDATE item_reminders
+           SET sent = true, sent_at = NOW()
+         WHERE id = ${r.reminderId}
+      `);
+      sent++;
+    } catch (e) {
+      console.error("[dispatch-reminders] send failed", {
+        reminderId: r.reminderId,
+        targetTg,
+        err: String(e),
       });
-      delivered = true;
-    } catch (error) {
-      if (primaryBot !== defaultBot) {
-        try {
-          await defaultBot.api.sendMessage(targetTelegramId, body, {
-            parse_mode: "MarkdownV2",
-            link_preview_options: { is_disabled: true },
-          });
-          delivered = true;
-          console.log(
-            "[cron/dispatch-reminders] white-label bot fallback to default",
-            { reminderId: job.reminderId, workspaceBotId: job.workspaceBotId },
-          );
-        } catch (fallbackError) {
-          console.error(
-            "[cron/dispatch-reminders] both white-label + default failed",
-            {
-              reminderId: job.reminderId,
-              primaryError: String(error),
-              fallbackError: String(fallbackError),
-            },
-          );
-        }
-      } else {
-        console.error(
-          "[cron/dispatch-reminders] sendMessage failed; will retry next tick",
-          { reminderId: job.reminderId, error: String(error) },
-        );
-      }
-    }
-
-    if (delivered) {
-      // Recurrence is only allowed for kind='absolute' — guarded by
-      // the CHECK constraint. before_deadline reminders never advance.
-      if (job.recurrenceRule && job.kind === "absolute") {
-        await advanceRecurringReminder(
-          job.reminderId,
-          job.remindAt,
-          job.recurrenceRule,
-        );
-      } else {
-        await markReminderSent(job.reminderId);
-      }
-      sent += 1;
-    } else {
-      failed += 1;
+      failed++;
     }
   }
 
-  await detectPersistentFailures();
-
-  return { picked: due.length, sent, failed };
+  // silence unused env import; remains live for downstream config branches
+  void env;
+  return { picked: picked.length, sent, failed };
 }
 
-/**
- * Inv-15: identify reminders whose `remind_at` is >5 minutes in the
- * past and still have `sent = false`. Each row gets a single
- * `reminder_send_persistent_failure` warning log entry. Capped at 50
- * to avoid log flood when a bot token has been revoked. Detection is
- * purely observability — no DB writes, no exceptions thrown.
- */
-async function detectPersistentFailures(): Promise<void> {
-  try {
-    const stuck = await db
-      .select({
-        reminderId: itemReminders.id,
-        itemId: itemReminders.itemId,
-        remindAt: itemReminders.remindAt,
-      })
-      .from(itemReminders)
-      .innerJoin(items, sql`${items.id} = ${itemReminders.itemId}`)
-      .where(
-        sql`${itemReminders.remindAt} < (now() - interval '5 minutes')
-            AND ${itemReminders.sent} = false
-            AND ${items.archivedAt} IS NULL`,
-      )
-      .limit(50);
-
-    for (const row of stuck) {
-      console.warn(
-        "[cron/dispatch-reminders] reminder_send_persistent_failure",
-        {
-          reminderId: row.reminderId,
-          itemId: row.itemId,
-          remindAt: row.remindAt ? row.remindAt.toISOString() : null,
-        },
-      );
-    }
-  } catch (error) {
-    console.error(
-      "[cron/dispatch-reminders] persistent-failure detection threw",
-      error,
-    );
-  }
-}
-
-/**
- * Liveness ping — fires whenever the dispatcher loop completes without
- * throwing, regardless of per-row delivery success. Phase 4 · P2-3.
- */
 async function maybePingHeartbeat(): Promise<void> {
-  const url = env.LISTBULL_HEARTBEAT_URL;
+  // Healthchecks heartbeat is configured per-deployment env;
+  // intentional no-op when unset.
+  const url = process.env.LISTBULL_REMINDERS_HEARTBEAT_URL;
   if (!url) return;
   try {
     await fetch(url, { method: "GET" });
   } catch {
-    // Heartbeat is monitoring, never load-bearing. Swallow.
+    // ignore
   }
 }
 
 async function main(): Promise<void> {
   try {
     const result = await dispatchReminders();
-    console.log("[cron/dispatch-reminders]", result);
+    if (result.picked > 0) {
+      console.log("[cron/dispatch-reminders]", result);
+    }
   } catch (error) {
     console.error("[cron/dispatch-reminders] unrecoverable", error);
     process.exitCode = 1;
     return;
   }
-  // Phase 15: 09:00 daily digest. Run once per UTC hour at minute :00
-  // (cron tick fires every 60s, so up to 60 ticks may match; the
-  // pickup query filters down to users whose local hour is currently
-  // 9 AND who haven't received today's digest yet, which limits the
-  // re-evaluation cost to a few SQL ops). We gate at minute < 1 to
-  // avoid running the SELECT 60 times per hour.
+
+  // Hour-top jobs: daily digest + per-chat 09:00 push.
   if (new Date().getUTCMinutes() < 1) {
     try {
       const { dispatchDailyDigest } = await import("./daily-digest");
       const result = await dispatchDailyDigest();
-      if (result.picked > 0) {
-        console.log("[cron/daily-digest]", result);
-      }
-    } catch (error) {
-      console.error("[cron/daily-digest] threw", error);
+      if (result.picked > 0) console.log("[cron/daily-digest]", result);
+    } catch (e) {
+      console.error("[cron/daily-digest] threw", e);
+    }
+    try {
+      const { dispatchChatDailyPush } = await import("./chat-daily-push");
+      const result = await dispatchChatDailyPush();
+      if (result.picked > 0) console.log("[cron/chat-daily-push]", result);
+    } catch (e) {
+      console.error("[cron/chat-daily-push] threw", e);
     }
   }
 

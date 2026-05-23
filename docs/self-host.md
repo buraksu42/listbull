@@ -1,65 +1,54 @@
 # Self-host listbull — adım adım
 
-Bir Telegram-native AI to-do botunu kendi sunucunda çalıştırmak için bu
-dokümanı baştan sona uygula. Tahmini süre: 30-45 dakika (DNS propagation +
-ilk Docker build dahil).
+Telegram-native AI to-do botunu kendi sunucunda çalıştırmak için
+bu dokümanı baştan sona uygula. Tahmini süre: 20-30 dakika
+(DNS propagation + ilk Docker build dahil).
 
-Sıfırdan kuruluyorsan baştan başla. Bot'un yanıt verdiğinde bittin demektir.
+> Phase 17 chat-only mimari: tek surface bot. Mini App / workspace
+> / multi-list mimarisi yok. Bir Telegram chat = bir to-do context.
 
 ---
 
 ## Önkoşullar
 
-Şunlara ihtiyacın var:
-
-- **Bir sunucu** (ör. Hetzner CPX21 5€/ay yeterli). Docker + Docker
-  Compose kurulu olsun. SSH erişimin olsun.
-- **Bir domain** (ör. `myapp.com` ya da `listbull.mydomain.com`). DNS
-  yönetimine erişimin olsun. Subdomain de olur.
-- **Bir Telegram hesabı.** Bot yaratmak için.
-- **Bir OpenRouter hesabı** (https://openrouter.ai). Tek operator-mode'da
-  $5 yatırsan haftalarca yeter; her kullanıcı kendi key'ini getirirse
-  hiç yatırma.
-- Lokalde `git`, `openssl`, `curl` (komutlar için).
+- **Bir sunucu** (ör. Hetzner CPX21 5€/ay yeterli). Docker +
+  Docker Compose kurulu. SSH erişimin olsun.
+- **Bir domain** (subdomain olur, ör. `listbull.mydomain.com`).
+  DNS yönetimine erişimin olsun.
+- **Bir Telegram hesabı.**
+- (Opsiyonel) **Bir OpenRouter hesabı** (https://openrouter.ai).
+  Kendi key'ini her kullanıcı `/settings`'ten verebilir; alternatif
+  olarak operator olarak shared bir free-tier key set edebilirsin.
+- Lokalde `git`, `openssl`, `curl`.
 
 ---
 
 ## 1. Telegram botunu yarat
 
-1. Telegram'da [@BotFather](https://t.me/BotFather)'a `/newbot` gönder.
-2. Bot adı (display) ve username (`...bot` ile bitmeli) ver.
-3. BotFather sana **HTTP API token** verecek (ör.
-   `1234567890:ABC-DEF...`). Bunu güvenli bir yerde sakla — `.env`'e
-   yazacaksın.
-4. BotFather'da bot ayarlarına git → şunları **şimdilik** değiştirme,
-   adım 9'da geri döneceğiz.
+Telegram'da [@BotFather](https://t.me/BotFather):
 
-> **İpucu**: bot adına `_bot` zorunlu ama display name'i istediğin gibi
-> seçebilirsin ("Listbull", "Karen's Tasks" vs).
+1. `/newbot` → bot adı (display) + username (`...bot` ile bitmeli) ver.
+2. BotFather sana **HTTP API token** verir (`1234567890:ABC-DEF...`).
+   Güvenli sakla.
 
 ---
 
-## 2. DNS yönetimi
+## 2. DNS
 
-Domain'inin A record'u sunucu IP'sine işaret etmeli. Cloudflare/Route53
-gibi bir DNS panelinde:
+Domain'inin A record'u sunucu IP'sine işaret etmeli:
 
 ```
-A   myapp.com       → <SUNUCU_IP>
-A   www.myapp.com   → <SUNUCU_IP>   (opsiyonel)
+A   listbull.mydomain.com   → <SUNUCU_IP>
 ```
 
-> Cloudflare kullanıyorsan proxy modu **OFF** olsun ki Let's Encrypt
-> sertifika doğrulaması çalışabilsin.
+> Cloudflare kullanıyorsan proxy modu **OFF** olsun (Let's Encrypt
+> HTTP-01 challenge için).
 
-Propagation 2-30 dakika sürer. `dig myapp.com +short` ile sunucu IP'sini
-gösteriyorsa hazır.
+`dig listbull.mydomain.com +short` sunucu IP'sini gösteriyorsa hazır.
 
 ---
 
 ## 3. Repo'yu klonla + `.env` hazırla
-
-Sunucuda:
 
 ```bash
 git clone https://github.com/buraksu42/listbull.git
@@ -72,40 +61,31 @@ chmod 600 .env
 
 ## 4. Secret'ları üret
 
-Lokalde ya da sunucuda — sonuçları `.env`'e yazacaksın:
-
 ```bash
-# Better Auth session cookie imzalama secret'ı (≥32 byte)
-echo "BETTER_AUTH_SECRET=$(openssl rand -base64 48)"
-
-# BYOK ve workspace org-key AES-256-GCM şifrelemesi (32 byte base64)
+# BYOK + secrets AES-256-GCM şifreleme key'i (32 byte base64)
 echo "ENV_KEY=$(openssl rand -base64 32)"
 
-# Telegram webhook doğrulama secret'ı (≥16 hex char)
+# Telegram webhook signature secret (≥16 hex char)
 echo "TELEGRAM_WEBHOOK_SECRET=$(openssl rand -hex 32)"
 
-# Postgres şifresi (rastgele)
+# Postgres şifresi
 echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)"
 ```
 
-> **ENV_KEY rotation = veri kaybı**: Bu key her stored OpenRouter
-> key'ini decrypt etmek için kullanılır. Rotate edersen tüm kullanıcılar
-> key'lerini tekrar girmek zorunda. Bir kere üret, güvenli sakla.
+> **`ENV_KEY` rotation = veri kaybı.** Stored OpenRouter key'leri
+> ve `/password` secret'ları bu key ile şifreleniyor; rotate edersen
+> hepsi okunamaz hale gelir. Bir kere üret, güvenli sakla.
 
 ---
 
 ## 5. `.env` doldur
 
-`.env` dosyasını aç ve şu alanları doldur:
-
 ```bash
 # Public URL (DNS'in işaret ettiği)
-NEXT_PUBLIC_APP_URL=https://myapp.com
-BETTER_AUTH_URL=https://myapp.com
+NEXT_PUBLIC_APP_URL=https://listbull.mydomain.com
 NEXT_PUBLIC_ENV=production
 
 # Adım 4'te ürettiğin secret'lar
-BETTER_AUTH_SECRET=...
 ENV_KEY=...
 TELEGRAM_WEBHOOK_SECRET=...
 POSTGRES_PASSWORD=...
@@ -119,39 +99,41 @@ POSTGRES_USER=listbull
 TELEGRAM_BOT_TOKEN=1234567890:ABC-DEF...
 TELEGRAM_BOT_USERNAME=my_listbull_bot   # @ olmadan
 
-# OpenRouter — operator-mode kullanacaksan doldur, BYOK-only ise boş bırak
-# (bkz adım 11)
-OPENROUTER_API_KEY=sk-or-v1-...
-OPERATOR_TELEGRAM_ID=                   # adım 8'de dolduracağız
+# (Opsiyonel) Free-tier shared key — operator senin için ücretsiz
+# bir OpenRouter free model kullanır, kullanıcılar kendi key'lerini
+# vermeden bot'u deneyebilir.
+# LISTBULL_SHARED_OPENROUTER_KEY=sk-or-v1-...
+# LISTBULL_FREE_MODEL=openrouter/free
 
-# Opsiyonel: Sentry (hata takibi)
-NEXT_PUBLIC_SENTRY_DSN=
+# (Opsiyonel) Sentry hata takibi
+# NEXT_PUBLIC_SENTRY_DSN=
+# SENTRY_ORG=
+# SENTRY_PROJECT=
+# SENTRY_AUTH_TOKEN=
 
-# Opsiyonel: Umami (analytics)
-NEXT_PUBLIC_UMAMI_WEBSITE_ID=
+# (Opsiyonel) Umami self-hosted analytics
+# NEXT_PUBLIC_UMAMI_WEBSITE_ID=
 ```
 
 ---
 
 ## 6. Reverse proxy / TLS
 
-listbull kendi başına HTTPS terminate etmez. Önüne bir reverse proxy
-koyman gerek. **En basit çözüm**: Traefik veya Caddy.
-
-**Caddy örneği** (sunucuda `/etc/caddy/Caddyfile`):
+listbull kendi HTTPS terminate etmiyor — önüne bir reverse proxy koy.
+**En basit**: Caddy.
 
 ```
-myapp.com {
+listbull.mydomain.com {
     reverse_proxy 127.0.0.1:3000
 }
 ```
 
-Caddy otomatik Let's Encrypt sertifikası alır. Compose listbull'u
-sadece localhost'a (`127.0.0.1:3000`) açar; Caddy public 443'ten
+Caddy otomatik Let's Encrypt sertifikası alır. Compose `app`'i
+sadece localhost'a açar (`127.0.0.1:3000`), Caddy public 443'ten
 proxy'ler.
 
-**Dokploy kullanıyorsan**: Dokploy'ın Traefik'i bunu otomatik yapar,
-domain'i panelden eklemek yeterli.
+**Dokploy kullanıyorsan**: panel domain ekle, Traefik otomatik
+yapar.
 
 ---
 
@@ -162,220 +144,136 @@ docker compose up -d
 docker compose logs -f app
 ```
 
-`✓ Ready in ...ms` görene kadar bekle (~1 dakika ilk build için
-3-5 dakika). Sonra Ctrl+C ile log'dan çık (servis arka planda kalır).
+`✓ Ready in ...ms` görene kadar bekle (ilk build için ~3-5 dk).
 
 ```bash
-# Sağlık kontrolü
-curl -s https://myapp.com/api/health
+# Health check
+curl -s https://listbull.mydomain.com/api/health
 # Beklenen: {"status":"ok","db":"ok","bot":"ok",...}
 ```
-
-`bot:"ok"` çıkmıyorsa bot token yanlıştır — `.env`'de düzelt,
-`docker compose up -d --force-recreate app` ile restart at.
 
 ---
 
 ## 8. DB migration'ları uygula
 
-İlk kurulumda Postgres boş. Migration'lar şemayı yaratır:
-
 ```bash
 docker compose run --rm app npm run db:migrate
 ```
 
-`[✓] migrations applied successfully!` görmelisin. Doğrulama:
+`[✓] migrations applied successfully!` görmelisin.
+
+---
+
+## 9. Bot konfigürasyonu
+
+İki kısım: otomatik script + manuel BotFather adımları.
+
+### 9a. Otomatik (script)
 
 ```bash
-docker compose exec postgres psql -U listbull -d listbull \
-  -c "SELECT COUNT(*) FROM drizzle.__drizzle_migrations"
-# 19 olmalı (mevcut versiyon)
+TELEGRAM_BOT_TOKEN="<token>" \
+TELEGRAM_WEBHOOK_SECRET="<secret>" \
+APP_BASE_URL="https://listbull.mydomain.com" \
+  npm run setup:bot
 ```
 
----
+Script yapar:
+- `setWebhook` → `/api/telegram/webhook` (`message`, `callback_query`,
+  `my_chat_member`, `chat_member` updates)
+- `setMyCommands` → 12 slash command (items, done, memory, tag,
+  today, thisweek, reminders, password, settings, onboarding, help,
+  reset)
+- `setChatMenuButton` → `{ type: "commands" }`
+- `getWebhookInfo` ile doğrular
 
-## 9. BotFather'ı konfigüre et
+### 9b. Manuel (BotFather)
 
-Telegram'da [@BotFather](https://t.me/BotFather)'a dön, botunu seç,
-**Bot Settings** → şunları yap:
+[@BotFather](https://t.me/BotFather) → botunu seç → **Bot Settings**:
 
-- **`/setdomain`** → `myapp.com` (bot Mini App'i açabilsin)
-- **`/setjoingroups`** → **Disable** (bot grup eklenmesin)
-- **`/setinline`** → **Enable**, placeholder: `Search items…`
-- **`/setmenubutton`** → **Web App** → `https://myapp.com/app`
-
-Menu button Telegram chat'inde sağ alttaki "/" yerine **Web App**
-ikonuyla görünecek.
-
----
-
-## 10. Telegram webhook'unu set et
-
-Bot'a gelen mesajların sunucuna gelmesi için Telegram'a webhook URL'i
-söylemen gerek (tek sefer):
-
-```bash
-TOKEN="<TELEGRAM_BOT_TOKEN .env'den>"
-SECRET="<TELEGRAM_WEBHOOK_SECRET .env'den>"
-
-curl -X POST "https://api.telegram.org/bot${TOKEN}/setWebhook" \
-  -H "content-type: application/json" \
-  -d "{
-    \"url\": \"https://myapp.com/api/telegram/webhook\",
-    \"secret_token\": \"${SECRET}\",
-    \"drop_pending_updates\": true,
-    \"allowed_updates\": [\"message\",\"inline_query\",\"callback_query\"]
-  }"
-```
-
-`{"ok":true,...}` cevabı almalısın.
-
-Doğrulama:
-
-```bash
-curl -s "https://api.telegram.org/bot${TOKEN}/getWebhookInfo" | jq
-# "url" senin domain'ini göstermeli, "pending_update_count": 0
-```
+- **`/setjoingroups`** → **Enable** (gruba eklenebilsin)
+- **`/setprivacy`** → **Disable** (zorunlu — grup ses notlarını ve
+  güvenilir @-mention yakalamayı bot'un görmesi için. Bot kendi
+  privacy filter'ını kod içinde uyguluyor: yalnız mention edildiğinde
+  veya birinin mesajına reply atıldığında LLM'e gönderiyor, dolayısıyla
+  privacy ayarı OFF olsa da token israfı olmaz.)
 
 ---
 
-## 11. OpenRouter key'ini set et (workspace'in sahibi sen)
+## 10. Smoke test
 
-listbull'da OpenRouter key **workspace seviyesinde** tanımlanır,
-kullanıcı bazında değil. Bir kişi (workspace owner) key'i koyar,
-o workspace'in tüm üyeleri onu kullanır.
+Telegram'da kendi bot'una `/start` at — hoş geldin mesajı + "🎯 Hızlı
+tur (3 dk)" butonu görmelisin. Butona tıkla → 8 adımlı onboarding.
 
-Önce Mini App'i aç → /start sonrası **Open App** menu button →
-Workspace ayarları → **Workspace API key** → https://openrouter.ai/keys
-'den aldığın key'i yapıştır → Kaydet.
-
-Key sunucuda AES-256-GCM ile şifrelenir (`ENV_KEY` adım 4'te
-ürettiğin); plaintext bir daha gözükmez.
-
-**Maliyet kontrolü**: OpenRouter dashboard'da credit limit + daily cap
-ayarla. Aylık $5 credit yatır, "Don't auto-recharge" + günlük cap.
-Bot key'i bittiğinde OpenRouter 402 döner ve sen Telegram'da
-"transient error" görürsün — dashboard'da credit ekle, geri çalışır.
-
----
-
-## 12. Bot'a `/start` at
-
-Telegram'da kendi botunu aç, `/start` gönder. Şunu görmelisin:
-
-```
-Hoş geldin <ismin>! 
-- /create_item ile aklındaki şeyleri yaz
-- @<bot> diye yazıp inline'da ara
-- 🪧 Web App butonundan listeleri yönet
-```
-
-`/start` arka planda:
-- `users` tablosunda senin satırın yaratılır (Telegram first_name + locale)
-- Senin için bir **Personal** workspace + **Inbox** listesi yaratılır
-
----
-
-## 13. Mini App'i aç
-
-Telegram chat'inde sağ alttaki **Web App** ikonu (menu button)'a tıkla.
-Listbull açılır. URL `https://myapp.com/app`. Telegram initData ile
-otomatik login olursun.
-
-İlk açılışta **Inbox** listesini görmelisin (boş, /start ile yaratıldı).
-
-Üst nav'da **Bugün / Hafta / Pano** quick links var:
-- **Bugün**: tarihi bugüne denk gelen + in_progress + high-priority itemlar
-- **Hafta**: önümüzdeki 7 günün ajandası
-- **Pano**: workspace-wide Kanban (4 status kolonu + filter chip'leri)
-
----
-
-## 14. (B veya hibrit modda) OpenRouter key'ini gir
-
-Operator-mode kullanmıyorsan Mini App'te:
-
-1. Settings (⚙️) → **OpenRouter API Key**
-2. https://openrouter.ai/keys 'ten aldığın key'i yapıştır → Kaydet
-
-Key sunucuda AES-256-GCM şifrelenir; sen Mini App'te de kuruluş
-sonrası bir daha göremezsin (sadece "Tanımlı ✓" gösterir).
-
----
-
-## 15. Smoke test
-
-Telegram bot'a şunu yaz:
+Sonra:
 
 ```
 süt al
 ```
 
-Bot 2-5 saniyede şöyle cevap vermeli:
+Bot 2-5 saniyede:
 
 ```
-✓ "süt al" Inbox'a eklendi.
+✓ "süt al" eklendi.
 ```
 
-Mini App'i aç → Inbox listesinde "süt al" görünüyor.
+`/items` → "süt al" görünür.
 
 Daha komplike:
 
 ```
 yarın 9'da diş hekimine git
-```
-
-→ deadline_at = yarın 09:00 ile item eklenir.
-
-```
-süt'ü tamamla
-```
-
-→ search_items + complete_item → ✓ ile gösterilir.
-
----
-
-## 16. Cron + reminder testi
-
-```
 süt al, 2 dakika sonra hatırlat
 ```
 
-→ item + reminder kurulur. 2 dakika sonra bot sana DM atmalı:
-"⏰ süt al". Reminder gelmiyorsa:
+İkinci komut: cron container 2 dakika sonra sana DM atmalı.
 
-```bash
-docker compose logs cron | tail -20
-# her 60s'de "[cron] tick — N reminders due" benzeri görmelisin
-```
+Tam e2e matrix: [`docs/SMOKE_TEST.md`](./SMOKE_TEST.md).
 
 ---
 
-## 17. (Opsiyonel) Sentry'ye bağla
+## 11. (Opsiyonel) Sentry'ye bağla
 
-Hatalar production'da görünmez kalmaz:
-
-1. https://sentry.io 'da yeni Next.js projesi yarat → DSN al
-2. `.env`'de `NEXT_PUBLIC_SENTRY_DSN=https://...@sentry.io/...`
-3. **Build args'a da koy** (Dockerfile ARG ile inline ediyor):
+1. https://sentry.io 'da yeni Next.js projesi → DSN al.
+2. `.env`'de `NEXT_PUBLIC_SENTRY_DSN=https://...@sentry.io/...`.
+3. **Build args'a da koy** (Next 16 Turbopack inline ediyor):
    ```bash
    docker compose build --no-cache app
    docker compose up -d --force-recreate app
    ```
-4. Doğrulama:
+4. Doğrulama (bundle scan):
    ```bash
-   curl -s https://myapp.com/_next/static/chunks/*.js | grep -E 'ingest\.(de\.)?sentry\.io'
-   # bir match çıkmalı
+   curl -s https://listbull.mydomain.com/_next/static/chunks/*.js \
+     | grep -E 'ingest\.(de\.)?sentry\.io|@sentry|sentryDsn'
    ```
-
-İlk gerçek hata Sentry dashboard'una düşmeli.
 
 ---
 
-## 18. (Opsiyonel) Umami analytics
+## 12. (Opsiyonel) Umami analytics
 
-`NEXT_PUBLIC_UMAMI_WEBSITE_ID=<umami-website-id>` ekle + rebuild.
-Detay: [umami.is/docs](https://umami.is/docs).
+`NEXT_PUBLIC_UMAMI_WEBSITE_ID=<id>` ekle + rebuild. Detay:
+[umami.is/docs](https://umami.is/docs).
+
+---
+
+## Webhook secret rotation
+
+`TELEGRAM_WEBHOOK_SECRET` leak olduğunda:
+
+1. **Yeni secret üret**: `openssl rand -hex 32` → güvenli sakla.
+2. `.env`'de güncelle.
+3. Restart: `docker compose up -d --force-recreate app`.
+4. **Yeni secret'la `setWebhook` çağır** (eskisini iptal eder):
+   ```bash
+   curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+     -H "content-type: application/json" \
+     -d '{"url":"https://listbull.mydomain.com/api/telegram/webhook","secret_token":"<NEW_SECRET>"}'
+   ```
+5. Doğrula: `curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo`
+   → `pending_update_count` zamanla 0'a düşmeli, `last_error_message`
+   boş.
+
+**Önemli**: adım 4'ten önce app eskiyi reddedip yeniyi kabul ediyor
+olmalı (adım 3'teki restart). Sırayı tersine çevirirsen kısa downtime.
 
 ---
 
@@ -396,22 +294,9 @@ proxy / DNS / sertifika kontrol et.
 
 ### "AI özelliklerini kullanmak için OpenRouter key ekle"
 
-Operator-mode mu BYOK mu seçtin? Operator-mode'daysa `OPERATOR_TELEGRAM_ID`
-senin telegram_id'ne eşit mi? Kontrol et:
-
-```bash
-docker compose exec postgres psql -U listbull -d listbull \
-  -c "SELECT telegram_id, telegram_first_name FROM users"
-```
-
-`OPERATOR_TELEGRAM_ID=<o_id>` eşleşmeli. Değilse `.env`'de düzelt + restart.
-
-### Mini App'te beyaz ekran
-
-Tarayıcı dev tools console'una bak. Genelde:
-- `BETTER_AUTH_URL` HTTPS değil → değiştir
-- `NEXT_PUBLIC_APP_URL` Telegram BotFather'da set edilen domain'le
-  eşleşmiyor (adım 9) → düzelt
+İki seçenek: (a) `LISTBULL_SHARED_OPENROUTER_KEY` set et (operator
+shared key — kullanıcı kendi key'ini vermek zorunda kalmaz), veya
+(b) kullanıcı `/settings` → 🔑'den kendi key'ini girer.
 
 ### Migration fail oluyor
 
@@ -420,17 +305,29 @@ docker compose exec postgres psql -U listbull -d listbull \
   -c "SELECT hash FROM drizzle.__drizzle_migrations ORDER BY id"
 ```
 
-Listede 19 hash görüyorsan migration'lar zaten uygulanmış. Yoksa
-container log'da spesifik hatayı ara.
+Listede son migration hash'ini görüyorsan idempotent — yeniden
+koşmuyor. Yoksa container log'da spesifik hatayı ara.
 
 ---
 
-## Yeni kullanıcı davet et
+## Telegram grup'larında kullan
 
-Workspace owner'sın (sen). Mini App `Workspace ayarları → Üyeler`'e
-git, `@username` veya Telegram username gir → davet linki çıkacak.
-O kullanıcı linki tıklayınca senin workspace'inin üyesi olur, senin
-operator-mode key'inle (varsa) bot kullanabilir.
+Bot'u bir Telegram grubuna ekleyebilirsin:
+
+1. Bot ayarlarında: `/setjoingroups Enable`, `/setprivacy Disable`
+   (adım 9b).
+2. Bot'u gruba ekle.
+3. Grup içinde bot'a yaz: `@listbull_bot süt yumurta peynir` →
+   grup'un to-do listesine 3 item eklenir.
+
+Bot grup'ta:
+- Yalnız mention edilince (`@bot ...`) veya bot mesajına reply
+  atılınca LLM'e gider (kod-içi filter, token israfı yok).
+- Ses notlarını **ambient** dinler — içinde to-do varsa düşer, yoksa
+  sessiz kalır.
+- Hatırlatıcılar gruba düşer (DM'e değil).
+- `/password` save grup'ta engellenir (DM-only); reveal grup'tan
+  yapılabilir (kullanıcı grubun üyesi olmak şartıyla).
 
 ---
 
@@ -439,40 +336,26 @@ operator-mode key'inle (varsa) bot kullanabilir.
 Postgres dump cron'u önerilir:
 
 ```bash
-# /etc/cron.d/listbull-backup veya systemd timer
+# /etc/cron.d/listbull-backup
 0 * * * * docker exec listbull-postgres pg_dump -U listbull listbull \
   | gzip > /backups/listbull-$(date +\%Y\%m\%d-\%H).sql.gz
 ```
 
-Backup destination önerisi: Hetzner Storage Box, Backblaze B2 veya
-benzeri S3-uyumlu obje depo.
+Destination: Hetzner Storage Box, Backblaze B2 veya S3-uyumlu obje
+depo.
 
 ---
 
 ## Attachment'lar nasıl saklanır
 
-listbull dosyaları **kendi sunucunda saklamaz**. Bot intake aldığında
-sadece `telegram_file_id` (Telegram'ın CDN referansı) DB'ye yazılır;
-dosyanın kendisi Telegram'ın altyapısında durur. Avantajı: sıfır disk +
-sıfır storage faturası.
+listbull dosyaları **kendi sunucusunda saklamaz**. Bot intake aldığında
+sadece `telegram_file_id` (Telegram'ın CDN referansı) DB'ye yazılır.
+Avantajı: sıfır disk + sıfır storage faturası.
 
-Mini App içinde dosya görüntüleme:
-- **≤20MB**: Bot API `getFile` çekip stream eder → lightbox preview
-- **>20MB**: Bot API limiti nedeniyle preview yok. Lightbox typed icon
-  + size etiketi gösterir, **"Telegram'a yolla"** butonu (file_id ile
-  `sendDocument/sendPhoto` — size limiti yok) dosyayı bot DM'inize geri
-  iletir; orada Telegram client native save / forward / open with
-  affordance'larını kullanırsın.
-
-⚠️ **Bot token rotation = attachment loss.** Telegram'da bot
+⚠️ **Bot token rotation = attachment loss.** BotFather'da bot
 yeniden yaratırsan veya `/revoke` ile token değiştirirsen tüm eski
-`telegram_file_id` değerleri **geçersiz olur**. Bu Telegram Bot API'nın
-yapısal sınırı; listbull'un kontrolü dışında. Plan:
-- BotFather'da bot token'ını rotate etmeden önce kullanıcılara haber ver.
-- Kritik attachment'lar varsa kullanıcılar Telegram client içinde bot
-  DM'inden manual `Save to gallery` yapabilir.
-- DB pg_dump backup'ları bu sorunu **çözmez** — sadece metadata
-  korunur, dosyalar Telegram tarafında.
+`telegram_file_id` değerleri **geçersiz olur**. Bu Telegram Bot
+API'nin yapısal sınırı.
 
 ---
 
@@ -486,12 +369,12 @@ docker compose up -d
 docker compose run --rm app npm run db:migrate
 ```
 
-Migration'lar idempotent — daha önce uygulanmışlar tekrar koşmaz.
+Migration'lar idempotent.
 
 ---
 
 ## Yardım
 
-- Issue açmak: https://github.com/buraksu42/listbull/issues
-- Architecture deep-dive: `handoff/specs/architecture.md`
-- Contributing: `CONTRIBUTING.md`
+- Issue: https://github.com/buraksu42/listbull/issues
+- Security: [`SECURITY.md`](../SECURITY.md)
+- Contributing: [`CONTRIBUTING.md`](../CONTRIBUTING.md)

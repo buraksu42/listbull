@@ -89,3 +89,23 @@ export async function enforceRateLimit(
   if (success) return { limited: false, remaining, reset };
   return { limited: true, reason: "rate_limited", reset };
 }
+
+/**
+ * Webhook idempotency: mark a Telegram `update_id` as seen so a
+ * replay (same secret-token-bearing request, captured by an
+ * attacker) doesn't re-process the update. Uses SET NX with a
+ * 1-hour TTL — Telegram retries within seconds, so an hour of
+ * memory is plenty.
+ *
+ * Returns `true` if this is the first time we've seen the id (proceed),
+ * `false` if it's a duplicate (caller should ack without reprocessing).
+ * When Upstash isn't configured, always returns `true` (no
+ * protection but also no spurious blocks).
+ */
+export async function markUpdateSeen(updateId: number): Promise<boolean> {
+  const redis = getRedis();
+  if (!redis) return true;
+  const key = `lb-update-seen:${updateId}`;
+  const res = await redis.set(key, 1, { nx: true, ex: 3600 });
+  return res === "OK";
+}

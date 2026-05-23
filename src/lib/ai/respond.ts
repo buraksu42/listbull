@@ -34,10 +34,7 @@ import type {
   ToolResult,
 } from "@/lib/types";
 
-// rollback: systemPromptV1 from "@/lib/ai/prompts/system.v1"
-// rollback: systemPromptV2 from "@/lib/ai/prompts/system.v2"
-// rollback: systemPromptV3 from "@/lib/ai/prompts/system.v3"
-import { systemPromptV4 } from "@/lib/ai/prompts/system.v4";
+import { systemPromptV5 } from "@/lib/ai/prompts/system.v5";
 import { tools as toolRegistry } from "@/lib/ai/tools";
 import type { RespondInput, RespondOutput } from "@/lib/ai/types";
 
@@ -55,8 +52,15 @@ export const MAX_TOOL_ROUNDTRIPS = 5;
 // Wrong: "https://openrouter.ai/api/v1" → request hits /api/v1/v1/messages (404, empty body).
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api";
 
-/** Default `max_tokens` for the assistant message. */
-const DEFAULT_MAX_TOKENS = 2048;
+/**
+ * Default `max_tokens` for the assistant message. Tightened from 2048
+ * → 1024 because (a) chat-bot replies in this product top out at
+ * ~300 tokens; the headroom was wasted, (b) OpenRouter credit
+ * budgeting blocks the *requested* ceiling, not actual usage, so
+ * shorter ceilings let small balances keep working, and (c) tool
+ * round-trips are bounded by `MAX_TOOL_ROUNDTRIPS` already.
+ */
+const DEFAULT_MAX_TOKENS = 1024;
 
 /**
  * Run a single user turn through the LLM, executing any tool calls the
@@ -64,7 +68,7 @@ const DEFAULT_MAX_TOKENS = 2048;
  * cap is hit).
  */
 export async function respond(input: RespondInput): Promise<RespondOutput> {
-  const { messages, user, workspaces, apiKey, model, toolDispatcher } = input;
+  const { messages, user, chat, apiKey, model, toolDispatcher } = input;
 
   if (!apiKey) {
     // Sentinel reply for Backend to render as a "no key configured"
@@ -92,11 +96,11 @@ export async function respond(input: RespondInput): Promise<RespondOutput> {
     // the SDK's default is fine.
   });
 
-  const system = systemPromptV4({
+  const system = systemPromptV5({
     userLocale: user.locale,
     userFirstName: user.firstName,
     userTimezone: user.timezone,
-    workspaces,
+    chat,
   });
 
   // Anthropic-shaped tool list — convert each zod schema to JSON Schema.

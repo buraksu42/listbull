@@ -1,20 +1,9 @@
 /**
- * Executor: `add_reminder` (Phase 14d).
- *
- * Append one reminder to an item. Two kinds — exactly one input
- * branch must be supplied (XOR enforced by zod refine; double-check
- * here defensively):
- *
- *   - 'absolute' (remind_at): fires at a fixed UTC moment. May carry
- *     an RRULE for recurrence.
- *   - 'before_deadline' (offset_minutes): fires `offset_minutes`
- *     before `items.deadline_at`. Requires the item to have a
- *     deadline at call time (`deadline_required` else). Recurrence
- *     not allowed.
+ * Executor: `add_reminder` (Phase 17 chat-only).
  */
 import "server-only";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { activityLog, itemReminders, items } from "@/lib/db/schema";
@@ -22,141 +11,92 @@ import {
   addReminderInputSchema,
   type AddReminderOutput,
 } from "@/lib/ai/tools";
-import {
-  ERR,
-  err,
-  isPast,
-  ok,
-  toItemReminderSnapshot,
-} from "./_shared";
-import { userCanWriteList } from "@/lib/db/queries/items";
+import { ERR, err, ok, toItemReminderSnapshot } from "./_shared";
 
 import type { ExecResult } from "./_shared";
 
 export async function executeAddReminder(
   input: unknown,
-  ctx: { userId: string; workspaceId: string },
+  ctx: { userId: string; chatId: number },
 ): Promise<ExecResult<AddReminderOutput>> {
   const parsed = addReminderInputSchema.safeParse(input);
   if (!parsed.success) {
+    // Loud-log so we can see what malformed args the LLM passed when
+    // a user reports "reminder error". Container stdout → docker logs.
+    console.error("[add_reminder] invalid_input", {
+      input,
+      issues: parsed.error.issues,
+    });
     return err(ERR.invalid_input, parsed.error.message);
   }
   const { item_id, remind_at, offset_minutes, recurrence_rule } = parsed.data;
-
-  // Validate RRULE up-front so we never write garbage.
-  if (typeof recurrence_rule === "string") {
-    try {
-      const { RRule } = await import("rrule");
-      RRule.fromString(`RRULE:${recurrence_rule}`);
-    } catch (e) {
-      return err(
-        ERR.invalid_input,
-        `Invalid RRULE: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
-  }
 
   return await db.transaction(async (tx) => {
     const [current] = await tx
       .select()
       .from(items)
-      .where(eq(items.id, item_id))
+      .where(and(eq(items.id, item_id), eq(items.chatId, ctx.chatId)))
       .limit(1);
-    if (!current || current.archivedAt) {
-      return err(ERR.not_found, "Item not found.");
-    }
-    if (!current.isCheckable) {
-      return err("cannot_schedule_note", "Notes cannot have reminders.");
-    }
-
-    const allowed = await userCanWriteList(
-      ctx.userId,
-      current.listId,
-      ctx.workspaceId,
-    );
-    if (!allowed) {
-      return err(ERR.forbidden, "You don't have access to that list.");
-    }
-
-    const warnings: string[] = [];
-    let kind: "absolute" | "before_deadline";
-    let remindAt: Date;
-    let storedOffset: number | null;
-    let storedRrule: string | null;
-
-    if (remind_at !== undefined) {
-      kind = "absolute";
-      if (isPast(remind_at)) {
-        // For absolute reminders WITHOUT an RRULE, dropping silently is
-        // the right move (matches old schedule_reminder UX). If RRULE
-        // is set, the rule itself may resolve to a future occurrence
-        // when the cron parses it — we still accept the past anchor;
-        // the dispatcher will skip-and-advance.
-        if (!recurrence_rule) {
-          warnings.push("remind_at_in_past");
-          // Soft-fail: surface warning but no row. The LLM phrases
-          // "geçmişte, ileri bir zaman ister misin?".
-          return err(
-            ERR.invalid_input,
-            "remind_at is in the past. Provide a future time.",
-          );
-        }
-      }
-      remindAt = new Date(remind_at);
-      storedOffset = null;
-      storedRrule = recurrence_rule ?? null;
-    } else {
-      // offset_minutes branch (refined non-undefined).
-      if (offset_minutes === undefined) {
-        // Defensive — refine should have caught this.
-        return err(
-          ERR.invalid_input,
-          "offset_minutes required when remind_at omitted.",
-        );
-      }
-      if (current.deadlineAt === null) {
-        return err(
-          "deadline_required",
-          "Item has no deadline; set one before adding a before-deadline reminder.",
-        );
-      }
-      kind = "before_deadline";
-      remindAt = new Date(
-        current.deadlineAt.getTime() - offset_minutes * 60_000,
+    if (!current) {
+      console.error("[add_reminder] not_found", {
+        item_id,
+        chatId: ctx.chatId,
+      });
+      return err(
+        ERR.not_found,
+        `Item ${item_id} not found in this chat — make sure search_items returned this id from the current chat before calling add_reminder.`,
       );
-      storedOffset = offset_minutes;
-      storedRrule = null;
     }
 
-    const [inserted] = await tx
+    let remindAt: Date;
+    let kind: "absolute" | "before_deadline";
+    let effectiveOffsetMinutes: number | null = null;
+    if (remind_at !== undefined) {
+      remindAt = new Date(remind_at);
+      kind = "absolute";
+    } else if (offset_minutes !== undefined) {
+      if (current.deadlineAt) {
+        // Anchored to deadline → before_deadline kind. Reminder recomputes
+        // automatically when the deadline shifts (recomputeOffsetReminders).
+        remindAt = new Date(
+          current.deadlineAt.getTime() - offset_minutes * 60_000,
+        );
+        kind = "before_deadline";
+        effectiveOffsetMinutes = offset_minutes;
+      } else {
+        // No deadline → interpret as "N minutes from now". Falls into the
+        // absolute kind so the cron picks it up just like a remind_at.
+        // Phase 17: user wanted offset_minutes to work without a forced
+        // set_deadline first.
+        remindAt = new Date(Date.now() + offset_minutes * 60_000);
+        kind = "absolute";
+      }
+    } else {
+      return err(ERR.invalid_input, "remind_at or offset_minutes required.");
+    }
+
+    const [created] = await tx
       .insert(itemReminders)
       .values({
         itemId: item_id,
-        remindAt,
         kind,
-        offsetMinutes: storedOffset,
-        recurrenceRule: storedRrule,
-        sent: false,
+        remindAt,
+        offsetMinutes: effectiveOffsetMinutes,
+        recurrenceRule: recurrence_rule ?? null,
       })
       .returning();
-    if (!inserted) {
-      throw new Error("add-reminder: insert returned no row");
-    }
+    if (!created) throw new Error("add-reminder: insert returned no row");
 
     await tx.insert(activityLog).values({
-      listId: current.listId,
+      chatId: ctx.chatId,
       entityType: "item",
-      entityId: current.id,
+      entityId: item_id,
       action: "item_reminder_added",
       actorId: ctx.userId,
       payloadBefore: null,
-      payloadAfter: toItemReminderSnapshot(inserted),
+      payloadAfter: toItemReminderSnapshot(created),
     });
 
-    return ok({
-      reminder: toItemReminderSnapshot(inserted),
-      kind,
-      ...(warnings.length > 0 ? { warnings } : {}),
-    });
+    return ok({ reminder: toItemReminderSnapshot(created) });
   });
 }

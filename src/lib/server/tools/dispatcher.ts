@@ -1,11 +1,13 @@
 /**
- * Tool dispatcher: routes a `ToolCall` from `respond.ts` to the right
- * executor for the given user context.
+ * Tool dispatcher (Phase 17 chat-only).
  *
- * The dispatcher MUST return successfully — even tool failures travel
- * back as `output` envelopes so the LLM can recover. Throwing is
- * reserved for unrecoverable infra issues; `respond.ts`'s `safeDispatch`
- * catches those and converts them to internal_error envelopes.
+ * Routes a `ToolCall` from `respond.ts` to the right executor. Every
+ * tool failure travels back as `output` envelopes — throwing is
+ * reserved for unrecoverable infra issues which `respond.ts`'s
+ * `safeDispatch` catches.
+ *
+ * ExecutorCtx now carries `chatId` (BIGINT Telegram chat_id) instead
+ * of `workspaceId`. Chat resolution happens in `handle-message`.
  */
 import "server-only";
 
@@ -13,64 +15,59 @@ import type { ToolCall, ToolResult } from "@/lib/types";
 import type { ToolDispatcher } from "@/lib/ai/types";
 import type { ToolName } from "@/lib/ai/tools";
 
-import { executeCreateItem } from "./create-item";
-import { executeSearchItems } from "./search-items";
-import { executeUpdateItem } from "./update-item";
-import { executeCompleteItem } from "./complete-item";
-import { executeDeleteItem } from "./delete-item";
-import { executeListLists } from "./list-lists";
-import { executeCreateList } from "./create-list";
-import { executeUpdateList } from "./update-list";
-import { executeDeleteList } from "./delete-list";
-import { executeRestoreList } from "./restore-list";
-import { executeShareList } from "./share-list";
-import { executeCreateSnapshot } from "./create-snapshot";
-import { executeCancelInvite } from "./cancel-invite";
-import { executeListMembers } from "./list-members";
-import { executeRemoveMember } from "./remove-member";
-import { executeUpdateMemberRole } from "./update-member-role";
-import { executeUpdateSettings } from "./update-settings";
-import { executeSetDeadline } from "./set-deadline";
 import { executeAddReminder } from "./add-reminder";
-import { executeRemoveReminder } from "./remove-reminder";
 import { executeAttachFileToItem } from "./attach-file-to-item";
-import { executeStartChecklistRun } from "./start-checklist-run";
-import { executeCompleteChecklistRun } from "./complete-checklist-run";
-import { executeAssignItem } from "./assign-item";
-import { executeCreateWorkspace } from "./create-workspace";
-import { executeSwitchWorkspace } from "./switch-workspace";
-import { executeListWorkspaces } from "./list-workspaces";
-import { executeUpdateWorkspace } from "./update-workspace";
-import { executeInviteToWorkspace } from "./invite-to-workspace";
-import { executeRemoveWorkspaceMember } from "./remove-workspace-member";
-import { executeListWorkspaceInvites } from "./list-workspace-invites";
-import { executeCancelWorkspaceInvite } from "./cancel-workspace-invite";
+import { executeCompleteItem } from "./complete-item";
+import { executeCreateItem } from "./create-item";
+import { executeDeleteItem } from "./delete-item";
+import { executeGetItemByPosition } from "./get-item-by-position";
+import { executeListChatMembers } from "./list-chat-members";
+import { executeRevealSecret } from "./reveal-secret";
+import { executeSendItemAttachments } from "./send-item-attachments";
+import { executeRemoveReminder } from "./remove-reminder";
+import { executeSearchItems } from "./search-items";
+import { executeSetChatApiKey } from "./set-chat-api-key";
+import { executeSetDeadline } from "./set-deadline";
 import { executeSetItemAttributes } from "./set-item-attributes";
+import { executeUpdateItem } from "./update-item";
+import { executeUpdateSettings } from "./update-settings";
 import { ERR } from "./_shared";
 
-/**
- * Per-tool execution context. `workspaceId` is the user's currently-
- * active workspace, resolved by the dispatcher caller (handle-message
- * for bot, route handler for Mini App) before each LLM turn.
- *
- * Phase 4.5: every executor reads `workspaceId` to scope queries.
- * Phase 5 adds bot-aware overlay (incoming bot ID → bound workspace
- * → ctx.workspaceId override).
- */
 export type ExecutorCtx = {
   userId: string;
-  workspaceId: string;
+  chatId: number;
 };
 
-/**
- * Build a per-user dispatcher. Backend's bot router calls this once per
- * Telegram update and passes the dispatcher into `respond()`.
- */
 export function createToolDispatcher(ctx: ExecutorCtx): ToolDispatcher {
   return async function dispatch(call: ToolCall): Promise<ToolResult> {
     const { id, name, input } = call;
-    const output = await routeCall(name as ToolName, input, ctx);
-    return { toolCallId: id, output };
+    // Arg VALUES not logged so user-content stays out of logs.
+    const argKeys =
+      input && typeof input === "object" && !Array.isArray(input)
+        ? Object.keys(input as Record<string, unknown>)
+        : [];
+    // Pre-call breadcrumb: fires even if the executor throws so we
+    // never lose track of which tool was being attempted.
+    console.log("[tool:start]", { name, args: argKeys, chatId: ctx.chatId });
+    try {
+      const output = await routeCall(name as ToolName, input, ctx);
+      const result = output as { ok?: boolean; error?: { code?: string } };
+      console.log("[tool:done]", {
+        name,
+        chatId: ctx.chatId,
+        ok: result?.ok ?? null,
+        errCode: result?.error?.code ?? null,
+      });
+      return { toolCallId: id, output };
+    } catch (err) {
+      console.error("[tool:throw]", {
+        name,
+        chatId: ctx.chatId,
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack?.slice(0, 800) : undefined,
+      });
+      throw err;
+    }
   };
 }
 
@@ -90,69 +87,95 @@ async function routeCall(
       return await executeCompleteItem(input, ctx);
     case "delete_item":
       return await executeDeleteItem(input, ctx);
-    case "list_lists":
-      return await executeListLists(input, ctx);
-    case "create_list":
-      return await executeCreateList(input, ctx);
-    case "update_list":
-      return await executeUpdateList(input, ctx);
-    case "delete_list":
-      return await executeDeleteList(input, ctx);
-    case "restore_list":
-      return await executeRestoreList(input, ctx);
-    case "share_list":
-      return await executeShareList(input, ctx);
-    case "create_snapshot":
-      return await executeCreateSnapshot(input, ctx);
-    case "cancel_invite":
-      return await executeCancelInvite(input, ctx);
-    case "list_members":
-      return await executeListMembers(input, ctx);
-    case "remove_member":
-      return await executeRemoveMember(input, ctx);
-    case "update_member_role":
-      return await executeUpdateMemberRole(input, ctx);
-    case "update_settings":
-      return await executeUpdateSettings(input, ctx);
     case "set_deadline":
       return await executeSetDeadline(input, ctx);
     case "add_reminder":
       return await executeAddReminder(input, ctx);
     case "remove_reminder":
       return await executeRemoveReminder(input, ctx);
-    case "attach_file_to_item":
-      return await executeAttachFileToItem(input, ctx);
-    case "start_checklist_run":
-      return await executeStartChecklistRun(input, ctx);
-    case "complete_checklist_run":
-      return await executeCompleteChecklistRun(input, ctx);
-    case "assign_item":
-      return await executeAssignItem(input, ctx);
-    case "create_workspace":
-      return await executeCreateWorkspace(input, ctx);
-    case "switch_workspace":
-      return await executeSwitchWorkspace(input, ctx);
-    case "list_workspaces":
-      return await executeListWorkspaces(input, ctx);
-    case "update_workspace":
-      return await executeUpdateWorkspace(input, ctx);
-    case "invite_to_workspace":
-      return await executeInviteToWorkspace(input, ctx);
-    case "remove_workspace_member":
-      return await executeRemoveWorkspaceMember(input, ctx);
-    case "list_workspace_invites":
-      return await executeListWorkspaceInvites(input, ctx);
-    case "cancel_workspace_invite":
-      return await executeCancelWorkspaceInvite(input, ctx);
     case "set_item_attributes":
       return await executeSetItemAttributes(input, ctx);
+    case "update_settings":
+      return await executeUpdateSettings(input, ctx);
+    case "attach_file_to_item":
+      return await executeAttachFileToItem(input, ctx);
+    case "set_chat_api_key":
+      return await executeSetChatApiKey(input, ctx);
+    case "list_chat_members":
+      return await executeListChatMembers(input, ctx);
+    case "get_item_by_position":
+      return await executeGetItemByPosition(input, ctx);
+    case "reveal_secret":
+      return await executeRevealSecret(input, ctx);
+    case "send_item_attachments":
+      return await executeSendItemAttachments(input, ctx);
     default:
       return {
         ok: false,
         error: {
           code: ERR.bad_input,
-          message: `Unknown tool: ${name}`,
+          message: buildUnknownToolMessage(name as string),
         },
       };
   }
+}
+
+const KNOWN_TOOLS = [
+  "create_item",
+  "search_items",
+  "update_item",
+  "complete_item",
+  "delete_item",
+  "set_deadline",
+  "add_reminder",
+  "remove_reminder",
+  "set_item_attributes",
+  "update_settings",
+  "attach_file_to_item",
+  "set_chat_api_key",
+  "list_chat_members",
+  "get_item_by_position",
+  "reveal_secret",
+  "send_item_attachments",
+] as const;
+
+function buildUnknownToolMessage(badName: string): string {
+  const suggestion = closestTool(badName);
+  if (suggestion) {
+    return `Unknown tool: ${badName}. Did you mean: ${suggestion}? Retry with the correct name.`;
+  }
+  return `Unknown tool: ${badName}. Valid tools: ${KNOWN_TOOLS.join(", ")}.`;
+}
+
+function closestTool(name: string): string | null {
+  let best: { tool: string; dist: number } | null = null;
+  for (const tool of KNOWN_TOOLS) {
+    const dist = levenshtein(name.toLowerCase(), tool);
+    if (!best || dist < best.dist) {
+      best = { tool, dist };
+    }
+  }
+  if (!best || best.dist > 4) return null;
+  return best.tool;
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const prev: number[] = new Array(b.length + 1).fill(0).map((_, i) => i);
+  const curr: number[] = new Array(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(
+        (curr[j - 1] ?? 0) + 1,
+        (prev[j] ?? 0) + 1,
+        (prev[j - 1] ?? 0) + cost,
+      );
+    }
+    for (let j = 0; j <= b.length; j++) prev[j] = curr[j] ?? 0;
+  }
+  return prev[b.length] ?? 0;
 }

@@ -5,9 +5,6 @@ const serverSchema = z.object({
 
   DATABASE_URL: z.string().url(),
 
-  BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be ≥32 chars"),
-  BETTER_AUTH_URL: z.string().url(),
-
   ENV_KEY: z
     .string()
     .min(32, "ENV_KEY must be a base64-encoded 32-byte key (≥32 chars)"),
@@ -25,9 +22,19 @@ const serverSchema = z.object({
     .default(0),
   LISTBULL_HEARTBEAT_URL: z.string().url().optional(),
 
-  // Phase 4 · D2 (Inv-18): optional dedicated HMAC key for snapshot
-  // URLs. When unset we fall back to BETTER_AUTH_SECRET.
-  SNAPSHOT_SIGNING_KEY: z.string().min(32).optional(),
+  // Shared free-tier fallback: when a chat has no OpenRouter key of
+  // its own, the bot uses this operator key with a free model
+  // (LISTBULL_FREE_MODEL). Lets group members use the bot in their
+  // DM without setting up their own key. Optional — when unset, a
+  // keyless chat falls back to the "set your key" prompt.
+  LISTBULL_SHARED_OPENROUTER_KEY: z.string().optional(),
+  // Model used for free-tier (keyless) chats. Must be an OpenRouter
+  // `:free` model (zero token cost) that supports tool calling.
+  // Verify the exact id at openrouter.ai/api/v1/models — the free
+  // lineup churns (deepseek-chat-v3:free was retired May 2026).
+  LISTBULL_FREE_MODEL: z
+    .string()
+    .default("deepseek/deepseek-v4-flash:free"),
 
   // Phase 7: Upstash Redis (KV) for cross-pod webhook idempotency +
   // per-route rate limiting on admin surfaces. When unset, idempotency
@@ -68,12 +75,9 @@ function parseServer(): ServerEnv {
   const parsed = serverSchema.safeParse(process.env);
   if (!parsed.success) {
     if (isBuildPhase) {
-      // Best-effort placeholder during build — properties may be empty strings.
       cachedServer = serverSchema.parse({
         NODE_ENV: "production",
         DATABASE_URL: "postgres://placeholder@localhost:5432/placeholder",
-        BETTER_AUTH_SECRET: "x".repeat(32),
-        BETTER_AUTH_URL: "http://localhost",
         ENV_KEY: "x".repeat(32),
         TELEGRAM_BOT_TOKEN: "0000000000",
         TELEGRAM_WEBHOOK_SECRET: "x".repeat(16),

@@ -1,13 +1,14 @@
 /**
- * Executor: `create_item`.
+ * Executor: `create_item` (Phase 17 chat-only).
  *
- * Inserts one row into `items` plus one `activity_log` row in a single
- * transaction (Inv-1). List resolution per Inv-3; membership check
- * implicit in `resolveList` (Inv-2).
+ * Inserts one row into `items` with chat_id = ExecutorCtx.chatId. When
+ * deadline_at is supplied, auto-creates a single absolute reminder
+ * anchored at the same moment. Activity log row written in the same
+ * transaction (Inv-1).
  */
 import "server-only";
 
-import { desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { activityLog, itemReminders, items } from "@/lib/db/schema";
@@ -15,159 +16,114 @@ import {
   createItemInputSchema,
   type CreateItemOutput,
 } from "@/lib/ai/tools";
-import {
-  ERR,
-  err,
-  isPast,
-  ok,
-  resolveList,
-  toItemReminderSnapshot,
-  toItemSnapshot,
-} from "./_shared";
+import { ERR, err, isPast, ok, toItemReminderSnapshot, toItemSnapshot } from "./_shared";
 
 import type { ExecResult } from "./_shared";
 
 export async function executeCreateItem(
   input: unknown,
-  ctx: { userId: string; workspaceId: string },
+  ctx: { userId: string; chatId: number },
 ): Promise<ExecResult<CreateItemOutput>> {
   const parsed = createItemInputSchema.safeParse(input);
   if (!parsed.success) {
     return err(ERR.invalid_input, parsed.error.message);
   }
-  const { text, description, list_id, list_name, deadline_at, is_checkable } =
-    parsed.data;
+  const {
+    text,
+    description,
+    deadline_at,
+    is_checkable,
+    kind,
+    parent_item_id,
+  } = parsed.data;
 
-  // List resolution lives outside the transaction — read-only and
-  // doesn't need to share the write's snapshot. Inv-3 + Inv-2.
-  const resolution = await resolveList(
-    ctx,
-    { listId: list_id, listName: list_name },
-    { inboxFallback: true },
-  );
-
-  switch (resolution.kind) {
-    case "forbidden":
-      return err(ERR.forbidden, "You don't have access to that list.");
-    case "not_found":
-      return err(ERR.not_found, "No matching list found.");
-    case "ambiguous": {
-      const names = resolution.candidates.map((c) => c.name).join(", ");
-      return err(
-        ERR.ambiguous_list,
-        `List name matched multiple lists: ${names}. Specify which one.`,
-      );
-    }
-  }
-
-  const targetListId = resolution.listId;
   const warnings: string[] = [];
-
-  // Past deadline_at → drop the field, surface a warning. Per the
-  // contract, past times never set a deadline.
-  let deadlineAt: Date | null = null;
-  if (deadline_at !== undefined) {
+  let deadlineDate: Date | null = null;
+  if (deadline_at) {
+    deadlineDate = new Date(deadline_at);
     if (isPast(deadline_at)) {
       warnings.push("deadline_at_in_past");
-    } else {
-      deadlineAt = new Date(deadline_at);
     }
   }
-  // Notes can't have deadline (already enforced by zod refine, but
-  // defense in depth).
-  if (!is_checkable) deadlineAt = null;
 
   return await db.transaction(async (tx) => {
-    // Compute next position: max+1 within the list (active items only).
-    const [maxRow] = await tx
-      .select({ position: items.position })
-      .from(items)
-      .where(eq(items.listId, targetListId))
-      .orderBy(desc(items.position))
-      .limit(1);
-    const nextPosition = (maxRow?.position ?? -1) + 1;
-
-    // Empty string → null (no implicit description). Trim before
-    // storage so leading/trailing whitespace doesn't trigger the
-    // "has description" indicator.
-    const normalizedDescription =
-      description === undefined
-        ? null
-        : description === null
-          ? null
-          : description.trim().length > 0
-            ? description.trim()
-            : null;
+    // Validate parent FK eagerly so the CHECK constraint on the DB
+    // doesn't surface as a generic 23514 error. Also enforce the
+    // one-level nesting rule for todos (parent must be top-level + same kind).
+    if (parent_item_id) {
+      const [parent] = await tx
+        .select({
+          id: items.id,
+          parentItemId: items.parentItemId,
+          kind: items.kind,
+        })
+        .from(items)
+        .where(
+          and(eq(items.id, parent_item_id), eq(items.chatId, ctx.chatId)),
+        )
+        .limit(1);
+      if (!parent) {
+        return err(
+          ERR.not_found,
+          `parent_item_id ${parent_item_id} not found in this chat.`,
+        );
+      }
+      if (parent.parentItemId !== null) {
+        return err(
+          ERR.invalid_input,
+          `no_grandchildren: parent ${parent_item_id} is already nested under another item. Sub-items can only nest one level deep.`,
+        );
+      }
+      if (kind === "todo" && parent.kind !== "todo") {
+        return err(
+          ERR.invalid_input,
+          `kind_mismatch: cannot nest a todo under a ${parent.kind} parent. Checklist sub-items must share kind with their parent.`,
+        );
+      }
+    }
 
     const [created] = await tx
       .insert(items)
       .values({
-        listId: targetListId,
-        text,
-        description: normalizedDescription,
+        chatId: ctx.chatId,
+        text: text.trim(),
+        description: description?.trim() || null,
         isCheckable: is_checkable,
-        isDone: false,
-        deadlineAt,
-        position: nextPosition,
+        deadlineAt: deadlineDate,
         createdBy: ctx.userId,
+        kind,
+        parentItemId: parent_item_id ?? null,
       })
       .returning();
     if (!created) throw new Error("create-item: insert returned no row");
 
-    const snapshot = toItemSnapshot(created);
+    const reminderRows: (typeof itemReminders.$inferSelect)[] = [];
+    if (deadlineDate) {
+      const [reminder] = await tx
+        .insert(itemReminders)
+        .values({
+          itemId: created.id,
+          kind: "absolute",
+          remindAt: deadlineDate,
+        })
+        .returning();
+      if (reminder) reminderRows.push(reminder);
+    }
 
     await tx.insert(activityLog).values({
-      listId: targetListId,
+      chatId: ctx.chatId,
       entityType: "item",
       entityId: created.id,
       action: "item_created",
       actorId: ctx.userId,
       payloadBefore: null,
-      payloadAfter: snapshot,
+      payloadAfter: toItemSnapshot(created),
     });
 
-    // Phase 14d: when the user provides a deadline at create time,
-    // also create one default absolute reminder anchored at the
-    // deadline. Preserves the legacy UX where setting a due date
-    // implies a ping. The user can add more reminders via
-    // `add_reminder` afterward.
-    const reminders = [];
-    if (deadlineAt !== null) {
-      const [reminder] = await tx
-        .insert(itemReminders)
-        .values({
-          itemId: created.id,
-          remindAt: deadlineAt,
-          kind: "absolute",
-          offsetMinutes: null,
-          recurrenceRule: null,
-          sent: false,
-        })
-        .returning();
-      if (reminder) {
-        reminders.push(toItemReminderSnapshot(reminder));
-        await tx.insert(activityLog).values({
-          listId: targetListId,
-          entityType: "item",
-          entityId: created.id,
-          action: "item_reminder_added",
-          actorId: ctx.userId,
-          payloadBefore: null,
-          payloadAfter: toItemReminderSnapshot(reminder),
-        });
-      }
-    }
-
     return ok({
-      item: snapshot,
-      list: {
-        id: targetListId,
-        name: resolution.listName,
-        emoji: resolution.emoji,
-      },
-      reminders,
-      ...(warnings.length > 0 ? { warnings } : {}),
+      item: toItemSnapshot(created),
+      reminders: reminderRows.map(toItemReminderSnapshot),
+      ...(warnings.length ? { warnings } : {}),
     });
   });
 }
-

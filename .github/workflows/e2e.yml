@@ -60,7 +60,10 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Compile Playwright config (list specs)
-        run: npx playwright test --list
+        # Calls the npm script which tolerates "no tests found" (exit
+        # 1) via `|| test $? -eq 1`. Config-compile errors (different
+        # exit codes) still surface.
+        run: npm run e2e:list
 
       - name: Run live e2e suite
         if: github.event.inputs.live == '1'
@@ -71,8 +74,6 @@ jobs:
           # Staging secrets (Phase 5):
           TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_BOT_TOKEN }}
           TELEGRAM_WEBHOOK_SECRET: ${{ secrets.E2E_WEBHOOK_SECRET }}
-          BETTER_AUTH_SECRET: ${{ secrets.E2E_BETTER_AUTH_SECRET }}
-          BETTER_AUTH_URL: http://127.0.0.1:3000
           ENV_KEY: ${{ secrets.E2E_ENV_KEY }}
           NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
           NEXT_PUBLIC_ENV: test

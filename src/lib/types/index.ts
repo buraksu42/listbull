@@ -1,78 +1,49 @@
 /**
- * Architect-owned shared types. Frozen after Phase 1 except via Architect-agent invocation.
- * All entity types derived from Drizzle schema via $inferSelect / $inferInsert.
- * If a new shared type is needed, request via the agent contract — never declare equivalents elsewhere.
+ * Phase 17 chat-only pivot — shared types.
  *
- * Phase 4.5 additions live in dedicated modules — workspace.ts,
- * bot.ts — and are re-exported below so consumers can
- * keep `import { Workspace } from '@/lib/types'`.
+ * Workspace + list + sharing concepts removed; the surface is now:
+ *   - User, Chat, ChatMember
+ *   - Item + Reminder + Attachment (chat-scoped)
+ *   - ActivityLog (chat-scoped)
+ *   - Message (LLM history)
+ *   - LLM tool-calling primitives
+ *
+ * Derived from Drizzle schema via $inferSelect / $inferInsert.
  */
 import type {
   activityLog,
+  chatMembers,
+  chats,
   itemAttachments,
   itemReminders,
   items,
-  listInvites,
-  listMembers,
-  listRuns,
-  lists,
   messages,
   users,
 } from "@/lib/db/schema";
-
-// ─── Phase 4.5 module re-exports ────────────────────────────────────
-export type {
-  Workspace,
-  NewWorkspace,
-  WorkspaceMember,
-  NewWorkspaceMember,
-  WorkspaceRole,
-  WorkspaceSnapshot,
-  WorkspaceMemberSnapshot,
-  WorkspaceListItem,
-  WorkspaceInvite,
-  NewWorkspaceInvite,
-  WorkspaceInviteTokenInfo,
-} from "./workspace";
-
-export type {
-  Bot,
-  NewBot,
-  WorkspaceBot,
-  NewWorkspaceBot,
-  BotUser,
-  NewBotUser,
-  BotPublic,
-  WorkspaceBotBinding,
-} from "./bot";
 
 // ─── User ───────────────────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 
-// ─── List ───────────────────────────────────────────────────────────
-export type List = typeof lists.$inferSelect;
-export type NewList = typeof lists.$inferInsert;
+// ─── Chat (Phase 17) ────────────────────────────────────────────────
+export type Chat = typeof chats.$inferSelect;
+export type NewChat = typeof chats.$inferInsert;
+export type ChatType = "private" | "group" | "supergroup";
 
-// ─── ListMember ─────────────────────────────────────────────────────
-export type ListMember = typeof listMembers.$inferSelect;
-export type NewListMember = typeof listMembers.$inferInsert;
-export type ListRole = "owner" | "editor" | "viewer";
-
-// ─── ListRun (Phase 16, checklists) ─────────────────────────────────
-export type ListRun = typeof listRuns.$inferSelect;
-export type NewListRun = typeof listRuns.$inferInsert;
+// ─── ChatMember (Phase 17) ──────────────────────────────────────────
+export type ChatMember = typeof chatMembers.$inferSelect;
+export type NewChatMember = typeof chatMembers.$inferInsert;
 
 // ─── Item ───────────────────────────────────────────────────────────
 export type Item = typeof items.$inferSelect;
 export type NewItem = typeof items.$inferInsert;
 
-// ─── ItemReminder (Phase 14d) ───────────────────────────────────────
+// ─── ItemReminder ───────────────────────────────────────────────────
 export type ItemReminder = typeof itemReminders.$inferSelect;
 export type NewItemReminder = typeof itemReminders.$inferInsert;
 export type ItemReminderKind = "absolute" | "before_deadline";
 
-// ─── ItemAttachment (Phase 14b) ─────────────────────────────────────
+// ─── ItemAttachment ─────────────────────────────────────────────────
 export type ItemAttachment = typeof itemAttachments.$inferSelect;
 export type NewItemAttachment = typeof itemAttachments.$inferInsert;
 export type AttachmentKind =
@@ -83,57 +54,32 @@ export type AttachmentKind =
   | "voice"
   | "video_note";
 
-// ─── Message (LLM conversation) ─────────────────────────────────────
+// ─── Message ────────────────────────────────────────────────────────
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 export type MessageRole = "user" | "assistant" | "tool";
 
-// ─── ListInvite ─────────────────────────────────────────────────────
-export type ListInvite = typeof listInvites.$inferSelect;
-export type NewListInvite = typeof listInvites.$inferInsert;
-
-// ─── ActivityLog ────────────────────────────────────────────────────
+// ─── ActivityLog (Phase 17 — chat-scoped) ───────────────────────────
 export type ActivityLog = typeof activityLog.$inferSelect;
 export type NewActivityLog = typeof activityLog.$inferInsert;
-export type ActivityEntityType = "item" | "list" | "member" | "workspace";
+export type ActivityEntityType = "item" | "chat" | "member";
 export type ActivityAction =
   | "item_created"
   | "item_completed"
   | "item_uncompleted"
   | "item_edited"
-  | "item_moved"
   | "item_deleted"
-  | "item_assigned"
-  | "item_unassigned"
-  // Phase 1-3 deadline actions (kept in union so historical activity_log
-  // rows still validate; new writes use the Phase 14d actions below).
-  | "item_due_set"
-  | "item_due_cleared"
-  // ─── Phase 14d: deadline / reminder split ─────────────────────────
   | "item_deadline_set"
   | "item_deadline_cleared"
   | "item_reminder_added"
   | "item_reminder_removed"
   | "item_reminder_fired"
-  // ─── Phase 14b: attachments ───────────────────────────────────────
   | "item_attachment_added"
   | "item_attachment_removed"
-  // ─── Phase 16: checklists ─────────────────────────────────────────
-  | "checklist_run_started"
-  | "checklist_run_completed"
-  | "list_created"
-  | "list_renamed"
-  | "list_archived"
-  | "list_restored"
+  | "chat_created"
+  | "chat_api_key_set"
   | "member_added"
-  | "member_removed"
-  | "member_role_changed"
-  // ─── Phase 4.5: workspace-shell mutations ────────────────────────
-  | "workspace_created"
-  | "workspace_renamed"
-  | "workspace_member_added"
-  | "workspace_member_removed"
-  | "workspace_member_role_changed";
+  | "member_removed";
 
 // ─── Generic API envelope ───────────────────────────────────────────
 export type ApiOk<T> = { ok: true; data: T };
@@ -144,151 +90,77 @@ export type ApiErr = {
 export type ApiResult<T> = ApiOk<T> | ApiErr;
 
 // ─── LLM tool calling primitives ────────────────────────────────────
-//
-// Mirror the Anthropic / OpenRouter tool-calling shape and the JSONB
-// schema of `messages.tool_calls` / `messages.tool_call_id`. AI-agent
-// (`src/lib/ai/**`) and Backend-agent (`src/lib/server/**`) both consume
-// these — the contract is intentionally provider-neutral.
 
-/**
- * One assistant tool invocation. Stored as an element of
- * `messages.tool_calls` (jsonb) when role='assistant'.
- *
- * `id` is the provider-issued opaque id; backend echoes it back as
- * `ToolResult.toolCallId` when persisting the corresponding tool message.
- *
- * `input` is `unknown` at the boundary; each executor zod-parses it
- * against the tool's input schema before doing any work.
- */
 export type ToolCall = {
   id: string;
   name: string;
   input: unknown;
 };
 
-/**
- * One tool execution result. Persisted as a single message row with
- * role='tool', `tool_call_id` = the originating ToolCall.id, and
- * `content` = JSON.stringify(output).
- */
 export type ToolResult = {
   toolCallId: string;
   output: unknown;
 };
 
-/**
- * Discriminated union over the three message roles for in-memory LLM
- * orchestration. NOT a DB row — see `MessageWithToolCalls` for that.
- *
- * - 'user' / 'assistant' (no tool_calls): plain text content
- * - 'assistant' with tool_calls: model wants to invoke tools; content
- *   may be empty string (some providers omit reasoning)
- * - 'tool': result message; toolCallId references the assistant's call
- */
 export type ConversationMessage =
   | { role: "user"; content: string }
   | { role: "assistant"; content: string; toolCalls?: ToolCall[] }
   | { role: "tool"; toolCallId: string; content: string };
 
-/**
- * DB row type for `messages` with the jsonb `tool_calls` column parsed
- * into `ToolCall[] | null`. Use this in queries that hand rows to the
- * AI orchestrator; raw `Message` keeps `tool_calls: unknown` from
- * Drizzle's jsonb inference and forces casts at every consumer.
- */
 export type MessageWithToolCalls = Omit<Message, "toolCalls"> & {
   toolCalls: ToolCall[] | null;
 };
 
-// ─── Activity log payload snapshots ─────────────────────────────────
-//
-// `activity_log.payload_before` / `payload_after` are JSONB. JSON has
-// no Date type, so dates round-trip as ISO strings. These types fix
-// the on-disk shape so F2 audit/restore (Phase 4) can deserialize
-// without guessing.
-//
-// Convention: omit `created_at`/`updated_at` from the snapshot when
-// they're not meaningful for the diff (kept here for completeness so a
-// restore can reconstruct the full row).
+// ─── Activity log payload snapshots (chat-scoped) ───────────────────
 
-/**
- * JSON-safe snapshot of an `items` row. Mirror of `Item` with all
- * `Date` fields serialized as ISO 8601 strings.
- *
- * Used as the value type of `activity_log.payload_before` and
- * `payload_after` whenever `entity_type = 'item'`.
- *
- * Phase 14d: `dueAt` / `reminderSent` / `recurrenceRule` removed; use
- * `deadlineAt` and the sibling `ItemReminderSnapshot` for reminders.
- * Old activity_log rows with the legacy field names are still valid
- * jsonb — readers narrow on field presence when migrating UI surfaces.
- */
+/** 'todo' | 'memory' | 'secret' — items.kind discriminator. */
+export type ItemKind = "todo" | "memory" | "secret";
+
+/** JSON-safe snapshot of an `items` row. */
 export type ItemSnapshot = {
   id: string;
-  listId: string;
+  chatId: number;
   text: string;
-  /** Phase 14a: optional long-form context (≤5000 chars). */
   description: string | null;
   isCheckable: boolean;
   isDone: boolean;
   status: string;
   priority: string;
   tags: string[];
-  assigneeId: string | null;
-  /** ISO 8601 string, e.g. "2026-05-01T18:00:00.000Z" */
   deadlineAt: string | null;
-  /** ISO 8601 string — pin-to-top marker. */
   pinnedAt: string | null;
-  /** RFC 5545 RRULE; when set, complete reverts + advances deadline. */
   taskRecurrenceRule: string | null;
   position: number;
   createdBy: string;
-  /** ISO 8601 string */
   completedAt: string | null;
-  /** ISO 8601 string — soft-delete marker */
   archivedAt: string | null;
-  /** ISO 8601 string */
   createdAt: string;
-  /** ISO 8601 string */
   updatedAt: string;
+  /** 'todo' | 'memory' | 'secret' — discriminator. */
+  kind: ItemKind;
+  /** Nested-item parent; null for top-level. */
+  parentItemId: string | null;
 };
 
-/**
- * JSON-safe snapshot of an `item_reminders` row (Phase 14d). Mirror of
- * `ItemReminder` with all `Date` fields serialized as ISO 8601 strings.
- *
- * Used in activity_log payloads for `item_reminder_added` /
- * `item_reminder_removed` / `item_reminder_fired` actions, and as the
- * client-facing shape returned alongside items in API responses.
- */
+/** JSON-safe snapshot of an `item_reminders` row. */
 export type ItemReminderSnapshot = {
   id: string;
   itemId: string;
-  /** ISO 8601 UTC timestamp — the moment to fire. */
   remindAt: string;
   kind: ItemReminderKind;
   offsetMinutes: number | null;
   recurrenceRule: string | null;
   sent: boolean;
-  /** ISO 8601 string — last successful fire time. */
   lastSentAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
-/**
- * JSON-safe snapshot of an `item_attachments` row (Phase 14b).
- *
- * Used in activity_log payloads (`item_attachment_added` /
- * `item_attachment_removed`) and as the client-facing shape returned
- * to the Mini App. The raw `telegramFileId` is intentionally NOT
- * exposed to the client — clients fetch bytes via the proxy route
- * `/api/attachments/[itemId]/[attachmentId]` keyed by attachment id.
- */
+/** JSON-safe snapshot of an `item_attachments` row. */
 export type AttachmentSnapshot = {
   id: string;
   itemId: string;
-  workspaceId: string;
+  chatId: number;
   kind: AttachmentKind;
   mimeType: string | null;
   fileSize: number | null;
@@ -297,314 +169,29 @@ export type AttachmentSnapshot = {
   height: number | null;
   originalFilename: string | null;
   uploadedByUserId: string;
-  /** ISO 8601 string. */
   createdAt: string;
 };
 
-// ─── Phase 3 additions ─────────────────────────────────────────────
+// ─── Cron reminder dispatcher pickup row ────────────────────────────
 //
-// Phase 3 introduces three new tool surfaces (`share_list`,
-// `schedule_reminder`, `assign_item`), the invite-token flow, and a
-// cron-driven reminder dispatcher. The types below pin the JSON shapes
-// that flow across activity_log, the invite-accept screen, the
-// activity-feed API, and the cron query layer. ListRole already exists
-// above — re-use, do not redeclare.
-
-/**
- * JSON-safe snapshot of a `lists` row. Mirror of `List` with all
- * `Date` fields serialized as ISO 8601 strings.
- *
- * Used as the value type of `activity_log.payload_before` /
- * `payload_after` whenever `entity_type = 'list'` (Phase 3 actions:
- * `list_renamed`, `list_archived`, `list_restored`; Phase 4 may add
- * more). Phase 3 itself only emits `list_created` once when an invite
- * is accepted into a brand-new list — the existing `list_created`
- * action also uses this shape.
- */
-export type ListSnapshot = {
-  id: string;
-  name: string;
-  emoji: string | null;
-  ownerId: string;
-  isInbox: boolean;
-  /** Phase 16: when true, the list is a repeatable checklist. */
-  isChecklist: boolean;
-  /** ISO 8601 string — soft-delete marker. */
-  archivedAt: string | null;
-  /** ISO 8601 string */
-  createdAt: string;
-  /** ISO 8601 string */
-  updatedAt: string;
-};
-
-/**
- * JSON-safe snapshot of a `list_runs` row (Phase 16). Used in
- * activity_log payloads (`checklist_run_started` /
- * `checklist_run_completed`) and as the wire shape returned to the
- * Mini App when rendering run history.
- */
-export type ListRunSnapshot = {
-  id: string;
-  listId: string;
-  /** ISO 8601 string. */
-  startedAt: string;
-  /** ISO 8601 string — null while the run is still open. */
-  completedAt: string | null;
-  startedByUserId: string;
-  completedByUserId: string | null;
-  itemsTotal: number;
-  itemsCompleted: number | null;
-  /** ISO 8601 string. */
-  createdAt: string;
-};
-
-/**
- * JSON-safe snapshot of a `list_members` row enriched with the joined
- * user info needed for activity-feed rendering without an N+1 lookup.
- *
- * Used as the value type of `activity_log.payload_before` /
- * `payload_after` whenever `entity_type = 'member'` (Phase 3 actions:
- * `member_added`, `member_removed`, `member_role_changed`).
- *
- * `payload_before` is `null` for `member_added`; `payload_after` is
- * `null` for `member_removed`. For `member_role_changed`, both
- * snapshots are present and only `role` differs.
- */
-export type MemberSnapshot = {
-  id: string;
-  listId: string;
-  userId: string;
-  role: ListRole;
-  invitedBy: string | null;
-  /** ISO 8601 string */
-  acceptedAt: string;
-  /** ISO 8601 string */
-  createdAt: string;
-  /** ISO 8601 string */
-  updatedAt: string;
-  /** Joined `users` columns — frozen at write-time so the feed renders
-   *  the actor's display name even if they later change their handle. */
-  user: {
-    telegramFirstName: string;
-    telegramUsername: string | null;
-    telegramPhotoUrl: string | null;
-  };
-};
-
-/**
- * Derived view of a `list_invites` row + the originating list's display
- * info, computed for the invite-accept screen
- * (`/app/invites/[token]/page.tsx`). The page itself is publicly
- * reachable (the invitee may not yet have a session); the API gates
- * read access via the token's entropy alone.
- *
- * `isExpired` and `isAccepted` are derived booleans the API computes so
- * the client doesn't re-derive (and disagree with) the same logic.
- */
-export type InviteTokenInfo = {
-  token: string;
-  listId: string;
-  listName: string;
-  listEmoji: string | null;
-  /** Display name of the user who created the invite (for "Invited by Ali"). */
-  invitedByName: string;
-  role: ListRole;
-  /** ISO 8601 string */
-  expiresAt: string;
-  isExpired: boolean;
-  isAccepted: boolean;
-};
-
-/**
- * Denormalized row returned by `GET /api/lists/[id]/activity` to the
- * activity-feed view (B1). One SQL query joins `activity_log` to
- * `users` (actor) so the client renders without an N+1.
- *
- * `payloadBefore` / `payloadAfter` stay `unknown` here on purpose: the
- * concrete shape is `ItemSnapshot | ListSnapshot | MemberSnapshot |
- * null` discriminated by `entityType`. Reader narrows via a switch on
- * `entityType` and casts; keeping it `unknown` at the row boundary
- * stops accidental field access on the wrong variant.
- *
- * Day grouping (sticky labels) is the Frontend's job. Activity
- * sentence localization (TR/EN) is also Frontend's job — backend
- * returns the raw `action` enum + actor name and lets the client pick
- * the localized sentence.
- */
-export type ActivityFeedRow = {
-  id: string;
-  listId: string;
-  entityType: ActivityEntityType;
-  entityId: string;
-  action: ActivityAction;
-  actorId: string;
-  actorFirstName: string;
-  actorUsername: string | null;
-  actorPhotoUrl: string | null;
-  payloadBefore: unknown;
-  payloadAfter: unknown;
-  /** ISO 8601 string */
-  createdAt: string;
-};
-
-/**
- * Projected shape returned by the cron dispatcher's pickup query
- * (`src/lib/cron/dispatch-reminders.ts`). Stable type so the dispatcher
- * loop, the DM sender, and any future test harness all share the same
- * row contract.
- *
- * Phase 14d: pickup is now `item_reminders` JOIN `items` JOIN `lists`
- * JOIN `users`. `reminderId` is the unsent row to mark fired; `itemId`
- * is the parent for context. `deadlineAt` rides along so the DM body
- * can render both the reminder time and the deadline when they differ.
- *
- * The dispatcher DMs `assigneeTelegramId` if non-null, else falls back
- * to `ownerTelegramId` (Inv-12). All times are UTC because Dokploy cron
- * runs in UTC; user timezone is presentation-only.
- */
+// Phase 17: chat-scoped. items.chat_id → chats.owner_user_id resolves
+// the bot DM target. White-label bots dropped; default platform bot
+// serves all reminders.
 export type ReminderJobItem = {
   reminderId: string;
   itemId: string;
-  listId: string;
+  chatId: number;
   text: string;
-  /** ISO 8601 UTC timestamp — the reminder fire time. */
   remindAt: string;
-  /** ISO 8601 UTC timestamp — the parent item's deadline. */
   deadlineAt: string | null;
-  /** 'absolute' | 'before_deadline'. */
   kind: ItemReminderKind;
   offsetMinutes: number | null;
-  /** RFC 5545 RRULE body (no 'RRULE:' prefix), or null for one-shot. */
   recurrenceRule: string | null;
+  /** Chat owner's Telegram ID — the reminder DM target. */
   ownerTelegramId: number;
   ownerLocale: string;
   ownerTimezone: string;
-  assigneeTelegramId: number | null;
-  assigneeLocale: string | null;
-  assigneeTimezone: string | null;
 };
 
-// ─── Phase 4 additions (FROZEN after Phase 4 — Phase 5 is launch only) ─
-//
-// Phase 4 ships the OSS-quality features: A3 forwarded messages, D1
-// inline mode, D2 shareable list snapshot, D3 docs-only, F1 export, F2
-// audit/restore, E1/E2/E3 i18n + a11y. The types below pin the JSON
-// shapes that flow across the snapshot page, the export download, the
-// audit/restore UI, and the inline-query result list. After this phase,
-// `src/lib/types/index.ts` is FROZEN — Phase 5 (launch prep) does not
-// alter the type surface.
-
-/**
- * Public read-only snapshot of a list (D2). Generated on-the-fly from
- * the list's current state at request time — no DB column stores
- * snapshots. Expiration is URL-bound via a signed query parameter, not
- * DB-tracked, which keeps the schema frozen.
- *
- * Consumed by `src/app/(marketing)/snapshot/[id]/page.tsx`. The URL
- * carries `?token=<base64url(hmac)>` + `?exp=<unix-ms>`; the page
- * verifies HMAC-SHA256 against `ENV_KEY` (or a dedicated
- * `SNAPSHOT_SIGNING_KEY` if Backend chooses) and rejects expired or
- * tampered requests.
- *
- * Excludes: assignees, due dates, members, activity. The snapshot is a
- * forwardable read-only artifact, not a fully-functional list view.
- */
-export type SnapshotPublic = {
-  listId: string;
-  listName: string;
-  listEmoji: string | null;
-  /** ISO 8601 — when the snapshot was generated. */
-  capturedAt: string;
-  /** ISO 8601 — when the signed URL expires (default capturedAt + 30 days). */
-  expiresAt: string;
-  items: Array<{
-    text: string;
-    isDone: boolean;
-    /** ISO 8601 or null — only the date is shown to viewers; assignee not exposed. */
-    deadlineAt: string | null;
-  }>;
-  /** Owner's display first-name only — no username or photo (light privacy). */
-  ownerFirstName: string;
-};
-
-/**
- * Full data export bundle (F1). Returned by `GET /api/settings/export`
- * (caller is the user being exported — never another user's data).
- *
- * Excludes per spec: other users' data (only items in lists the caller
- * OWNS or co-edits where the caller created them are included), the
- * encrypted OpenRouter API key, the user's session cookies. `messages`
- * are caller-only by `(user_id)` filter.
- *
- * Delivery shape: served as `application/json` directly from the route
- * (Phase 4 default). If a backing store path emerges later, switch to
- * a 24h signed Hetzner Object Storage URL — the bundle shape stays the
- * same.
- */
-export type ExportBundle = {
-  /** ISO 8601 — when the bundle was generated. */
-  generatedAt: string;
-  user: {
-    telegramId: number;
-    locale: string;
-    timezone: string;
-  };
-  lists: ListSnapshot[];
-  items: ItemSnapshot[];
-  activity: ActivityFeedRow[];
-  messages: Array<{
-    role: MessageRole;
-    content: string;
-    /** ISO 8601 string. */
-    createdAt: string;
-  }>;
-};
-
-/**
- * Audit-feed row enriched with a derived `canRestore` boolean (F2). The
- * audit page (`(app)/lists/[id]/audit`) consumes `ActivityFeedRow`
- * unchanged plus this view-model for the per-row Restore button.
- *
- * `canRestore = (action === "item_deleted" AND createdAt > now() - 30d)`.
- * Phase 4 backend computes the boolean server-side so client and server
- * never disagree; the 30-day window is enforced again in
- * `POST /api/lists/[id]/restore` for defense-in-depth.
- */
-export type AuditEntryWithRestore = ActivityFeedRow & {
-  canRestore: boolean;
-};
-
-/**
- * One inline-query result row (D1). Bot inline mode lets users type
- * `@listbull_bot <query>` in any chat to surface item suggestions.
- * Telegram caps results at 50; per the open question resolution
- * (handoff/specs/CLAUDE.md), Phase 4 returns up to 10 most-recent
- * matching items across the user's lists (no LLM ranking — instant
- * surface, deterministic).
- *
- * `deeplink` opens the Mini App at the list containing the item:
- * `https://t.me/<bot>?startapp=item_<itemId>`. Tap action resolved
- * during Phase 4 implementation; spec is "open Mini App at the item".
- */
-export type InlineQueryResult = {
-  id: string;
-  type: "article";
-  /** Shown as the bold first line — the item text. */
-  title: string;
-  /** Shown below the title — list emoji + name + done state. */
-  description: string;
-  /** Mini App deeplink. */
-  deeplink: string;
-  /** Optional list emoji rendered as the result's thumbnail. */
-  thumbUrl?: string;
-};
-
-/**
- * Sentinel type for next-intl message catalogs. The catalog shape is
- * deep nested key-value pairs; we type it loosely at the boundary
- * (next-intl provides its own narrower types per-namespace via
- * generation). Use this where a catalog is passed around opaquely.
- *
- * `messages/{tr,en}.json` are the on-disk canonical sources.
- */
+/** Sentinel for next-intl message catalogs. */
 export type LocaleMessages = Record<string, unknown>;
