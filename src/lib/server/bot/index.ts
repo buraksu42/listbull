@@ -20,7 +20,10 @@ import {
 } from "@/lib/server/bot/commands/settings";
 import { handleStart } from "@/lib/server/bot/commands/start";
 import { handleToday, handleWeek } from "@/lib/server/bot/commands/today";
-import { handleTour, handleTourCallback } from "@/lib/server/bot/commands/tour";
+import {
+  handleOnboarding,
+  handleOnboardingCallback,
+} from "@/lib/server/bot/commands/onboarding";
 import { handleMessage } from "@/lib/server/bot/handle-message";
 import { handleChatMemberUpdate } from "@/lib/server/bot/handlers/chat-member-update";
 import { handleItemActionCallback } from "@/lib/server/bot/handlers/item-action-callback";
@@ -54,7 +57,7 @@ export async function getBot(): Promise<Bot> {
         { command: "reminders", description: "🔔 Bekleyen hatırlatıcılar" },
         { command: "password", description: "🔒 Şifre sakla / görüntüle" },
         { command: "settings", description: "⚙️ Ayarlar" },
-        { command: "tour", description: "🎯 Hızlı tur (yeni misin?)" },
+        { command: "onboarding", description: "🎯 Hızlı tur (yeni misin?)" },
         { command: "help", description: "❓ Yardım" },
         { command: "reset", description: "🧹 Konuşmayı sıfırla" },
       ]);
@@ -94,7 +97,7 @@ function registerHandlers(bot: Bot): void {
   bot.command("tag", handleTag);
   bot.command("reminders", handleReminders);
   bot.command("settings", handleSettings);
-  bot.command("tour", handleTour);
+  bot.command("onboarding", handleOnboarding);
 
   // Inline-keyboard callbacks.
   bot.on("callback_query:data", async (ctx, next) => {
@@ -112,8 +115,8 @@ function registerHandlers(bot: Bot): void {
       await handleSettingsCallback(ctx);
       return;
     }
-    if (data.startsWith("tour:")) {
-      await handleTourCallback(ctx);
+    if (data.startsWith("onboarding:")) {
+      await handleOnboardingCallback(ctx);
       return;
     }
     await next();

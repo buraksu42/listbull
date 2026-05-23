@@ -1,20 +1,20 @@
 /**
- * /tour — interactive onboarding walkthrough.
+ * /onboarding — interactive walkthrough.
  *
  * One message that edits in place as the user advances through the
  * steps (avoids cluttering the chat). Each step explains a feature
  * with a concrete "try this" example; the user can run the example
  * separately (normal bot flow handles it) and tap "Devam" when ready.
- * "Atla" ends the tour at any step.
+ * "Atla" ends the walkthrough at any step.
  *
  * Stateless: the current step is encoded in the callback data
- * (`tour:step:<n>`). No DB column needed.
+ * (`onboarding:step:<n>`). No DB column needed.
  *
  * Callback prefixes routed here from index.ts:
- *   tour:step:<n>  → render step n (1-based) in place
- *   tour:skip      → ends the tour cleanly
+ *   onboarding:step:<n>  → render step n (1-based) in place
+ *   onboarding:skip      → ends the walkthrough cleanly
  *
- * /start surfaces the tour via a "🎯 Hızlı tur" inline button.
+ * /start surfaces it via a "🎯 Hızlı tur" inline button.
  */
 import type { Context } from "grammy";
 import { InlineKeyboard } from "grammy";
@@ -150,10 +150,10 @@ function renderStep(
   const keyboard = new InlineKeyboard();
   if (stepIdx + 1 < total) {
     keyboard
-      .text(tr ? "Devam ▶" : "Continue ▶", `tour:step:${stepIdx + 1}`)
-      .text(tr ? "Atla ✗" : "Skip ✗", "tour:skip");
+      .text(tr ? "Devam ▶" : "Continue ▶", `onboarding:step:${stepIdx + 1}`)
+      .text(tr ? "Atla ✗" : "Skip ✗", "onboarding:skip");
   } else {
-    keyboard.text(tr ? "Bitir ✓" : "Finish ✓", "tour:skip");
+    keyboard.text(tr ? "Bitir ✓" : "Finish ✓", "onboarding:skip");
   }
   return { text, keyboard };
 }
@@ -167,12 +167,12 @@ function renderIntro(locale: "tr" | "en"): {
     ? `🎯 listbull turu — ${STEPS.length} adım, ~3 dk.\n\nHer adımda kısa bir şey dener, hazır olunca **Devam**'a basarsın. İstediğin an **Atla** ile çıkabilirsin.`
     : `🎯 listbull tour — ${STEPS.length} steps, ~3 min.\n\nEach step has a quick thing to try; hit **Continue** when ready. **Skip** ends the tour anytime.`;
   const keyboard = new InlineKeyboard()
-    .text(tr ? "Başla ▶" : "Start ▶", "tour:step:0")
-    .text(tr ? "Atla ✗" : "Skip ✗", "tour:skip");
+    .text(tr ? "Başla ▶" : "Start ▶", "onboarding:step:0")
+    .text(tr ? "Atla ✗" : "Skip ✗", "onboarding:skip");
   return { text, keyboard };
 }
 
-export async function handleTour(ctx: Context): Promise<void> {
+export async function handleOnboarding(ctx: Context): Promise<void> {
   const from = ctx.from;
   const message = ctx.message;
   if (!from || !message) return;
@@ -185,23 +185,23 @@ export async function handleTour(ctx: Context): Promise<void> {
   });
 }
 
-export async function handleTourCallback(ctx: Context): Promise<void> {
+export async function handleOnboardingCallback(ctx: Context): Promise<void> {
   const cb = ctx.callbackQuery;
   if (!cb || typeof cb.data !== "string") return;
   const data = cb.data;
-  if (!data.startsWith("tour:")) return;
+  if (!data.startsWith("onboarding:")) return;
 
   const user = await getUserByTelegramId(cb.from.id);
   const locale = pickLocale(user?.locale);
 
-  if (data === "tour:skip") {
+  if (data === "onboarding:skip") {
     await ctx.answerCallbackQuery(
       locale === "tr" ? "Tur kapatıldı" : "Tour closed",
     );
     const text =
       locale === "tr"
-        ? "✨ Tamam, çıktın. İstediğin zaman **/tour** ile baştan başlatabilirsin. **/help** ile tüm komutlar."
-        : "✨ Tour closed. Run **/tour** anytime to restart. **/help** for the full command list.";
+        ? "✨ Tamam, çıktın. İstediğin zaman **/onboarding** ile baştan başlatabilirsin. **/help** ile tüm komutlar."
+        : "✨ Walkthrough closed. Run **/onboarding** anytime to restart. **/help** for the full command list.";
     try {
       await ctx.editMessageText(text, { parse_mode: "Markdown" });
     } catch {
@@ -210,8 +210,8 @@ export async function handleTourCallback(ctx: Context): Promise<void> {
     return;
   }
 
-  if (data.startsWith("tour:step:")) {
-    const n = Number.parseInt(data.slice("tour:step:".length), 10);
+  if (data.startsWith("onboarding:step:")) {
+    const n = Number.parseInt(data.slice("onboarding:step:".length), 10);
     if (!Number.isFinite(n) || n < 0 || n >= STEPS.length) {
       await ctx.answerCallbackQuery();
       return;

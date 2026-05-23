@@ -42,7 +42,7 @@ export async function handleStart(ctx: Context): Promise<void> {
   const tr = t(locale);
   const keyboard = new InlineKeyboard().text(
     locale === "tr" ? "🎯 Hızlı tur (3 dk)" : "🎯 Quick tour (3 min)",
-    "tour:step:0",
+    "onboarding:step:0",
   );
   await ctx.reply(tr.welcome(user.telegramFirstName, user.timezone), {
     reply_markup: keyboard,
