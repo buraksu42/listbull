@@ -1,38 +1,28 @@
-import { CommandList } from "@/components/marketing/CommandList";
-import { DemoGif } from "@/components/marketing/DemoGif";
-import { FeatureGrid } from "@/components/marketing/FeatureGrid";
-import { Footer } from "@/components/marketing/Footer";
+import { DemoChat } from "@/components/marketing/DemoChat";
 import { Hero } from "@/components/marketing/Hero";
-import { ScreenshotMosaic } from "@/components/marketing/ScreenshotMosaic";
-import { TestimonialsPlaceholder } from "@/components/marketing/TestimonialsPlaceholder";
+import { LinkCards } from "@/components/marketing/LinkCards";
+import { SiteFooter } from "@/components/marketing/SiteFooter";
+import { SiteHeader } from "@/components/marketing/SiteHeader";
 
 export const metadata = {
   title: "listbull — Telegram-native AI to-do bot",
   description:
-    "Open-source Telegram bot for to-dos, reminders, voice notes, and encrypted passwords. Self-host in 15 minutes; BYOK or free tier.",
+    "A Telegram bot for your to-dos. Bring your own OpenRouter key, or use the operator's free tier. Open source, MIT-licensed, self-hostable.",
 };
 
-/**
- * Marketing landing (Phase 17 chat-only).
- *
- * Sections compose top-to-bottom: hero CTA → demo loop → feature
- * grid → screenshot mosaic → slash-command reference → testimonials
- * placeholder → footer. Light-only (parent layout sets data-theme).
- */
 export default function MarketingHome() {
   return (
-    <main
-      id="lb-main"
-      className="flex min-h-dvh flex-col"
-      style={{ background: "var(--lb-bg)", color: "var(--lb-fg)" }}
-    >
-      <Hero />
-      <DemoGif />
-      <FeatureGrid />
-      <ScreenshotMosaic />
-      <CommandList />
-      <TestimonialsPlaceholder />
-      <Footer />
-    </main>
+    <>
+      <a className="skip" href="#main">
+        Skip to main content
+      </a>
+      <SiteHeader />
+      <main id="main">
+        <Hero />
+        <DemoChat />
+        <LinkCards />
+      </main>
+      <SiteFooter />
+    </>
   );
 }
