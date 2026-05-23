@@ -62,9 +62,6 @@ chmod 600 .env
 ## 4. Secret'ları üret
 
 ```bash
-# Session cookie / future signed-URL HMAC key (≥32 byte)
-echo "SNAPSHOT_SIGNING_KEY=$(openssl rand -base64 48)"
-
 # BYOK + secrets AES-256-GCM şifreleme key'i (32 byte base64)
 echo "ENV_KEY=$(openssl rand -base64 32)"
 
@@ -89,7 +86,6 @@ NEXT_PUBLIC_APP_URL=https://listbull.mydomain.com
 NEXT_PUBLIC_ENV=production
 
 # Adım 4'te ürettiğin secret'lar
-SNAPSHOT_SIGNING_KEY=...
 ENV_KEY=...
 TELEGRAM_WEBHOOK_SECRET=...
 POSTGRES_PASSWORD=...

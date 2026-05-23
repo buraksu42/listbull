@@ -5,15 +5,6 @@ const serverSchema = z.object({
 
   DATABASE_URL: z.string().url(),
 
-  // Canonical HMAC key for session cookie signing (and any future
-  // snapshot/share-URL signing). At least one of SNAPSHOT_SIGNING_KEY
-  // or the legacy BETTER_AUTH_SECRET must be set — see `getHmacSecret`
-  // below. Both are optional in the schema so older deployments still
-  // boot with only BETTER_AUTH_SECRET configured; runtime emits a
-  // deprecation warning in that case.
-  SNAPSHOT_SIGNING_KEY: z.string().min(32).optional(),
-  BETTER_AUTH_SECRET: z.string().min(32).optional(),
-
   ENV_KEY: z
     .string()
     .min(32, "ENV_KEY must be a base64-encoded 32-byte key (≥32 chars)"),
@@ -84,11 +75,9 @@ function parseServer(): ServerEnv {
   const parsed = serverSchema.safeParse(process.env);
   if (!parsed.success) {
     if (isBuildPhase) {
-      // Best-effort placeholder during build — properties may be empty strings.
       cachedServer = serverSchema.parse({
         NODE_ENV: "production",
         DATABASE_URL: "postgres://placeholder@localhost:5432/placeholder",
-        SNAPSHOT_SIGNING_KEY: "x".repeat(32),
         ENV_KEY: "x".repeat(32),
         TELEGRAM_BOT_TOKEN: "0000000000",
         TELEGRAM_WEBHOOK_SECRET: "x".repeat(16),
@@ -141,33 +130,3 @@ export const env: Env = new Proxy({} as Env, {
     return server[prop as keyof ServerEnv];
   },
 });
-
-let warnedDeprecatedBetterAuthSecret = false;
-
-/**
- * Resolve the HMAC key used to sign session cookies.
- *
- * Prefers `SNAPSHOT_SIGNING_KEY` (canonical name as of the Phase 17
- * post-pivot cleanup). Falls back to the legacy `BETTER_AUTH_SECRET`
- * for deployments configured before the rename — emits a one-shot
- * deprecation warning in that case so operators know to migrate.
- *
- * Throws if neither is set, since the build-time placeholder branch
- * in `parseServer` always supplies `SNAPSHOT_SIGNING_KEY`.
- */
-export function getHmacSecret(): string {
-  const server = parseServer();
-  if (server.SNAPSHOT_SIGNING_KEY) return server.SNAPSHOT_SIGNING_KEY;
-  if (server.BETTER_AUTH_SECRET) {
-    if (!warnedDeprecatedBetterAuthSecret) {
-      console.warn(
-        "[env] BETTER_AUTH_SECRET is deprecated — rename to SNAPSHOT_SIGNING_KEY.",
-      );
-      warnedDeprecatedBetterAuthSecret = true;
-    }
-    return server.BETTER_AUTH_SECRET;
-  }
-  throw new Error(
-    "Either SNAPSHOT_SIGNING_KEY or BETTER_AUTH_SECRET must be set (≥32 chars).",
-  );
-}

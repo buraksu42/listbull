@@ -71,10 +71,9 @@ Full guide: [`docs/self-host.md`](docs/self-host.md). TL;DR:
 git clone https://github.com/buraksu42/listbull.git && cd listbull
 cp .env.example .env
 
-# Fill .env — minimum: DATABASE_URL, SNAPSHOT_SIGNING_KEY, ENV_KEY,
-# TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, TELEGRAM_BOT_USERNAME,
-# NEXT_PUBLIC_APP_URL. Generate secrets with:
-#   openssl rand -base64 48   # SNAPSHOT_SIGNING_KEY
+# Fill .env — minimum: DATABASE_URL, ENV_KEY, TELEGRAM_BOT_TOKEN,
+# TELEGRAM_WEBHOOK_SECRET, TELEGRAM_BOT_USERNAME, NEXT_PUBLIC_APP_URL.
+# Generate secrets with:
 #   openssl rand -base64 32   # ENV_KEY
 #   openssl rand -hex 32      # TELEGRAM_WEBHOOK_SECRET
 
