@@ -26,7 +26,7 @@ export default function SecurityPage() {
           <div className="container">
             <p className="security-hero-links">
               <a
-                href="https://github.com/buraksu42/listbull/blob/dev/SECURITY.md"
+                href="https://github.com/buraksu42/listbull/blob/main/SECURITY.md"
                 target="_blank"
                 rel="noopener noreferrer"
               >

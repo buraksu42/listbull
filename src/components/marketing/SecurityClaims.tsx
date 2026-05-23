@@ -13,7 +13,7 @@ type Section = {
   claims: Claim[];
 };
 
-const REPO = "https://github.com/buraksu42/listbull/blob/dev";
+const REPO = "https://github.com/buraksu42/listbull/blob/main";
 
 const SECTIONS: Section[] = [
   {

@@ -47,7 +47,7 @@ export function SiteFooter() {
               </li>
               <li>
                 <a
-                  href="https://github.com/buraksu42/listbull/blob/dev/SECURITY.md"
+                  href="https://github.com/buraksu42/listbull/blob/main/SECURITY.md"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -79,7 +79,7 @@ export function SiteFooter() {
               </li>
               <li>
                 <a
-                  href="https://github.com/buraksu42/listbull/blob/dev/LICENSE"
+                  href="https://github.com/buraksu42/listbull/blob/main/LICENSE"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
