@@ -60,18 +60,10 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Compile Playwright config (list specs)
-        # Wraps `playwright test --list` so an empty test directory
-        # (exit 1: "No tests found") does NOT fail CI — config-compile
-        # is still validated; if the config itself is broken playwright
-        # exits with a different code that surfaces here.
-        run: |
-          set +e
-          out=$(npx playwright test --list 2>&1)
-          code=$?
-          echo "$out"
-          if [ $code -eq 0 ]; then exit 0; fi
-          if echo "$out" | grep -q "No tests found"; then exit 0; fi
-          exit $code
+        # Calls the npm script which tolerates "no tests found" (exit
+        # 1) via `|| test $? -eq 1`. Config-compile errors (different
+        # exit codes) still surface.
+        run: npm run e2e:list
 
       - name: Run live e2e suite
         if: github.event.inputs.live == '1'
