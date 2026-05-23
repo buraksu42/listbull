@@ -6,6 +6,7 @@
  * short welcome + tell users to chat in DM for personal lists.
  */
 import type { Context } from "grammy";
+import { InlineKeyboard } from "grammy";
 
 import { ensureChat } from "@/lib/db/queries/chats";
 import { upsertUserFromTelegram } from "@/lib/db/queries/users";
@@ -39,5 +40,11 @@ export async function handleStart(ctx: Context): Promise<void> {
 
   const locale = pickLocale(user.locale);
   const tr = t(locale);
-  await ctx.reply(tr.welcome(user.telegramFirstName, user.timezone));
+  const keyboard = new InlineKeyboard().text(
+    locale === "tr" ? "🎯 Hızlı tur (3 dk)" : "🎯 Quick tour (3 min)",
+    "tour:step:0",
+  );
+  await ctx.reply(tr.welcome(user.telegramFirstName, user.timezone), {
+    reply_markup: keyboard,
+  });
 }
