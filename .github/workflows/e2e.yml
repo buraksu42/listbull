@@ -60,7 +60,18 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Compile Playwright config (list specs)
-        run: npx playwright test --list
+        # Wraps `playwright test --list` so an empty test directory
+        # (exit 1: "No tests found") does NOT fail CI — config-compile
+        # is still validated; if the config itself is broken playwright
+        # exits with a different code that surfaces here.
+        run: |
+          set +e
+          out=$(npx playwright test --list 2>&1)
+          code=$?
+          echo "$out"
+          if [ $code -eq 0 ]; then exit 0; fi
+          if echo "$out" | grep -q "No tests found"; then exit 0; fi
+          exit $code
 
       - name: Run live e2e suite
         if: github.event.inputs.live == '1'
@@ -71,8 +82,7 @@ jobs:
           # Staging secrets (Phase 5):
           TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_BOT_TOKEN }}
           TELEGRAM_WEBHOOK_SECRET: ${{ secrets.E2E_WEBHOOK_SECRET }}
-          BETTER_AUTH_SECRET: ${{ secrets.E2E_BETTER_AUTH_SECRET }}
-          BETTER_AUTH_URL: http://127.0.0.1:3000
+          TELEGRAM_BOT_USERNAME: listbull_test_bot
           ENV_KEY: ${{ secrets.E2E_ENV_KEY }}
           NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
           NEXT_PUBLIC_ENV: test
