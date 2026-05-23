@@ -65,7 +65,7 @@ export function Footer() {
             </li>
             <li>
               <a
-                href="https://github.com/buraksu42/listbull/blob/main/LICENSE"
+                href="https://github.com/buraksu42/listbull/blob/dev/LICENSE"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:underline"
