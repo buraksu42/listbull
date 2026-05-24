@@ -1,8 +1,9 @@
 # Security
 
-> Last reviewed: 2026-05-23. Permalinks below point to `dev` (where
-> all current code lives — `main` is the initial scaffold). When
-> `dev` is merged to `main`, the links will be updated.
+> Last reviewed: 2026-05-23. Permalinks below point to `main` —
+> the canonical branch. Line numbers may shift as the code evolves;
+> if a link looks off, scan the file for the symbol or pin a
+> specific commit.
 
 ## TL;DR
 
@@ -22,7 +23,7 @@
 ### Algorithm
 AES-256-GCM, the standard authenticated-encryption-with-associated-data
 primitive. Implementation lives in
-[`src/lib/server/encryption.ts`](https://github.com/buraksu42/listbull/blob/dev/src/lib/server/encryption.ts):
+[`src/lib/server/encryption.ts`](https://github.com/buraksu42/listbull/blob/main/src/lib/server/encryption.ts):
 
 - **Key source**: `ENV_KEY` environment variable, base64-decoded to
   32 bytes (256 bits).
@@ -35,8 +36,8 @@ primitive. Implementation lives in
 
 | Plaintext                            | Encrypted column                       | Schema reference |
 |--------------------------------------|----------------------------------------|------------------|
-| User's `/password` secret payload    | `items.secret_encrypted`               | [`schema.ts:179`](https://github.com/buraksu42/listbull/blob/dev/src/lib/db/schema.ts#L179) |
-| Per-chat OpenRouter API key (BYOK)   | `chats.openrouter_api_key_encrypted`   | [`schema.ts:97`](https://github.com/buraksu42/listbull/blob/dev/src/lib/db/schema.ts#L97) |
+| User's `/password` secret payload    | `items.secret_encrypted`               | [`schema.ts:179`](https://github.com/buraksu42/listbull/blob/main/src/lib/db/schema.ts#L179) |
+| Per-chat OpenRouter API key (BYOK)   | `chats.openrouter_api_key_encrypted`   | [`schema.ts:97`](https://github.com/buraksu42/listbull/blob/main/src/lib/db/schema.ts#L97) |
 
 Plaintext never reaches the database. The bot decrypts lazily when
 the user invokes `/password view` or when the LLM needs the API key
@@ -51,9 +52,9 @@ duration of that operation and is then discarded.
   activity log records only `{label, secretSuffix}` (last 4 chars
   of the password), never the encrypted blob and never the
   plaintext. See
-  [`handle-message.ts:1177-1189`](https://github.com/buraksu42/listbull/blob/dev/src/lib/server/bot/handle-message.ts#L1177-L1189).
+  [`handle-message.ts:1177-1189`](https://github.com/buraksu42/listbull/blob/main/src/lib/server/bot/handle-message.ts#L1177-L1189).
 - **Reveal**: decryption happens in
-  [`tools/reveal-secret.ts`](https://github.com/buraksu42/listbull/blob/dev/src/lib/server/tools/reveal-secret.ts).
+  [`tools/reveal-secret.ts`](https://github.com/buraksu42/listbull/blob/main/src/lib/server/tools/reveal-secret.ts).
   Plaintext is sent to Telegram as HTML `<code>` for tap-to-copy,
   then the message is auto-deleted after 15 seconds. The activity
   log row records only `{label, suffix}`.
@@ -78,12 +79,12 @@ see another chat's items, reminders, memory, or secrets.
 Every database query that touches per-chat data filters on `chatId`.
 Sample call sites:
 
-- **Search**: [`tools/search-items.ts:40`](https://github.com/buraksu42/listbull/blob/dev/src/lib/server/tools/search-items.ts#L40)
+- **Search**: [`tools/search-items.ts:40`](https://github.com/buraksu42/listbull/blob/main/src/lib/server/tools/search-items.ts#L40)
   — `eq(items.chatId, ctx.chatId)`.
 - **Create / update / complete / delete**: every executor under
-  [`src/lib/server/tools/`](https://github.com/buraksu42/listbull/tree/dev/src/lib/server/tools)
+  [`src/lib/server/tools/`](https://github.com/buraksu42/listbull/tree/main/src/lib/server/tools)
   scopes by `ctx.chatId` before any write.
-- **Reveal secret**: [`reveal-secret.ts:67`](https://github.com/buraksu42/listbull/blob/dev/src/lib/server/tools/reveal-secret.ts#L67)
+- **Reveal secret**: [`reveal-secret.ts:67`](https://github.com/buraksu42/listbull/blob/main/src/lib/server/tools/reveal-secret.ts#L67)
   — looks up the secret with a `(itemId, chatId)` AND'd predicate.
 
 ### Callback-query verification
@@ -93,7 +94,7 @@ handler verifies the item belongs to the incoming chat before
 acting. Without this, anyone who guesses a UUID could toggle another
 chat's items.
 
-[`handlers/item-action-callback.ts:130-133`](https://github.com/buraksu42/listbull/blob/dev/src/lib/server/bot/handlers/item-action-callback.ts#L130-L133):
+[`handlers/item-action-callback.ts:130-133`](https://github.com/buraksu42/listbull/blob/main/src/lib/server/bot/handlers/item-action-callback.ts#L130-L133):
 
 ```ts
 .where(and(eq(items.id, itemId), eq(items.chatId, chatId)))
@@ -108,7 +109,7 @@ The Telegram webhook handler verifies the `X-Telegram-Bot-Api-Secret-Token`
 header on every request using a constant-time comparison
 (`crypto.timingSafeEqual`). Constant-time prevents timing oracles.
 
-[`api/telegram/webhook/route.ts:67-72`](https://github.com/buraksu42/listbull/blob/dev/src/app/api/telegram/webhook/route.ts#L67-L72):
+[`api/telegram/webhook/route.ts:67-72`](https://github.com/buraksu42/listbull/blob/main/src/app/api/telegram/webhook/route.ts#L67-L72):
 
 ```ts
 if (!secretsEqual(provided, env.TELEGRAM_WEBHOOK_SECRET)) {
@@ -125,7 +126,7 @@ pending action (e.g. "the user's next message is the secret label").
 The lookup uses both components, so a hostile actor cannot replay a
 message id from another chat:
 
-[`queries/bot-action-contexts.ts:62-67`](https://github.com/buraksu42/listbull/blob/dev/src/lib/db/queries/bot-action-contexts.ts#L62-L67):
+[`queries/bot-action-contexts.ts:62-67`](https://github.com/buraksu42/listbull/blob/main/src/lib/db/queries/bot-action-contexts.ts#L62-L67):
 
 ```ts
 .where(and(
@@ -137,7 +138,7 @@ message id from another chat:
 ### Known scope-wide queries (by design)
 
 `getAllMessagesForUser()`
-([`queries/messages.ts`](https://github.com/buraksu42/listbull/blob/dev/src/lib/db/queries/messages.ts))
+([`queries/messages.ts`](https://github.com/buraksu42/listbull/blob/main/src/lib/db/queries/messages.ts))
 returns a user's own messages across all chats they participate in.
 Used only by the user-data export tool — the requester is always the
 data subject. Not an isolation issue.
