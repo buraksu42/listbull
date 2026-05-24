@@ -85,12 +85,14 @@ services:
       - .env
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-listbull}:${POSTGRES_PASSWORD:-listbull}@postgres:5432/${POSTGRES_DB:-listbull}
-    # 60-second sleep loop. The dispatch script's per-row UPDATEs are
-    # conditional on `reminder_sent = false`, so overlap is safe.
+    # Apply pending migrations once at boot (idempotent — drizzle-kit
+    # skips applied entries), then enter the 60-second dispatch loop.
+    # The per-row UPDATEs are conditional on `reminder_sent = false`,
+    # so overlap during deploy rollover is safe.
     command:
       - sh
       - -c
-      - "while true; do npm run cron; sleep 60; done"
+      - "npm run db:migrate && while true; do npm run cron; sleep 60; done"
     networks:
       - listbull-net
 
