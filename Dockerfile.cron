@@ -44,11 +44,20 @@ RUN addgroup --system --gid 1001 nodejs \
  && chown -R dispatcher:nodejs /app
 USER dispatcher
 
-# Default = 60s loop, suitable for Dokploy Application mode and any
-# orchestrator that runs containers continuously (compose, k8s
-# Deployment). The dispatch script is idempotent (Inv-11) so overlap
-# during deploy rollover is safe.
+# Default = apply any pending DB migrations once at boot, then enter
+# the 60s reminder dispatch loop. drizzle-kit migrate is idempotent
+# (it consults the __drizzle_migrations table and skips already-
+# applied entries), so this is safe to run on every restart. If
+# migration fails the loop never starts — the error surfaces in
+# container logs and the next tick is skipped instead of running a
+# worker against a schema-skewed DB.
+#
+# Suitable for Dokploy Application mode and any orchestrator that
+# runs containers continuously (compose, k8s Deployment). The
+# dispatch script is idempotent (Inv-11) so overlap during deploy
+# rollover is safe.
 #
 # To run as a one-shot per tick (Dokploy cron job, k8s CronJob, etc.),
-# override the command at deploy time: `npm run cron`.
-CMD ["sh", "-c", "while true; do npm run cron; sleep 60; done"]
+# override the command at deploy time: `npm run cron` — but then YOU
+# must apply migrations out of band before the first invocation.
+CMD ["sh", "-c", "npm run db:migrate && while true; do npm run cron; sleep 60; done"]
