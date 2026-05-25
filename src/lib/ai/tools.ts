@@ -16,7 +16,7 @@
  */
 import { z } from "zod";
 
-import { ALLOWED_LLM_MODELS } from "@/lib/validators/settings";
+import { LLM_MODEL_SLUG_REGEX } from "@/lib/validators/settings";
 
 // ═══════════════════════════════════════════════════════════════════
 // Shared sub-schemas
@@ -394,9 +394,20 @@ export const updateSettingsInputSchema = z
         message: "timezone must be an IANA name like Europe/Istanbul",
       })
       .optional(),
-    // Single source of truth lives in validators/settings.ts so the
-    // bot picker, Mini App API, and this LLM tool schema never drift.
-    llm_model: z.enum(ALLOWED_LLM_MODELS).optional(),
+    // The bot picker shows a curated list (LLM_MODEL_META in
+    // validators/settings.ts), but power users may type a slug not on
+    // it ("modelimi qwen/qwen-max yap"). Accept any well-formed
+    // OpenRouter slug; invalid ones fail at runtime when OpenRouter
+    // returns 404, which we surface as a chat error.
+    llm_model: z
+      .string()
+      .min(3)
+      .max(96)
+      .regex(LLM_MODEL_SLUG_REGEX, {
+        message:
+          "llm_model must be an OpenRouter slug like provider/model-name",
+      })
+      .optional(),
     notifications_enabled: z.boolean().optional(),
     date_format: z.enum(["DD.MM.YYYY", "MM/DD/YYYY", "YYYY-MM-DD"]).optional(),
     time_format: z.enum(["24h", "12h"]).optional(),
@@ -778,7 +789,9 @@ export const tools = [
     name: "update_settings",
     description:
       "Change the calling user's preferences. Fields: `locale` ('tr'|'en'), `timezone` (IANA " +
-      "name like 'Europe/Istanbul'), `llm_model` (preset list — the user's personal default), " +
+      "name like 'Europe/Istanbul'), `llm_model` (any OpenRouter slug, e.g. " +
+      "'anthropic/claude-sonnet-4.5', 'qwen/qwen-max', 'x-ai/grok-4-fast:free' — the bot UI " +
+      "shows a curated picker but users may type any slug here), " +
       "`notifications_enabled` (false → no reminder DMs), `date_format` " +
       "('DD.MM.YYYY'|'MM/DD/YYYY'|'YYYY-MM-DD'), `time_format` ('24h'|'12h'). At least one " +
       "supplied. OpenRouter API keys: use `set_chat_api_key`, NOT this tool. Output `changes` " +
