@@ -460,6 +460,45 @@ export async function handleMessage(ctx: Context): Promise<void> {
     }
   }
 
+  // ─── Unlabeled API-token shape intercept ──────────────────────────
+  // Catches Anthropic / GitHub / Slack / AWS / Telegram bot-token
+  // shapes when a user pastes one as bare text (no "password:"
+  // label, so FREEFORM_SECRET_RE below would miss it). Note: the
+  // OpenRouter shape `sk-or-v1-...` is intentionally NOT redacted
+  // here — that's the bot's own BYOK channel and is handled by the
+  // dedicated paste-intercept above which actually STORES the key.
+  if (!isReplyToBot) {
+    const TOKEN_RE =
+      /\b(sk-ant-api03-[A-Za-z0-9_-]{40,}|(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{36,}|xox[bpars]-\d+-\d+-\d+-[A-Za-z0-9]+|AKIA[0-9A-Z]{16}|\d{6,12}:[A-Za-z0-9_-]{30,})\b/;
+    const tm = effectiveText.match(TOKEN_RE);
+    if (tm && tm[1]) {
+      const redactedText = effectiveText.replace(tm[1], "[token-redacted]");
+      await insertMessages([
+        {
+          userId: user.id,
+          chatId,
+          role: "user",
+          content: redactedText,
+          toolCalls: null,
+          toolCallId: null,
+        },
+      ]);
+      if (message.chat.type === "private") {
+        try {
+          await ctx.api.deleteMessage(message.chat.id, message.message_id);
+        } catch {
+          // ignore best-effort failures
+        }
+      }
+      await ctx.reply(
+        locale === "tr"
+          ? "🔒 Mesajında bir API token'a benzer şey gördüm. Veri tabanıma redact'ledim ve LLM'e iletmedim; Telegram'da görünüyorsa elinle silmen iyi olur. Bunu güvenli saklamak istersen DM'imde `/password` yaz."
+          : "🔒 Looks like you pasted an API token. I redacted it from my database and never sent it to the LLM. If it's still visible in Telegram, please delete it yourself. To store it safely, run `/password` in DM.",
+      );
+      return;
+    }
+  }
+
   // ─── Free-form credential pattern intercept ───────────────────────
   // Stops the messages-table + OpenRouter request from carrying a
   // plaintext password when the user types "şifrem ABC123" instead

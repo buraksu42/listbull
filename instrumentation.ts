@@ -16,6 +16,8 @@
  */
 import * as Sentry from "@sentry/nextjs";
 
+import { scrubSentryEvent } from "@/lib/sentry-scrub";
+
 export async function register() {
   // Same rationale as `instrumentation-client.ts`: don't gate the
   // init call on the DSN — Sentry's SDK no-ops gracefully when DSN
@@ -31,6 +33,10 @@ export async function register() {
       // SDK default; set explicitly so a future env override is
       // visible in code review.
       sendDefaultPii: false,
+      // Belt-and-suspenders scrubber — strips token-shaped strings
+      // (sk-..., ghp_..., AKIA..., bot tokens) from messages, stack
+      // frames, breadcrumbs, and extras before the event ships.
+      beforeSend: scrubSentryEvent,
     });
   }
 
@@ -40,6 +46,7 @@ export async function register() {
       environment: process.env.NEXT_PUBLIC_ENV ?? "production",
       tracesSampleRate: 0.05,
       sendDefaultPii: false,
+      beforeSend: scrubSentryEvent,
     });
   }
 }

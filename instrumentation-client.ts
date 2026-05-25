@@ -19,6 +19,8 @@
  */
 import * as Sentry from "@sentry/nextjs";
 
+import { scrubSentryEvent } from "@/lib/sentry-scrub";
+
 // `Sentry.init` is called unconditionally — when DSN is undefined the
 // SDK gracefully becomes a no-op, but the import + init call must
 // land in the browser bundle either way. The previous
@@ -36,6 +38,8 @@ Sentry.init({
   replaysSessionSampleRate: 0,
   replaysOnErrorSampleRate: 0,
   sendDefaultPii: false,
+  // See `src/lib/sentry-scrub.ts` for pattern list.
+  beforeSend: scrubSentryEvent,
 });
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
