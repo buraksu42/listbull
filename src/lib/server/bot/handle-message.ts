@@ -31,7 +31,7 @@ import {
   getBotActionContext,
   insertBotActionContext,
 } from "@/lib/db/queries/bot-action-contexts";
-import { ensureChat } from "@/lib/db/queries/chats";
+import { ensureChat, getChatById } from "@/lib/db/queries/chats";
 import { getRecentMessages, insertMessages } from "@/lib/db/queries/messages";
 import { getUserByTelegramId, upsertUserFromTelegram } from "@/lib/db/queries/users";
 import { enforceRateLimit } from "@/lib/server/middleware/rate-limit";
@@ -237,16 +237,55 @@ export async function handleMessage(ctx: Context): Promise<void> {
   const chatId = message.chat.id;
   const isGroupContext = chatType === "group" || chatType === "supergroup";
 
-  // Ensure the chat row exists + the sender is a chat member.
-  await ensureChat({
-    chatId,
-    type: chatType,
-    title:
-      message.chat.type === "private"
-        ? null
-        : (message.chat as { title?: string }).title ?? null,
-    ownerUserId: user.id,
-  });
+  // Chat row resolution.
+  //
+  // OWNERSHIP RULE: the `my_chat_member` handler is the canonical
+  // owner-setter for groups (Telegram carries `from` = bot inviter).
+  // If we let a regular message create the row here with the sender
+  // as owner, a fast group member could race the `my_chat_member`
+  // update and claim ownership. So: for groups, REFUSE to auto-create
+  // — bail silently and let my_chat_member arrive. For DMs, the
+  // sender IS the chat owner by definition (DM chat_id = user's TG
+  // id), so we create on first message as before.
+  //
+  // Operator dependency: `my_chat_member` MUST be in setWebhook's
+  // `allowed_updates`. Verify with: `getWebhookInfo` → look for
+  // `my_chat_member` and `chat_member`. setup-bot.ts sets them; a
+  // stale manual setWebhook can strip them.
+  const groupTitle =
+    message.chat.type === "private"
+      ? null
+      : (message.chat as { title?: string }).title ?? null;
+  const existingChat = await getChatById(chatId);
+  if (existingChat) {
+    // Refresh title / clear stale archivedAt without ever touching
+    // owner. ensureChat handles both.
+    await ensureChat({
+      chatId,
+      type: chatType,
+      title: groupTitle,
+      ownerUserId: existingChat.ownerUserId,
+    });
+  } else if (isGroupContext) {
+    // Group with no chat row: my_chat_member hasn't fired (or wasn't
+    // delivered). Silently bail — the next bot-added event will set
+    // up the chat correctly. Without this, the FIRST message author
+    // becomes owner, which is exploitable (race-to-claim).
+    console.warn("[handle-message] group chat row missing — waiting for my_chat_member", {
+      chatId,
+      from: from.id,
+    });
+    return;
+  } else {
+    // DM: sender IS the chat (chat_id = user's Telegram id), safe to
+    // create with sender as owner.
+    await ensureChat({
+      chatId,
+      type: chatType,
+      title: null,
+      ownerUserId: user.id,
+    });
+  }
   await upsertChatMember(chatId, user.id);
 
   // Lazy-sync any users mentioned via Telegram's @-suggestion popup
