@@ -38,6 +38,9 @@ export function SiteHeader() {
         <Link href="/" className="wordmark" aria-label="listbull home">
           <BrandMark className="mark" />
           <span className="wordmark-text">listbull</span>
+          <span className="beta-badge" aria-label="Beta">
+            BETA
+          </span>
         </Link>
         <nav className="nav" aria-label="Primary">
           {NAV.map((item) => {

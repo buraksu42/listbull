@@ -95,6 +95,42 @@ export function SiteFooter() {
             </ul>
           </div>
         </div>
+        <aside className="footer-disclaimer" aria-label="Disclaimer">
+          <p>
+            <strong>Beta software.</strong> listbull is in active
+            development; expect occasional bugs, schema migrations,
+            and breaking changes. Don&rsquo;t store anything you
+            can&rsquo;t afford to re-create or re-enter. We do our
+            best, but provide the software <strong>&ldquo;as
+            is&rdquo;</strong>, without warranty of any kind — see
+            the{" "}
+            <a
+              href="https://github.com/buraksu42/listbull/blob/main/LICENSE"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              MIT licence
+            </a>{" "}
+            for the legal terms.
+          </p>
+          <p style={{ marginTop: 8 }}>
+            <strong>Trust boundary.</strong> The bot encrypts your{" "}
+            <code>/password</code> secrets and OpenRouter keys with
+            AES-256-GCM and scopes every read/write to your Telegram
+            chat; <a href="/security">how we handle your data</a>{" "}
+            explains the model. But if a host operator&rsquo;s{" "}
+            <code>ENV_KEY</code> leaks, the Telegram app itself is
+            compromised, or you hand your bot token to someone, those
+            protections fall over. Treat the bot like any other
+            chat — sensible information goes in, sensitive secrets
+            stay out.
+          </p>
+          <p style={{ marginTop: 8 }}>
+            <strong>Not affiliated with Telegram</strong> or
+            OpenRouter. &ldquo;Telegram&rdquo; is a trademark of
+            Telegram FZ-LLC.
+          </p>
+        </aside>
         <div className="footer-meta">
           <span>© {new Date().getUTCFullYear()} listbull. MIT licensed.</span>
           <span>
