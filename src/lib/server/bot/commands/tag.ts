@@ -2,7 +2,7 @@
  * /tag <name> — list open todos carrying a given tag.
  *
  * Tags double as the person-assignment primitive: "ekmek işini
- * Burak'a ata" adds the tag `burak`, and `/tag burak` lists
+ * Michael'a ata" adds the tag `michael`, and `/tag michael` lists
  * everything tagged that way. `/tag` with no argument lists every
  * tag currently in use in the chat.
  *
@@ -55,8 +55,8 @@ export async function handleTag(ctx: Context): Promise<void> {
     if (tagRows.length === 0) {
       await ctx.reply(
         locale === "tr"
-          ? "🏷️ Henüz etiket yok. Bir işe etiket eklemek için: \"x işini #burak ile etiketle\"."
-          : "🏷️ No tags yet. Tag an item with: \"tag x with #burak\".",
+          ? "🏷️ Henüz etiket yok. Bir işe etiket eklemek için: \"x işini #michael ile etiketle\"."
+          : "🏷️ No tags yet. Tag an item with: \"tag x with #michael\".",
       );
       return;
     }

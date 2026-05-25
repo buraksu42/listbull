@@ -51,7 +51,7 @@ export async function getBot(): Promise<Bot> {
         { command: "items", description: "📋 Açık to-do'lar" },
         { command: "done", description: "✅ Tamamlananlar" },
         { command: "memory", description: "📁 Hafıza" },
-        { command: "tag", description: "🏷️ Etikete göre işler (örn. /tag burak)" },
+        { command: "tag", description: "🏷️ Etikete göre işler (örn. /tag michael)" },
         { command: "today", description: "📅 Bugünkü işler" },
         { command: "thisweek", description: "🗓 Bu haftaki işler" },
         { command: "reminders", description: "🔔 Bekleyen hatırlatıcılar" },

@@ -705,3 +705,23 @@
   text-decoration: none;
 }
 .back-link:hover { color: var(--lb-fg); }
+
+/* ─── Code blocks (install page + worked examples) ─── */
+.code-block {
+  background: var(--lb-ink-deep);
+  color: #f5f5f5;
+  padding: 14px 16px;
+  border-radius: var(--lb-r-md);
+  font-family: ui-monospace, "SF Mono", monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow-x: auto;
+  margin: 12px 0;
+  white-space: pre;
+}
+.code-block code {
+  background: none;
+  color: inherit;
+  padding: 0;
+  font-size: inherit;
+}

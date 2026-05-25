@@ -1,10 +1,10 @@
 /**
  * next-intl routing config — minimal surface.
  *
- * The project does NOT prefix URLs with the locale (clean URL convention,
- * see `handoff/specs/CLAUDE.md`). We expose only the supported locale
- * tuple and the default; consumers (request handler, language switcher)
- * import from here so the source of truth stays single.
+ * URLs do NOT carry a locale prefix; the bot stores `users.locale`
+ * server-side and the marketing surface is English-only. Consumers
+ * (request handler, future language switchers) import from this
+ * file so the supported-locale tuple stays single-sourced.
  */
 export const SUPPORTED_LOCALES = ["tr", "en"] as const;
 export type AppLocale = (typeof SUPPORTED_LOCALES)[number];

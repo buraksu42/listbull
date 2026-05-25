@@ -81,8 +81,8 @@ const FLOWS: Flow[] = [
         bot: "Bot joins; welcome.",
       },
       {
-        you: "@listbull_bot assign the report to Burak",
-        bot: "✓ created with #burak tag. /tag burak lists it.",
+        you: "@listbull_bot assign the report to Michael",
+        bot: "✓ created with #michael tag. /tag michael lists it.",
       },
       {
         you: '(record group voice: "meeting tomorrow 2pm")',

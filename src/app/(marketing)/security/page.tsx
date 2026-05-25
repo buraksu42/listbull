@@ -19,8 +19,8 @@ export default function SecurityPage() {
       <main id="main">
         <PageHero
           eyebrow="Security"
-          title="Every guarantee, linked to source."
-          lead="listbull stores your /password secrets and OpenRouter keys AES-256-GCM-encrypted; isolates every chat's data; and authenticates the Telegram webhook with a constant-time secret check. Click any link below to verify against the actual code."
+          title="How we handle your data, linked to source."
+          lead="listbull stores your /password secrets and OpenRouter keys AES-256-GCM-encrypted; scopes every read and write to your chat; and authenticates the Telegram webhook with a constant-time secret check. Each claim below links to the actual code so you can verify it. See the disclaimer at the bottom for what's out of scope."
         />
         <section style={{ padding: "0 0 56px" }}>
           <div className="container">
@@ -31,13 +31,6 @@ export default function SecurityPage() {
                 rel="noopener noreferrer"
               >
                 Full write-up: SECURITY.md ↗
-              </a>
-              <a
-                href="https://github.com/buraksu42/listbull/security/advisories/new"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Report privately via GitHub Security Advisories ↗
               </a>
             </p>
           </div>

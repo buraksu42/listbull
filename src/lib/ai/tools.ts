@@ -780,8 +780,8 @@ export const tools = [
       "='done' is equivalent to complete_item but also lets the LLM set status='in_progress' / " +
       "'blocked' which complete_item can't. " +
       "**Person assignment via tags**: there is no separate assignee field — to 'assign' an item " +
-      "to someone, add a person tag (their name, lowercased, no spaces: 'burak', 'ayse'). " +
-      "'ekmek işini Burak'a ata' → set_item_attributes({tags:[...existing, 'burak']}). The user " +
+      "to someone, add a person tag (their name, lowercased, no spaces: 'michael', 'ayse'). " +
+      "'ekmek işini Michael'a ata' → set_item_attributes({tags:[...existing, 'michael']}). The user " +
       "lists a person's items with the /tag <name> slash command.",
     inputSchema: setItemAttributesInputSchema,
     outputSchema: setItemAttributesOutputSchema,

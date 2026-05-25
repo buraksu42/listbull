@@ -78,7 +78,7 @@ const COPY = {
     voiceNeedsKey:
       "🎤 Sesli mesaj ücretsiz modda kapalı. Kendi OpenRouter key'ini girersen ses de açılır — openrouter.ai/keys'ten key alıp buraya yapıştır.",
     freeTierNudge:
-      "💡 Şu an ücretsiz modelle çalışıyorsun — kalite sınırlı olabilir, bazı özellikler beklenildiği gibi çalışmayabilir. Kendi OpenRouter key'ini girersen (openrouter.ai/keys) daha güçlü modellerle kullanırsın; key'i buraya yapıştırman yeterli.",
+      "💡 Şu an ücretsiz modelle çalışıyorsun — saatte 100 mesaj sınırı var, kalite sınırlı, sesli not kapalı. Kendi OpenRouter key'ini girersen (openrouter.ai/keys) limit kalkar + daha güçlü modeller açılır; key'i buraya yapıştır ya da /settings → 🔑.",
   },
   en: {
     noKey:
@@ -93,7 +93,7 @@ const COPY = {
     voiceNeedsKey:
       "🎤 Voice is off on the free tier. Add your own OpenRouter key to enable it — grab one at openrouter.ai/keys and paste it here.",
     freeTierNudge:
-      "💡 You're on a free model right now — quality is limited and some features may not work as expected. Add your own OpenRouter key (openrouter.ai/keys) for stronger models; just paste the key here.",
+      "💡 You're on a free model right now — 100 messages/hour, limited quality, voice notes off. Add your own OpenRouter key (openrouter.ai/keys) to lift the limit + unlock stronger models; paste it here or use /settings → 🔑.",
   },
 } as const;
 

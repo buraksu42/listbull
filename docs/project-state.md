@@ -28,7 +28,7 @@ Order matches `setMyCommands` in `src/lib/server/bot/index.ts`:
 | `/items`      | Open to-dos                                                     |
 | `/done`       | Completed items (reopen / archive)                              |
 | `/memory`     | Memory keepsakes (tickets, docs — never auto-deleted)           |
-| `/tag <name>` | Items filtered by tag (e.g. `/tag burak`)                       |
+| `/tag <name>` | Items filtered by tag (e.g. `/tag michael`)                       |
 | `/today`      | Today's items                                                   |
 | `/thisweek`   | Items due this week                                             |
 | `/reminders`  | Pending reminders                                               |
@@ -86,6 +86,8 @@ every 60s.
 ## Historical context
 
 The pre-Phase-17 architecture (workspaces, lists, Mini App, Better
-Auth, multi-bot, assignees) is preserved in
-[`docs/archive/`](./archive/). Those documents do not reflect the
-current implementation.
+Auth, multi-bot, assignees) was removed wholesale during the
+chat-only pivot. If you need a specific historical detail, the
+commit history pre-Phase-17 still has the old specs — but they
+do not reflect current behavior, so don't bring them back without
+a fresh read.

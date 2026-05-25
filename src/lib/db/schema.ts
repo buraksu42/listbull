@@ -356,7 +356,7 @@ export const activityLog = pgTable(
     // 'item' | 'chat' | 'member'
     entityType: text("entity_type").notNull(),
     entityId: uuid("entity_id").notNull(),
-    // See action enumeration in handoff/specs/architecture.md
+    // Action enumeration lives in src/lib/types/index.ts (ActivityAction).
     action: text("action").notNull(),
     actorId: uuid("actor_id")
       .notNull()
