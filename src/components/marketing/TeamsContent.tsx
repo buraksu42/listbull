@@ -103,18 +103,18 @@ const STORIES: Story[] = [
     who: "Marketing duo planning a launch",
     flow: [
       {
-        who: "Ayşe",
+        who: "Sarah",
         said: "@listbull_bot launch checklist: copy, hero illustration, og image, blog post, twitter thread",
         bot: "✓ created parent + 5 sub-items. /items shows 📂 0/5.",
       },
       {
         who: "Michael",
-        said: "@listbull_bot assign the og image to ayşe, blog post to me",
-        bot: "✓ tagged: og image → #ayşe, blog post → #michael.",
+        said: "@listbull_bot assign the og image to sarah, blog post to me",
+        bot: "✓ tagged: og image → #sarah, blog post → #michael.",
       },
       {
-        who: "Ayşe",
-        said: "/tag ayşe",
+        who: "Sarah",
+        said: "/tag sarah",
         bot: "📂 og image (open)",
       },
       {
