@@ -24,7 +24,9 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-listbull}
       POSTGRES_USER: ${POSTGRES_USER:-listbull}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-listbull}
+      # No default — operator MUST set POSTGRES_PASSWORD in .env.
+      # Compose aborts with a clear error if unset/empty.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env (see .env.example)}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -55,7 +57,7 @@ services:
       - .env
     environment:
       # Override DATABASE_URL to the in-network host (overrides .env).
-      DATABASE_URL: postgres://${POSTGRES_USER:-listbull}:${POSTGRES_PASSWORD:-listbull}@postgres:5432/${POSTGRES_DB:-listbull}
+      DATABASE_URL: postgres://${POSTGRES_USER:-listbull}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-listbull}
       PORT: "3000"
       HOSTNAME: "0.0.0.0"
     ports:
@@ -84,7 +86,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-listbull}:${POSTGRES_PASSWORD:-listbull}@postgres:5432/${POSTGRES_DB:-listbull}
+      DATABASE_URL: postgres://${POSTGRES_USER:-listbull}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-listbull}
     # Apply pending migrations once at boot (idempotent — drizzle-kit
     # skips applied entries), then enter the 60-second dispatch loop.
     # The per-row UPDATEs are conditional on `reminder_sent = false`,
