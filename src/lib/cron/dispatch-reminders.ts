@@ -212,6 +212,21 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Every-tick: sweep pending secret deletions (M5 — restart-safe
+  // floor for reveal_secret's 15s in-process timer). Cheap when
+  // empty; doesn't gate other hour-top jobs.
+  try {
+    const { dispatchPendingSecretDeletions } = await import(
+      "./sweep-pending-deletions"
+    );
+    const result = await dispatchPendingSecretDeletions();
+    if (result.picked > 0) {
+      console.log("[cron/sweep-pending-deletions]", result);
+    }
+  } catch (e) {
+    console.error("[cron/sweep-pending-deletions] threw", e);
+  }
+
   // Hour-top jobs: daily digest + per-chat 09:00 push.
   if (new Date().getUTCMinutes() < 1) {
     try {

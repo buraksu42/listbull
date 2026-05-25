@@ -316,8 +316,8 @@ export const itemAttachments = pgTable(
 
 // ─── messages (LLM conversation history) ───────────────────────────
 //
-// Already chat-id native — no Phase 17 changes beyond adding the FK
-// to `chats.chat_id` for cascade-on-archive cleanliness.
+// Already chat-id native — FK to `chats.chat_id` enforces
+// cascade-on-archive cleanliness (added in migration 0033).
 export const messages = pgTable(
   "messages",
   {
@@ -325,7 +325,9 @@ export const messages = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    chatId: bigint("chat_id", { mode: "number" }).notNull(),
+    chatId: bigint("chat_id", { mode: "number" })
+      .notNull()
+      .references(() => chats.chatId, { onDelete: "cascade" }),
     // 'user' | 'assistant' | 'tool'
     role: text("role").notNull(),
     content: text("content").notNull(),
@@ -390,14 +392,21 @@ export const activityLog = pgTable(
 export const botActionContexts = pgTable(
   "bot_action_contexts",
   {
-    chatId: bigint("chat_id", { mode: "number" }).notNull(),
+    chatId: bigint("chat_id", { mode: "number" })
+      .notNull()
+      .references(() => chats.chatId, { onDelete: "cascade" }),
     messageId: bigint("message_id", { mode: "number" }).notNull(),
     /** 'edit' | 'deadline' | 'reminder' | 'attach' | 'set_key' | 'memory_add' | 'items_add' | 'add_child' | 'secret_label' | 'secret_username' | 'secret_value' */
     action: text("action").notNull(),
     /** item UUID for per-item actions; null for set_key/memory_add/items_add/secret_*. */
-    itemId: uuid("item_id"),
+    itemId: uuid("item_id").references((): AnyPgColumn => items.id, {
+      onDelete: "set null",
+    }),
     /** target chat for set_key (group routing); null for item:* actions. */
-    targetChatId: bigint("target_chat_id", { mode: "number" }),
+    targetChatId: bigint("target_chat_id", { mode: "number" }).references(
+      () => chats.chatId,
+      { onDelete: "cascade" },
+    ),
     /** Free-form payload for multi-step flows (e.g. /şifre label between steps). */
     metadata: text("metadata"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -407,5 +416,33 @@ export const botActionContexts = pgTable(
   (t) => [
     uniqueIndex("bot_action_contexts_pk").on(t.chatId, t.messageId),
     index("bot_action_contexts_created_idx").on(t.createdAt),
+  ],
+);
+
+// ─── pending_secret_deletions (M5 — restart-safe secret cleanup) ───
+//
+// When `reveal_secret` delivers a plaintext credential to a Telegram
+// chat, it's deleted after 15s. The in-process setTimeout works while
+// the pod stays up, but a restart between reveal + delete left
+// plaintext in the chat indefinitely. This table is the durable
+// backup: every reveal writes a row; the dispatcher sweeps rows
+// whose fire_at has passed, attempts deleteMessage best-effort, and
+// drops the row. The in-process setTimeout still handles the fast
+// (happy) path — DB sweep is the floor, not the primary mechanism.
+export const pendingSecretDeletions = pgTable(
+  "pending_secret_deletions",
+  {
+    chatId: bigint("chat_id", { mode: "number" })
+      .notNull()
+      .references(() => chats.chatId, { onDelete: "cascade" }),
+    messageId: bigint("message_id", { mode: "number" }).notNull(),
+    fireAt: timestamp("fire_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("pending_secret_deletions_pk").on(t.chatId, t.messageId),
+    index("pending_secret_deletions_due_idx").on(t.fireAt),
   ],
 );

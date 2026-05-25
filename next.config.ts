@@ -14,6 +14,39 @@ const nextConfig: NextConfig = {
   output: "standalone",
   // Server-only packages Turbopack cannot bundle (server-only KV client).
   serverExternalPackages: ["@upstash/redis", "@upstash/ratelimit"],
+  // Defense-in-depth response headers applied to every route. CSP is
+  // intentionally omitted — wiring it correctly needs an allowlist for
+  // Sentry's ingest host + Umami's analytics host + any future
+  // third-party script. We'd rather ship no CSP than a permissive one.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          // 2 years, subdomains, preload-eligible. Every subdomain
+          // (prod/test/<tenant>.listbull.org) is HTTPS-only.
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+          // Browsers honor declared Content-Type — no MIME sniffing.
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          // No iframing — chat-only, no Mini App embed surface.
+          { key: "X-Frame-Options", value: "DENY" },
+          // Send origin (not full URL) on cross-origin navigation.
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin",
+          },
+          // Disable powerful APIs we don't use.
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=(), payment=()",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 // Sentry's wrapper installs the Webpack/Turbopack plugin needed to

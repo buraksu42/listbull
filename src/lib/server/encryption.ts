@@ -27,36 +27,40 @@ const TAG_LEN = 16; // 128-bit auth tag (GCM default)
 const KEY_LEN = 32; // AES-256
 
 /**
- * Resolve `env.ENV_KEY` to a 32-byte buffer. Tries base64 first; if the
- * decoded length isn't 32, falls back to UTF-8 (treat the env value as
- * raw chars — useful for dev convenience). Throws if neither path yields
- * 32 bytes.
+ * Resolve `env.ENV_KEY` to a 32-byte buffer.
+ *
+ * Accepts ONLY proper key encodings — base64 (canonical) or hex.
+ * The previous UTF-8 raw-chars fallback was a foot-gun: it silently
+ * accepted any 32-character string like "xxxxxxxx..." as a "key",
+ * producing an 8-bit-entropy key with no diagnostic. We'd rather
+ * fail loud at boot than encrypt with a weak key.
+ *
+ * Generate a proper key:
+ *   openssl rand -base64 32     (canonical, 44 chars with `=` padding)
+ *   openssl rand -hex 32        (alternate, 64 hex chars)
  */
 function loadKey(): Buffer {
   const raw = env.ENV_KEY;
   if (typeof raw !== "string" || raw.length === 0) {
     throw new Error(
-      "ENV_KEY missing — set a 32-byte base64-encoded value in env",
+      "ENV_KEY missing — generate with `openssl rand -base64 32`",
     );
   }
 
-  // Try base64 first.
-  try {
-    const decoded = Buffer.from(raw, "base64");
-    if (decoded.length === KEY_LEN) return decoded;
-  } catch {
-    // fall through
-  }
+  // Base64 canonical (with or without `=` padding).
+  const b64 = Buffer.from(raw, "base64");
+  if (b64.length === KEY_LEN) return b64;
 
-  // Fall back to UTF-8 raw chars.
-  const utf8 = Buffer.from(raw, "utf8");
-  if (utf8.length >= KEY_LEN) {
-    // Slice down — accept any value at least 32 bytes long.
-    return utf8.subarray(0, KEY_LEN);
+  // Hex tolerance (`openssl rand -hex 32` → 64 hex chars).
+  if (raw.length === 64 && /^[0-9a-fA-F]+$/.test(raw)) {
+    const hex = Buffer.from(raw, "hex");
+    if (hex.length === KEY_LEN) return hex;
   }
 
   throw new Error(
-    `ENV_KEY must decode to ≥${KEY_LEN} bytes (got ${utf8.length} utf8 / base64-decode mismatch)`,
+    `ENV_KEY must decode to ${KEY_LEN} bytes (base64 or hex). ` +
+      `Generate: \`openssl rand -base64 32\`. ` +
+      `Refusing to use raw-chars fallback (foot-gun).`,
   );
 }
 

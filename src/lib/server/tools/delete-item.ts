@@ -42,12 +42,17 @@ export async function executeDeleteItem(
     const isParent = current.parentItemId === null;
     let liveChildCount = 0;
     if (isParent) {
+      // Defensive `chatId` filter on cascade lookups — parent is
+      // already chatId-scoped above, and the FK enforces same-chat
+      // children, but a belt-and-suspenders match means a future
+      // bug that allowed cross-chat parent references won't leak.
       const countRows = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(items)
         .where(
           and(
             eq(items.parentItemId, current.id),
+            eq(items.chatId, ctx.chatId),
             isNull(items.archivedAt),
           ),
         );
@@ -80,6 +85,7 @@ export async function executeDeleteItem(
         .where(
           and(
             eq(items.parentItemId, current.id),
+            eq(items.chatId, ctx.chatId),
             isNull(items.archivedAt),
           ),
         );
@@ -89,6 +95,7 @@ export async function executeDeleteItem(
         .where(
           and(
             eq(items.parentItemId, current.id),
+            eq(items.chatId, ctx.chatId),
             isNull(items.archivedAt),
           ),
         )
