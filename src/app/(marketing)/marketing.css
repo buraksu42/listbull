@@ -706,6 +706,45 @@
 }
 .back-link:hover { color: var(--lb-fg); }
 
+/* ─── Beta badge ─── */
+.beta-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  margin-left: 6px;
+  border-radius: var(--lb-r-full);
+  background: color-mix(in oklch, var(--lb-accent) 18%, transparent);
+  color: var(--lb-teal-deep);
+  border: 1px solid color-mix(in oklch, var(--lb-accent) 30%, transparent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+
+/* ─── Footer disclaimer block ─── */
+.footer-disclaimer {
+  margin-top: 32px;
+  padding: 20px 24px;
+  background: var(--lb-subtle);
+  border: 1px solid var(--lb-border);
+  border-radius: var(--lb-r-md);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--lb-muted-fg);
+}
+.footer-disclaimer strong {
+  color: var(--lb-fg);
+  font-weight: 600;
+}
+.footer-disclaimer a {
+  color: var(--lb-teal-deep);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* ─── Code blocks (install page + worked examples) ─── */
 .code-block {
   background: var(--lb-ink-deep);
