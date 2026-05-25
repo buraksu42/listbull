@@ -16,6 +16,8 @@
  */
 import { z } from "zod";
 
+import { ALLOWED_LLM_MODELS } from "@/lib/validators/settings";
+
 // ═══════════════════════════════════════════════════════════════════
 // Shared sub-schemas
 // ═══════════════════════════════════════════════════════════════════
@@ -392,23 +394,9 @@ export const updateSettingsInputSchema = z
         message: "timezone must be an IANA name like Europe/Istanbul",
       })
       .optional(),
-    llm_model: z
-      .enum([
-        "anthropic/claude-haiku-4.5",
-        "anthropic/claude-sonnet-4",
-        "anthropic/claude-sonnet-4.5",
-        "anthropic/claude-opus-4.7",
-        "openai/gpt-4o-mini",
-        "openai/gpt-4o",
-        "openai/o1-mini",
-        "google/gemini-2.5-flash",
-        "google/gemini-2.5-pro",
-        "x-ai/grok-3",
-        "deepseek/deepseek-chat",
-        "deepseek/deepseek-r1",
-        "meta-llama/llama-3.3-70b-instruct",
-      ])
-      .optional(),
+    // Single source of truth lives in validators/settings.ts so the
+    // bot picker, Mini App API, and this LLM tool schema never drift.
+    llm_model: z.enum(ALLOWED_LLM_MODELS).optional(),
     notifications_enabled: z.boolean().optional(),
     date_format: z.enum(["DD.MM.YYYY", "MM/DD/YYYY", "YYYY-MM-DD"]).optional(),
     time_format: z.enum(["24h", "12h"]).optional(),
