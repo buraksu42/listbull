@@ -243,6 +243,16 @@ async function main(): Promise<void> {
     } catch (e) {
       console.error("[cron/chat-daily-push] threw", e);
     }
+    // Weekly digest: pickup gates further on DOW=Sunday + HOUR=21 in
+    // user's TZ, so this only actually does work in that window. Cheap
+    // empty-pickup query the rest of the time.
+    try {
+      const { dispatchWeeklyDigest } = await import("./weekly-digest");
+      const result = await dispatchWeeklyDigest();
+      if (result.picked > 0) console.log("[cron/weekly-digest]", result);
+    } catch (e) {
+      console.error("[cron/weekly-digest] threw", e);
+    }
   }
 
   await maybePingHeartbeat();

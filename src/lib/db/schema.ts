@@ -60,6 +60,12 @@ export const users = pgTable(
      * so cron-tick drift across UTC midnight doesn't cause a re-send.
      */
     dailyDigestSentOn: date("daily_digest_sent_on"),
+    /**
+     * Sunday 21:00 user-local weekly digest stamp. Same shape as
+     * `dailyDigestSentOn`: a `date` in user TZ. The cron uses this to
+     * avoid double-sending within a single Sunday tick window.
+     */
+    weeklyDigestSentOn: date("weekly_digest_sent_on"),
     ...timestamps,
   },
   (t) => [
@@ -67,6 +73,9 @@ export const users = pgTable(
     index("users_telegram_username_idx").on(sql`lower(${t.telegramUsername})`),
     index("users_digest_pickup_idx")
       .on(t.notificationsEnabled, t.dailyDigestSentOn)
+      .where(sql`${t.notificationsEnabled} = true`),
+    index("users_weekly_digest_pickup_idx")
+      .on(t.notificationsEnabled, t.weeklyDigestSentOn)
       .where(sql`${t.notificationsEnabled} = true`),
   ],
 );
