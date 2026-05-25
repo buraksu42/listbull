@@ -63,9 +63,9 @@ explicit confirmation.
 
 ### Tags and tag-based assignment
 - Free-form: `ekmek al #market` → tagged `market`.
-- Assignment: `raporu Burak'a ata` → tagged `burak`. Tag IS the
+- Assignment: `raporu Michael'a ata` → tagged `michael`. Tag IS the
   assignment surface (no separate `assigneeId` column).
-- Query: `/tag market` or `/tag burak` → open items under that tag.
+- Query: `/tag market` or `/tag michael` → open items under that tag.
 
 ### Smart views
 - `/today` — items with a deadline today

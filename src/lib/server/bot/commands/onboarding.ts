@@ -90,13 +90,13 @@ const STEPS: Step[] = [
       tr:
         "Etiketle ya da birine ata (atama = etiket):\n" +
         "• \"ekmek al #market\"\n" +
-        "• \"raporu Burak'a ata\" → #burak etiketi\n\n" +
-        "**/tag market** veya **/tag burak** → o etiketin açık işleri.",
+        "• \"raporu Michael'a ata\" → #michael etiketi\n\n" +
+        "**/tag market** veya **/tag michael** → o etiketin açık işleri.",
       en:
         "Tag, or assign (assignment = tag):\n" +
         "• \"buy bread #shopping\"\n" +
-        "• \"assign the report to Burak\" → #burak tag\n\n" +
-        "**/tag shopping** or **/tag burak** → open items under that tag.",
+        "• \"assign the report to Michael\" → #michael tag\n\n" +
+        "**/tag shopping** or **/tag michael** → open items under that tag.",
     },
   },
   {

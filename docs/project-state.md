@@ -28,7 +28,7 @@ Order matches `setMyCommands` in `src/lib/server/bot/index.ts`:
 | `/items`      | Open to-dos                                                     |
 | `/done`       | Completed items (reopen / archive)                              |
 | `/memory`     | Memory keepsakes (tickets, docs — never auto-deleted)           |
-| `/tag <name>` | Items filtered by tag (e.g. `/tag burak`)                       |
+| `/tag <name>` | Items filtered by tag (e.g. `/tag michael`)                       |
 | `/today`      | Today's items                                                   |
 | `/thisweek`   | Items due this week                                             |
 | `/reminders`  | Pending reminders                                               |

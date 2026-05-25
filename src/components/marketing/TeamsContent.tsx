@@ -70,7 +70,7 @@ const CAPABILITIES: Capability[] = [
   },
   {
     title: "Tag-based assignment",
-    body: "\"Assign the report to Burak\" creates an item tagged #burak. Anyone runs /tag burak to see Burak's items. No per-user role grants, no permission UI to babysit.",
+    body: "\"Assign the report to Michael\" creates an item tagged #michael. Anyone runs /tag michael to see Michael's items. No per-user role grants, no permission UI to babysit.",
     detail: "Tags are case-insensitive and lowercased on save.",
   },
   {
@@ -108,9 +108,9 @@ const STORIES: Story[] = [
         bot: "✓ created parent + 5 sub-items. /items shows 📂 0/5.",
       },
       {
-        who: "Burak",
+        who: "Michael",
         said: "@listbull_bot assign the og image to ayşe, blog post to me",
-        bot: "✓ tagged: og image → #ayşe, blog post → #burak.",
+        bot: "✓ tagged: og image → #ayşe, blog post → #michael.",
       },
       {
         who: "Ayşe",
@@ -118,12 +118,12 @@ const STORIES: Story[] = [
         bot: "📂 og image (open)",
       },
       {
-        who: "Burak",
+        who: "Michael",
         said: "(voice note) blog post draft is in notion, lemme know if it's too long",
         bot: "(silent — not actionable)",
       },
       {
-        who: "Burak",
+        who: "Michael",
         said: "(voice note) reminder: ship the og image tomorrow 10am",
         bot: "🔔 reminder set on \"og image\" for tomorrow 10:00.",
       },

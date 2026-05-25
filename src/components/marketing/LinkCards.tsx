@@ -25,7 +25,7 @@ const CARDS: Card[] = [
   {
     href: "/security",
     title: "Security →",
-    body: "Every guarantee linked to source. AES-256-GCM at rest, per-chat isolation.",
+    body: "How we handle your data, linked to source. AES-256-GCM at rest, per-chat isolation.",
   },
 ];
 
@@ -41,8 +41,8 @@ export function LinkCards() {
         <div className="section-head">
           <h2>Four places to go from here.</h2>
           <p className="lead">
-            Solo or with a team, scan the commands, or read the
-            security guarantees with source links.
+            Solo or with a team, scan the commands, or read how we
+            handle your data with source links.
           </p>
         </div>
         <div

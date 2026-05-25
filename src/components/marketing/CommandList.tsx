@@ -7,7 +7,7 @@ const COMMANDS: { cmd: string; desc: string }[] = [
   { cmd: "/items", desc: "Open to-dos." },
   { cmd: "/done", desc: "Completed items (reopen or archive)." },
   { cmd: "/memory", desc: "Memory keepsakes — never auto-deleted." },
-  { cmd: "/tag <name>", desc: "Items filtered by tag, e.g. /tag burak." },
+  { cmd: "/tag <name>", desc: "Items filtered by tag, e.g. /tag michael." },
   { cmd: "/today", desc: "Today's items." },
   { cmd: "/thisweek", desc: "Items due this week." },
   { cmd: "/reminders", desc: "Pending reminders." },

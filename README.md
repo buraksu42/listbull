@@ -36,7 +36,7 @@ self-host the Postgres, the data stays yours.
 - **Memory.** Long-lived keepsakes that never auto-archive (tickets,
   docs, receipts).
 - **Tag-based assignment.** Mentioning a user creates a tag, not an
-  owner. `/tag burak` filters to that tag's open items.
+  owner. `/tag michael` filters to that tag's open items.
 - **Interactive onboarding.** `/onboarding` walks through 8 features
   in a single edited message. Skip anytime.
 - **BYOK + free tier.** Users paste their own OpenRouter key via

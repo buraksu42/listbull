@@ -52,7 +52,7 @@ export function Hero() {
             <span className="dot" /> Live on Telegram
           </span>
           <span>MIT licensed</span>
-          <span>No telemetry by default</span>
+          <span>Self-host: zero telemetry</span>
           <span>v{pkg.version}</span>
         </div>
       </div>

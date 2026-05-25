@@ -46,7 +46,7 @@ export function SiteFooter() {
             <h4>Security</h4>
             <ul>
               <li>
-                <Link href="/security">Guarantees</Link>
+                <Link href="/security">How we handle your data</Link>
               </li>
               <li>
                 <a
@@ -55,15 +55,6 @@ export function SiteFooter() {
                   rel="noopener noreferrer"
                 >
                   SECURITY.md ↗
-                </a>
-              </li>
-              <li>
-                <a
-                  href="https://github.com/buraksu42/listbull/security/advisories"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Report privately ↗
                 </a>
               </li>
             </ul>
@@ -103,7 +94,11 @@ export function SiteFooter() {
         </div>
         <div className="footer-meta">
           <span>© {new Date().getUTCFullYear()} listbull. MIT licensed.</span>
-          <span>No telemetry by default. No cookies. No tracking.</span>
+          <span>
+            prod.listbull.org: cookieless analytics (Umami,
+            self-hosted) + crash reports (Sentry). Self-host setups
+            are telemetry-free by default.
+          </span>
           <span className="pill">v{pkg.version}</span>
         </div>
       </div>
