@@ -18,7 +18,7 @@ import "server-only";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { activityLog, items } from "@/lib/db/schema";
+import { activityLog, items, pendingSecretDeletions } from "@/lib/db/schema";
 import {
   revealSecretInputSchema,
   type RevealSecretOutput,
@@ -159,31 +159,78 @@ export async function executeRevealSecret(
     payloadAfter: { label: row.text, suffix },
   });
 
-  // Schedule TTL deletion. Plaintext stays in Telegram for 15s max
-  // (best-effort: relies on this container staying up; if it crashes
-  // before the timer fires the user must delete manually). Telegram
-  // bots may delete their own messages without time restrictions.
+  // Schedule TTL deletion. Two layers:
+  //   1. Durable row in pending_secret_deletions (cron sweep is the
+  //      floor — survives pod restart, fires within one cron tick
+  //      after fire_at, worst-case ~75s).
+  //   2. In-process setTimeout for the fast happy path (15s exactly
+  //      when the pod stays up). On success it also deletes the
+  //      pending row so the cron sweep skips it.
+  //
+  // The two paths converge safely: if both race, the second
+  // deleteMessage call gets a Telegram error (message gone) which we
+  // already ignore, and the second DELETE returns 0 rows affected.
   if (deliveredMessageId !== null) {
     const targetMsgId = deliveredMessageId;
-    setTimeout(() => {
-      void fetch(
-        `${TELEGRAM_API}/bot${env.TELEGRAM_BOT_TOKEN}/deleteMessage`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            chat_id: ctx.chatId,
-            message_id: targetMsgId,
-          }),
-        },
-      ).catch((e: unknown) => {
-        // User may have deleted it themselves first; ignore.
-        console.warn("[reveal_secret] deferred delete failed", {
-          itemId: row.id,
+    const fireAt = new Date(Date.now() + 15_000);
+    try {
+      await db
+        .insert(pendingSecretDeletions)
+        .values({
+          chatId: ctx.chatId,
           messageId: targetMsgId,
-          error: e instanceof Error ? e.message : String(e),
+          fireAt,
+        })
+        .onConflictDoNothing({
+          target: [
+            pendingSecretDeletions.chatId,
+            pendingSecretDeletions.messageId,
+          ],
         });
+    } catch (e) {
+      // Even if the durable insert fails, the in-process timer
+      // still fires — degraded but not broken.
+      console.warn("[reveal_secret] pending-deletion insert failed", {
+        itemId: row.id,
+        error: e instanceof Error ? e.message : String(e),
       });
+    }
+    setTimeout(() => {
+      void (async () => {
+        try {
+          await fetch(
+            `${TELEGRAM_API}/bot${env.TELEGRAM_BOT_TOKEN}/deleteMessage`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                chat_id: ctx.chatId,
+                message_id: targetMsgId,
+              }),
+            },
+          );
+        } catch (e) {
+          console.warn("[reveal_secret] deferred delete failed", {
+            itemId: row.id,
+            messageId: targetMsgId,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+        // Drop the pending row regardless of Telegram's response —
+        // it's already handled (either deleted or unreachable).
+        try {
+          await db
+            .delete(pendingSecretDeletions)
+            .where(
+              and(
+                eq(pendingSecretDeletions.chatId, ctx.chatId),
+                eq(pendingSecretDeletions.messageId, targetMsgId),
+              ),
+            );
+        } catch {
+          // ignore — cron sweep will eventually clean up
+        }
+      })();
     }, 15_000);
   }
 

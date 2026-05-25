@@ -418,3 +418,31 @@ export const botActionContexts = pgTable(
     index("bot_action_contexts_created_idx").on(t.createdAt),
   ],
 );
+
+// ─── pending_secret_deletions (M5 — restart-safe secret cleanup) ───
+//
+// When `reveal_secret` delivers a plaintext credential to a Telegram
+// chat, it's deleted after 15s. The in-process setTimeout works while
+// the pod stays up, but a restart between reveal + delete left
+// plaintext in the chat indefinitely. This table is the durable
+// backup: every reveal writes a row; the dispatcher sweeps rows
+// whose fire_at has passed, attempts deleteMessage best-effort, and
+// drops the row. The in-process setTimeout still handles the fast
+// (happy) path — DB sweep is the floor, not the primary mechanism.
+export const pendingSecretDeletions = pgTable(
+  "pending_secret_deletions",
+  {
+    chatId: bigint("chat_id", { mode: "number" })
+      .notNull()
+      .references(() => chats.chatId, { onDelete: "cascade" }),
+    messageId: bigint("message_id", { mode: "number" }).notNull(),
+    fireAt: timestamp("fire_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("pending_secret_deletions_pk").on(t.chatId, t.messageId),
+    index("pending_secret_deletions_due_idx").on(t.fireAt),
+  ],
+);
