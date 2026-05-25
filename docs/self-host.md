@@ -33,7 +33,23 @@ Telegram'da [@BotFather](https://t.me/BotFather):
 
 ---
 
-## 2. DNS
+## 2. BotFather ayarları (botu gruba eklemeden ÖNCE yap)
+
+BotFather'da botunu seç → **Bot Settings**:
+
+- **`/setjoingroups`** → **Enable** (kullanıcılar bot'u gruba ekleyebilsin)
+- **`/setprivacy`** → **Disable** (zorunlu — grup ses notlarını ve
+  güvenilir @-mention yakalamayı bot'un görmesi için. Kod içi filter
+  yine de yalnız mention/reply mesajlarını LLM'e yollar; privacy OFF
+  olsa da token israfı olmaz.)
+
+> ⚠️ Bunları **gruba eklemeden önce** yap. Sonra yapılırsa ilk
+> kullanım sırasında ses notları sessizce çalışmaz + bazı @-mention'lar
+> bot'a ulaşmaz. Sırayı doğru kurmak debug saatleri kazandırır.
+
+---
+
+## 3. DNS
 
 Domain'inin A record'u sunucu IP'sine işaret etmeli:
 
@@ -48,7 +64,7 @@ A   listbull.mydomain.com   → <SUNUCU_IP>
 
 ---
 
-## 3. Repo'yu klonla + `.env` hazırla
+## 4. Repo'yu klonla + `.env` hazırla
 
 ```bash
 git clone https://github.com/buraksu42/listbull.git
@@ -59,7 +75,7 @@ chmod 600 .env
 
 ---
 
-## 4. Secret'ları üret
+## 5. Secret'ları üret
 
 ```bash
 # BYOK + secrets AES-256-GCM şifreleme key'i (32 byte base64)
@@ -78,7 +94,7 @@ echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)"
 
 ---
 
-## 5. `.env` doldur
+## 6. `.env` doldur
 
 ```bash
 # Public URL (DNS'in işaret ettiği)
@@ -117,7 +133,7 @@ TELEGRAM_BOT_USERNAME=my_listbull_bot   # @ olmadan
 
 ---
 
-## 6. Reverse proxy / TLS
+## 7. Reverse proxy / TLS
 
 listbull kendi HTTPS terminate etmiyor — önüne bir reverse proxy koy.
 **En basit**: Caddy.
@@ -137,7 +153,7 @@ yapar.
 
 ---
 
-## 7. Stack'i ayağa kaldır
+## 8. Stack'i ayağa kaldır
 
 ```bash
 docker compose up -d
@@ -154,7 +170,7 @@ curl -s https://listbull.mydomain.com/api/health
 
 ---
 
-## 8. DB migration'ları uygula
+## 9. DB migration'ları uygula
 
 ```bash
 docker compose run --rm app npm run db:migrate
@@ -164,11 +180,7 @@ docker compose run --rm app npm run db:migrate
 
 ---
 
-## 9. Bot konfigürasyonu
-
-İki kısım: otomatik script + manuel BotFather adımları.
-
-### 9a. Otomatik (script)
+## 10. Webhook + slash menüsünü kaydet (script)
 
 ```bash
 TELEGRAM_BOT_TOKEN="<token>" \
@@ -186,20 +198,13 @@ Script yapar:
 - `setChatMenuButton` → `{ type: "commands" }`
 - `getWebhookInfo` ile doğrular
 
-### 9b. Manuel (BotFather)
-
-[@BotFather](https://t.me/BotFather) → botunu seç → **Bot Settings**:
-
-- **`/setjoingroups`** → **Enable** (gruba eklenebilsin)
-- **`/setprivacy`** → **Disable** (zorunlu — grup ses notlarını ve
-  güvenilir @-mention yakalamayı bot'un görmesi için. Bot kendi
-  privacy filter'ını kod içinde uyguluyor: yalnız mention edildiğinde
-  veya birinin mesajına reply atıldığında LLM'e gönderiyor, dolayısıyla
-  privacy ayarı OFF olsa da token israfı olmaz.)
+> BotFather privacy + joingroups ayarlarını **adım 2'de yapmış**
+> olmalısın. Yapmadıysan şimdi geri dön: gruba eklemeden önce ayarlamak
+> debug saatleri kazandırır.
 
 ---
 
-## 10. Smoke test
+## 11. Smoke test
 
 Telegram'da kendi bot'una `/start` at — hoş geldin mesajı + "🎯 Hızlı
 tur (3 dk)" butonu görmelisin. Butona tıkla → 8 adımlı onboarding.
@@ -231,7 +236,7 @@ Tam e2e matrix: [`docs/SMOKE_TEST.md`](./SMOKE_TEST.md).
 
 ---
 
-## 11. (Opsiyonel) Sentry'ye bağla
+## 12. (Opsiyonel) Sentry'ye bağla
 
 1. https://sentry.io 'da yeni Next.js projesi → DSN al.
 2. `.env`'de `NEXT_PUBLIC_SENTRY_DSN=https://...@sentry.io/...`.
@@ -248,7 +253,7 @@ Tam e2e matrix: [`docs/SMOKE_TEST.md`](./SMOKE_TEST.md).
 
 ---
 
-## 12. (Opsiyonel) Umami analytics
+## 13. (Opsiyonel) Umami analytics
 
 `NEXT_PUBLIC_UMAMI_WEBSITE_ID=<id>` ekle + rebuild. Detay:
 [umami.is/docs](https://umami.is/docs).

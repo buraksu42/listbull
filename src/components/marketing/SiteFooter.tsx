@@ -32,6 +32,9 @@ export function SiteFooter() {
                 <Link href="/commands">Commands</Link>
               </li>
               <li>
+                <Link href="/install">Install</Link>
+              </li>
+              <li>
                 <a
                   href="https://t.me/listbull_bot"
                   target="_blank"
