@@ -90,6 +90,23 @@ function parseServer(): ServerEnv {
     throw new Error("Invalid server environment variables");
   }
   cachedServer = parsed.data;
+  // Production without Upstash silently disables two protections —
+  // webhook replay protection (markUpdateSeen no-ops) and the bot's
+  // per-user hourly limit (enforceRateLimit no-ops). Both are safe
+  // defaults for dev / self-host, but operators running a public
+  // bot need to know they're flying without a net. Log loud.
+  if (
+    cachedServer.NODE_ENV === "production" &&
+    (!cachedServer.UPSTASH_REDIS_REST_URL ||
+      !cachedServer.UPSTASH_REDIS_REST_TOKEN)
+  ) {
+    console.warn(
+      "⚠️  PRODUCTION WITHOUT UPSTASH — webhook replay protection AND " +
+        "per-user rate limiting are NO-OPs. Set UPSTASH_REDIS_REST_URL " +
+        "+ UPSTASH_REDIS_REST_TOKEN to enable both. See " +
+        "src/lib/server/middleware/rate-limit.ts.",
+    );
+  }
   return cachedServer;
 }
 
