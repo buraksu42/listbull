@@ -43,14 +43,17 @@ type SettingsUser = {
   notificationsEnabled: boolean;
 };
 
-/** Pretty short name for the model line. Falls back to the raw slug
- * if a stored model was removed from `ALLOWED_LLM_MODELS` between
- * deploys (don't surface the index — slug is more debuggable). */
+/** Short display name + tier ("Sonnet 4.5 · $$"). Falls back to the
+ * raw slug if a stored model was removed from `ALLOWED_LLM_MODELS`
+ * between deploys (don't surface the index — slug is more debuggable). */
 function modelLabel(slug: string): string {
-  const meta = (LLM_MODEL_META as Record<string, { label: string } | undefined>)[
-    slug
-  ];
-  return meta ? `${meta.label}` : slug;
+  const meta = (
+    LLM_MODEL_META as Record<
+      string,
+      { label: string; tier: string } | undefined
+    >
+  )[slug];
+  return meta ? `${meta.label} · ${meta.tier}` : slug;
 }
 
 function buildSettingsView(
@@ -186,16 +189,20 @@ function buildModelPickerView(
         "",
         `Şu an: ${currentLabel}`,
         "",
+        "Fiyat: $ ucuz · $$ orta · $$$ pahalı · $$$$ premium",
+        "(OpenRouter input-token bandı; key'ine kendi limitin geçerli.)",
+        "",
         "Bir model seç — değişiklik anında geçerli olur.",
-        "Ücretsiz tier'da güçlü modeller için /settings → 🔑 ile OpenRouter key ekle.",
       ]
     : [
         "🤖 Pick a model",
         "",
         `Current: ${currentLabel}`,
         "",
+        "Pricing: $ cheap · $$ mid · $$$ pricey · $$$$ premium",
+        "(Approx OpenRouter input-token band; your key, your limits.)",
+        "",
         "Tap to switch — applies immediately.",
-        "On the free tier? Add an OpenRouter key from /settings → 🔑 to unlock the stronger models.",
       ];
 
   const keyboard = new InlineKeyboard();
@@ -205,7 +212,7 @@ function buildModelPickerView(
   ALLOWED_LLM_MODELS.forEach((slug, idx) => {
     const meta = LLM_MODEL_META[slug as AllowedLlmModel];
     const isCurrent = slug === currentModel;
-    const label = `${isCurrent ? "• " : ""}${meta.label}`;
+    const label = `${isCurrent ? "• " : ""}${meta.label} · ${meta.tier}`;
     keyboard.text(label, `settings:m:${idx}`);
     col += 1;
     if (col === 2) {
