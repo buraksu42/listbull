@@ -26,6 +26,9 @@ export function SiteFooter() {
                 <Link href="/features">Features</Link>
               </li>
               <li>
+                <Link href="/teams">Teams</Link>
+              </li>
+              <li>
                 <Link href="/commands">Commands</Link>
               </li>
               <li>

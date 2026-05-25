@@ -8,6 +8,7 @@ import { BrandMark, TelegramIcon } from "@/components/marketing/BrandMark";
 
 const NAV = [
   { href: "/features", label: "Features" },
+  { href: "/teams", label: "Teams" },
   { href: "/commands", label: "Commands" },
   { href: "/security", label: "Security" },
 ];
