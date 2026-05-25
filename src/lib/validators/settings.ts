@@ -42,6 +42,28 @@ export const ALLOWED_LLM_MODELS = [
 export type AllowedLlmModel = (typeof ALLOWED_LLM_MODELS)[number];
 
 /**
+ * Shape of an OpenRouter model slug: `<provider>/<model>[:variant]`.
+ *
+ *   anthropic/claude-haiku-4.5
+ *   openai/gpt-4o-2024-11-20
+ *   meta-llama/llama-3.3-70b-instruct
+ *   x-ai/grok-4-fast:free
+ *
+ * Used by `update_settings.llm_model` in `src/lib/ai/tools.ts` so the
+ * LLM can accept user-typed slugs *outside* the curated picker list
+ * (e.g. "modelimi qwen/qwen-max yap"). Curated buttons drive the bot
+ * picker UI; this regex is the second, looser gate that lets power
+ * users pick anything OpenRouter serves. Invalid slugs still fail at
+ * runtime when OpenRouter returns 404 — surfaced to the user as a
+ * chat-level error.
+ *
+ * Lowercase only; OpenRouter normalises to lowercase. Min 3 chars
+ * ("a/b") is the smallest possible well-formed slug.
+ */
+export const LLM_MODEL_SLUG_REGEX =
+  /^[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9.-]*(?::[a-z0-9-]+)?$/;
+
+/**
  * Cost tier — coarse buckets so the picker can show price-at-a-glance
  * without going stale every time OpenRouter changes a per-token rate.
  * Bands are approximate input-token cost per 1M tokens on OpenRouter:

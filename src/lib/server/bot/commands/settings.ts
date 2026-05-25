@@ -193,6 +193,10 @@ function buildModelPickerView(
         "(OpenRouter input-token bandı; key'ine kendi limitin geçerli.)",
         "",
         "Bir model seç — değişiklik anında geçerli olur.",
+        "",
+        "📝 Listede yoksa: bana yaz \"modelimi <slug> yap\".",
+        "   Örn: \"modelimi qwen/qwen-max yap\"",
+        "   Herhangi bir OpenRouter slug'ı çalışır (provider/model[:variant]).",
       ]
     : [
         "🤖 Pick a model",
@@ -203,6 +207,10 @@ function buildModelPickerView(
         "(Approx OpenRouter input-token band; your key, your limits.)",
         "",
         "Tap to switch — applies immediately.",
+        "",
+        "📝 Not listed? Just message me \"set my model to <slug>\".",
+        "   E.g. \"set my model to qwen/qwen-max\"",
+        "   Any OpenRouter slug works (provider/model[:variant]).",
       ];
 
   const keyboard = new InlineKeyboard();
