@@ -86,6 +86,8 @@ every 60s.
 ## Historical context
 
 The pre-Phase-17 architecture (workspaces, lists, Mini App, Better
-Auth, multi-bot, assignees) is preserved in
-[`docs/archive/`](./archive/). Those documents do not reflect the
-current implementation.
+Auth, multi-bot, assignees) was removed wholesale during the
+chat-only pivot. If you need a specific historical detail, the
+commit history pre-Phase-17 still has the old specs — but they
+do not reflect current behavior, so don't bring them back without
+a fresh read.
