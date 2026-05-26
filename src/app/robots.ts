@@ -3,13 +3,12 @@ import type { MetadataRoute } from "next";
 import { env } from "@/lib/env";
 
 /**
- * Production: marketing landing + public snapshot pages indexable, Mini App
- * + auth-gated routes disallowed.
+ * Production: marketing landing indexable; the API surface + the
+ * brand-owner /ops dashboard stay disallowed.
  *
- * Test/dev: full disallow — `<meta noindex>` is also set in the root layout
- * for belt-and-suspenders coverage. Test env contains synthetic data and
- * sometimes basic-auth-gated middleware fragments; keep crawlers out
- * entirely.
+ * Test/dev: full disallow — `<meta noindex>` is also set in the root
+ * layout for belt-and-suspenders coverage. Test env contains synthetic
+ * data; keep crawlers out entirely.
  */
 export default function robots(): MetadataRoute.Robots {
   const isProd = env.NEXT_PUBLIC_ENV === "production";
@@ -26,18 +25,8 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        allow: ["/", "/snapshot/"],
-        disallow: [
-          "/app/",
-          "/lists/",
-          "/lists",
-          "/settings",
-          "/invites/",
-          "/api/",
-          "/ops/",
-          "/ops",
-          "/api/ops/",
-        ],
+        allow: "/",
+        disallow: ["/api/", "/ops/", "/ops", "/api/ops/"],
       },
     ],
     sitemap: `${host}/sitemap.xml`,

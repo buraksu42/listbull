@@ -5,9 +5,9 @@ import type { Metadata } from "next";
  * already disallows /ops/ but this is belt-and-suspenders if a search
  * engine ignores robots.txt).
  *
- * Intentionally minimal — no marketing chrome, no Mini App theme adapter.
- * The basic-auth gate lives in `src/middleware.ts`; if you can render
- * this layout, you're already authorised.
+ * Intentionally minimal — no marketing chrome. The basic-auth gate
+ * lives in `src/middleware.ts`; if you can render this layout, you're
+ * already authorised.
  */
 export const metadata: Metadata = {
   title: "listbull · ops",

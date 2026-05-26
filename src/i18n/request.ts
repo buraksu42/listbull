@@ -1,11 +1,9 @@
 /**
  * next-intl per-request configuration.
  *
- * Phase 17 chat-only pivot removed the Mini App + the session cookie
- * layer that fed it, so there is no authenticated request context on
- * the public site. Locale resolution falls back to the `NEXT_LOCALE`
- * cookie (set by any client that needs to switch) and finally to the
- * default.
+ * No authenticated request context on the public site (chat-only
+ * architecture — bot is the surface). Locale resolution falls back to
+ * the `NEXT_LOCALE` cookie and finally to the default.
  *
  * Bot replies do their own locale handling via `users.locale` read
  * directly inside handlers — this `request.ts` only governs the

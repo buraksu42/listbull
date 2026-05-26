@@ -1,15 +1,16 @@
 /**
- * Mini App settings API validators.
+ * Settings validators — shared between the bot /settings picker and
+ * the LLM `update_settings` tool schema.
  */
 import { z } from "zod";
 
 /**
  * The preset list of LLM models the user can choose from. Mirrors the
- * default model in `users.llm_model` and the `architecture.md` AI section.
+ * default model in `users.llm_model`.
  *
  * Single source of truth — `src/lib/ai/tools.ts` imports this list for
- * the `update_settings` tool's `llm_model` enum, so the bot picker, the
- * Mini App API validator, and the LLM tool schema can never drift.
+ * the `update_settings` tool's `llm_model` enum, so the bot picker and
+ * the LLM tool schema can never drift.
  *
  * Curated set: each provider's flagship (no "mini" / older variants) +
  * open-weight workhorses (DeepSeek, Qwen, Llama) for cost-sensitive
