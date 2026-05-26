@@ -103,16 +103,18 @@ export async function executeCompleteItem(
       updatedAt: now,
     };
 
-    // Recurrence advance: compute next occurrence relative to the
-    // CURRENT deadline (not "now") so a delayed completion stays on
-    // the natural cadence — completing yesterday's missed pill today
-    // still advances to tomorrow's slot, not 24h from now.
+    // Recurrence advance: anchor on the CURRENT deadline if present
+    // (so a delayed "missed pill today" still advances to tomorrow's
+    // natural slot, not 24h from completion time). Fall back to NOW
+    // when there's no deadline — the picker UI hides the button in
+    // that case, but natural-language paths ("her gün süt al") can
+    // and do set a rule without a deadline. Without this fallback the
+    // item would silently mark done and drop to /done, which is the
+    // exact opposite of "this repeats".
     let advancedDeadline: Date | null = null;
-    if (is_done && current.taskRecurrenceRule && current.deadlineAt) {
-      const next = nextOccurrence(
-        current.taskRecurrenceRule,
-        current.deadlineAt,
-      );
+    if (is_done && current.taskRecurrenceRule) {
+      const anchor = current.deadlineAt ?? now;
+      const next = nextOccurrence(current.taskRecurrenceRule, anchor);
       if (next) {
         patch.isDone = false;
         patch.status = "open";
