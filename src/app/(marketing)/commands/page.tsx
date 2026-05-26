@@ -11,7 +11,7 @@ import { WorkedExamples } from "@/components/marketing/WorkedExamples";
 export const metadata = {
   title: "Commands — listbull",
   description:
-    "Twelve slash commands and four worked example flows for the listbull Telegram bot. Matches the live setMyCommands menu exactly.",
+    "Twelve slash commands and five worked example flows for the listbull Telegram bot. Matches the live setMyCommands menu exactly.",
 };
 
 export default function CommandsPage() {

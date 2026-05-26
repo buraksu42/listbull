@@ -49,11 +49,11 @@ const STEPS: Step[] = [
       tr:
         "**/items** yaz → tıklanabilir liste gelir. Her satırın altında butonlar:\n" +
         "• ☐ tamamla\n" +
-        "• ✏️ düzenle  ·  📅 deadline  ·  ⏰ hatırlatıcı  ·  📎 dosya  ·  🗑️ sil",
+        "• ✏️ düzenle  ·  🔁 tekrar  ·  📅 deadline  ·  ⏰ hatırlatıcı  ·  📎 dosya  ·  🗑️ sil",
       en:
         "Send **/items** → tappable list. Each row has buttons:\n" +
         "• ☐ complete\n" +
-        "• ✏️ edit  ·  📅 deadline  ·  ⏰ reminder  ·  📎 attach  ·  🗑️ delete",
+        "• ✏️ edit  ·  🔁 repeat  ·  📅 deadline  ·  ⏰ reminder  ·  📎 attach  ·  🗑️ delete",
     },
   },
   {
@@ -69,6 +69,21 @@ const STEPS: Step[] = [
         "• \"remind me about the milk in 1 hour\"\n" +
         "• /items → ⏰ button → \"5 minutes\"\n\n" +
         "I'll ping your DM when it's time.",
+    },
+  },
+  {
+    title: { tr: "🔁 Tekrar eden işler", en: "🔁 Recurring tasks" },
+    body: {
+      tr:
+        "Her gün/hafta/ay tekrar eden iş için 🔁 (kalemin yanında) ya da yaz:\n" +
+        "• \"her gün 09:00 vitamin al\"\n" +
+        "• \"her pazartesi 14:00 toplantı\"\n\n" +
+        "Tamamladığında: orijinal satır /done'a düşer, aynı koşullarla — reminder + dosya + yeni deadline — bir kopyası /items'e otomatik açılır. \"🔁 Yeni açıldı: ...\" diye chat'e de düşer.",
+      en:
+        "For daily/weekly/monthly work, tap 🔁 (next to ✏️) or type:\n" +
+        "• \"every day 9am vitamins\"\n" +
+        "• \"every Monday 2pm standup\"\n\n" +
+        "When you complete a cycle: the original drops into /done, and a fresh copy opens in /items with the same reminders + attachments + the next deadline. You also get a \"🔁 New cycle opened: …\" message in chat.",
     },
   },
   {
