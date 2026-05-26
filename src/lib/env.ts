@@ -43,6 +43,13 @@ const serverSchema = z.object({
   // env.
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+
+  // Brand-owner ops dashboard (Track A). Both must be set to enable
+  // /ops + /api/ops/stats; if either is unset both routes return 404
+  // (not 401) so their existence isn't advertised. Middleware reads
+  // process.env directly to avoid the env-proxy validation cycle.
+  LISTBULL_OPS_USER: z.string().min(1).optional(),
+  LISTBULL_OPS_PASSWORD: z.string().min(8).optional(),
 });
 
 const clientSchema = z.object({

@@ -253,6 +253,13 @@
       "when": 1778892000000,
       "tag": "0035_pending_secret_deletions",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1779745364699,
+      "tag": "0036_users_weekly_digest_stamp",
+      "breakpoints": true
     }
   ]
 }
