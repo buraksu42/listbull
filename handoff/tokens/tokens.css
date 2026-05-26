@@ -1,7 +1,6 @@
 /* listbull · design tokens · v1
  * Direction C "Sent" — chat-bubble mark
  * Theme tokens are scoped on [data-theme] / [data-theme="dark"].
- * Telegram Mini Apps expose CSS vars via tg-theme-*; bridge them in app code.
  */
 
 :root {

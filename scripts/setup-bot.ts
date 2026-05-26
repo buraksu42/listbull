@@ -6,9 +6,9 @@
  * run by hand (Telegram doesn't expose `/setdomain`, `/setjoingroups`,
  * or `/setprivacy` over the public API).
  *
- * Mini App was frozen in Phase 17 — this script no longer registers a
- * chat menu button. All interaction is in-chat (inline keyboards via
- * `/items`, free-form messages routed through the LLM).
+ * Bot is the only surface — no Mini App, no web menu button. All
+ * interaction is in-chat (inline keyboards via `/items`, free-form
+ * messages routed through the LLM).
  *
  * Run:
  *   TELEGRAM_BOT_TOKEN=<token> \
@@ -95,13 +95,13 @@ async function main(): Promise<void> {
   });
   console.log(`  ok`);
 
-  console.log("→ deleteChatMenuButton (Mini App frozen)");
-  // Pivot: Mini App is dormant, so no web_app menu button — fall back
-  // to Telegram's default commands menu.
+  console.log("→ setChatMenuButton (commands)");
+  // Bot is the only surface — no web_app menu button. Telegram's
+  // default commands menu is the entry point.
   await tg("setChatMenuButton", {
     menu_button: { type: "commands" },
   });
-  console.log(`  ok: menu reset to default commands`);
+  console.log(`  ok: menu set to default commands`);
 
   console.log("→ getWebhookInfo");
   const info = await tg<{

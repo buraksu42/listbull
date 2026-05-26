@@ -16,9 +16,8 @@ export const metadata: Metadata = {
       ? new URL(process.env.NEXT_PUBLIC_APP_URL)
       : undefined,
   // Belt-and-suspenders with src/app/robots.ts: anywhere outside production
-  // gets a noindex meta even if the robots route is misconfigured. Mini App
-  // (`(app)` route group) ALWAYS gets noindex via its own layout — this only
-  // catches the marketing surface on test/dev environments.
+  // gets a noindex meta even if the robots route is misconfigured. The
+  // /ops dashboard has its own noindex via the (ops) layout.
   robots: isProd ? undefined : { index: false, follow: false },
 };
 
