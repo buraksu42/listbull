@@ -20,7 +20,6 @@ import { db } from "@/lib/db/client";
 import { itemAttachments, itemReminders, items } from "@/lib/db/schema";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
-import { recurrenceLabel } from "@/lib/server/recurrence";
 
 // Page size kept small so each item's label + action row sit together
 // on screen — the screenshot bug (scrolled-off buttons being ambiguous)
@@ -232,13 +231,18 @@ export async function buildItemsView(
         `item:toggle:${it.id}`,
       )
       .row();
-    // Row B — 5 narrow action buttons. Order tuned for frequency:
-    // edit (most common), deadline, reminder, attach, delete (least).
+    // Row B — 6 narrow action buttons, all in one row to keep each
+    // item's controls in a single tap zone. Order tuned for frequency:
+    // edit (most common), recurrence (right next to edit per user
+    // request), deadline, reminder, attach, delete (least).
     // 📎 button shows count when files exist, so tapping it is also
-    // a hint that there's something to download.
+    // a hint that there's something to download. The 🔁 button shows
+    // unconditionally — taps on an item without a deadline land on a
+    // picker that prompts the user to set one first.
     const attachLabel = attachCount > 0 ? `📎${attachCount}` : "📎";
     keyboard
       .text("✏️", `item:edit:${it.id}`)
+      .text("🔁", `item:recur:${it.id}`)
       .text("📅", `item:deadline:${it.id}`)
       .text("⏰", `item:reminder:${it.id}`)
       .text(attachLabel, `item:attach:${it.id}`)
@@ -252,15 +256,6 @@ export async function buildItemsView(
           ? `📂 Alt-itemlar (${childDone}/${childTotal})`
           : `📂 Sub-items (${childDone}/${childTotal})`;
       keyboard.text(label, `item:children:${it.id}`).row();
-    }
-    // Row D (conditional) — recurrence picker. Shown when the item
-    // either has a deadline (so we can anchor the cycle) or already
-    // has a rule set (so the user can change/clear it). Items with
-    // neither don't get the button — set a deadline first, by text
-    // ("yarın 22:00") or the 📅 button.
-    if (it.deadlineAt || it.taskRecurrenceRule) {
-      const label = `🔁 ${recurrenceLabel(it.taskRecurrenceRule, locale)}`;
-      keyboard.text(label, `item:recur:${it.id}`).row();
     }
   }
 

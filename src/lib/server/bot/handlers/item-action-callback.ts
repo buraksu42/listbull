@@ -33,7 +33,7 @@ import { insertBotActionContext } from "@/lib/db/queries/bot-action-contexts";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
 import {
-  recomputeOffsetReminders,
+  cloneRecurringItemAsNextCycle,
   rollupParentDoneState,
   type RollupResult,
 } from "@/lib/server/tools/_shared";
@@ -44,6 +44,7 @@ import {
   RECURRENCE_PRESETS,
   recurrenceLabel,
 } from "@/lib/server/recurrence";
+import { formatDate } from "@/lib/utils/format-date";
 
 export async function handleItemActionCallback(
   ctx: Context,
@@ -660,9 +661,12 @@ export async function handleItemActionCallback(
     // Wrapped in an object to defeat TS's narrowing of `let` written
     // only inside a closure (otherwise the post-tx access reads as
     // `never`).
-    const captured: { rollup: RollupResult | null; recurred: boolean } = {
+    const captured: {
+      rollup: RollupResult | null;
+      clone: { text: string; deadlineAt: Date | null } | null;
+    } = {
       rollup: null,
-      recurred: false,
+      clone: null,
     };
     await db.transaction(async (tx) => {
       const [current] = await tx
@@ -673,47 +677,45 @@ export async function handleItemActionCallback(
       if (!current) return;
       toggledParentId = current.parentItemId;
       const next = !current.isDone;
-      // Recurrence advance — mirrors complete-item executor. When the
-      // user taps the checkbox on a recurring item, keep it open and
-      // bump deadline_at to the next RRULE occurrence. Without this
-      // the button path silently sends the item to /done while the
-      // LLM path (complete_item executor) correctly cycles it.
-      //
-      // TODO: dedupe with executeCompleteItem — extract a shared
-      // toggleItemDone helper that both paths call.
+      // Recurrence clone — mirrors complete-item executor. When the
+      // user taps the checkbox on a recurring item, the original
+      // lands in /done and a fresh row is inserted in /items with
+      // the same text / reminders / attachments and a new deadline.
       const now = new Date();
-      let advancedDeadline: Date | null = null;
-      let effectiveDone = next;
+      let nextCycleDeadline: Date | null = null;
       if (next && current.taskRecurrenceRule) {
         const anchor = current.deadlineAt ?? now;
         const nextOcc = nextOccurrence(current.taskRecurrenceRule, anchor);
-        if (nextOcc) {
-          effectiveDone = false;
-          advancedDeadline = nextOcc;
-          captured.recurred = true;
-        }
+        if (nextOcc) nextCycleDeadline = nextOcc;
       }
       const [updated] = await tx
         .update(items)
         .set({
-          isDone: effectiveDone,
-          status: effectiveDone ? "done" : "open",
-          completedAt: effectiveDone ? now : null,
-          ...(advancedDeadline ? { deadlineAt: advancedDeadline } : {}),
+          isDone: next,
+          status: next ? "done" : "open",
+          completedAt: next ? now : null,
           updatedAt: now,
         })
         .where(eq(items.id, itemId))
         .returning();
       if (!updated) return;
-      // Re-anchor before_deadline reminders when the cycle advanced.
-      if (advancedDeadline) {
-        await recomputeOffsetReminders(tx, itemId, advancedDeadline);
+      if (nextCycleDeadline) {
+        const clone = await cloneRecurringItemAsNextCycle(
+          tx,
+          current,
+          nextCycleDeadline,
+          user.id,
+        );
+        captured.clone = {
+          text: clone.text,
+          deadlineAt: clone.deadlineAt,
+        };
       }
       await tx.insert(activityLog).values({
         chatId,
         entityType: "item",
         entityId: itemId,
-        action: effectiveDone ? "item_completed" : "item_uncompleted",
+        action: next ? "item_completed" : "item_uncompleted",
         actorId: user.id,
         payloadBefore: toItemSnapshot(current),
         payloadAfter: toItemSnapshot(updated),
@@ -729,13 +731,13 @@ export async function handleItemActionCallback(
       );
     });
     const r = captured.rollup;
-    // Toast priority: recurrence-advance message wins (it's the
-    // unusual case the user needs to see — "this didn't go to /done,
-    // it moved to tomorrow"). Otherwise fall back to checklist
-    // rollup toasts, then silent ack.
-    const toast: string | undefined = captured.recurred
+    // Toast priority: recurrence-clone message wins (it's the
+    // unusual case the user needs to see — "the original moved to
+    // /done, a fresh copy opened in /items"). Otherwise fall back to
+    // checklist rollup toasts, then silent ack.
+    const toast: string | undefined = captured.clone
       ? locale === "tr"
-        ? "🔁 Tamamlandı — sonraki açıldı"
+        ? "🔁 Tamamlandı — yeni açıldı"
         : "🔁 Done — next cycle opened"
       : r && r.flipped && r.parentNowDone === true
         ? locale === "tr"
@@ -759,6 +761,37 @@ export async function handleItemActionCallback(
     } else {
       const view = await buildItemsView(chatId, locale, 0);
       await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+    }
+    // Recurrence clone: surface the new cycle in chat history so the
+    // user gets a persistent "yeni açıldı" message (the callback
+    // toast disappears after a few seconds). Done AFTER the view
+    // re-render so the new item is already visible when this lands.
+    if (captured.clone) {
+      const deadline = captured.clone.deadlineAt;
+      const dueLabel = deadline
+        ? formatDate(deadline.toISOString(), {
+            timezone: user.timezone,
+            dateFormat: user.dateFormat as
+              | "DD.MM.YYYY"
+              | "MM/DD/YYYY"
+              | "YYYY-MM-DD",
+            timeFormat: user.timeFormat as "24h" | "12h",
+            locale,
+          })
+        : null;
+      const title =
+        captured.clone.text.length > 80
+          ? `${captured.clone.text.slice(0, 80)}…`
+          : captured.clone.text;
+      const body =
+        locale === "tr"
+          ? dueLabel
+            ? `🔁 Yeni açıldı: "${title}" · ${dueLabel}`
+            : `🔁 Yeni açıldı: "${title}"`
+          : dueLabel
+            ? `🔁 New cycle opened: "${title}" · ${dueLabel}`
+            : `🔁 New cycle opened: "${title}"`;
+      await ctx.api.sendMessage(chatId, body);
     }
     return;
   }

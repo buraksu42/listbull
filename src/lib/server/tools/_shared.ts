@@ -8,12 +8,18 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { activityLog, itemReminders, items } from "@/lib/db/schema";
+import {
+  activityLog,
+  itemAttachments,
+  itemReminders,
+  items,
+} from "@/lib/db/schema";
 import {
   toAttachmentSnapshot,
   toItemReminderSnapshot,
   toItemSnapshot,
 } from "@/lib/db/snapshots";
+import type { Item } from "@/lib/types";
 
 export { toAttachmentSnapshot, toItemReminderSnapshot, toItemSnapshot };
 
@@ -230,4 +236,140 @@ export async function recomputeOffsetReminders(
      WHERE item_id = ${itemId}
        AND kind = 'before_deadline'
   `);
+}
+
+/**
+ * Recurrence clone-and-complete (replaces the in-place "advance the
+ * same row" behaviour the executor used to do).
+ *
+ * Called when a task with `task_recurrence_rule` is marked done:
+ *  - the ORIGINAL row stays marked done so it lands in /done (audit
+ *    trail of "I did the dishes on Monday, Tuesday, Wednesday…").
+ *  - a fresh row is INSERTED with the same text / description /
+ *    priority / tags / kind / parent / recurrence rule, anchored at
+ *    `nextDeadline`. Reminders are cloned (before_deadline recomputed
+ *    off the new deadline; absolute reminders cloned with sent=false
+ *    so the new cycle gets its own ping). Attachments are cloned by
+ *    duplicating the rows — Telegram file_ids are stable for the
+ *    bot's lifetime, so referencing the same file_id from a new row
+ *    is safe and cheap.
+ *  - any pending reminders on the ORIGINAL are deleted (a "done" row
+ *    shouldn't keep pinging — the dispatcher gates on archived_at,
+ *    not is_done, so leaving them would cause duplicate pings on the
+ *    original AND the clone).
+ *  - an `item_created` activity row is written for the clone so the
+ *    feed / digest surfaces show the new cycle as a fresh event.
+ *
+ * Returns the inserted row so the caller can surface "🔁 yeni açıldı:
+ * <text>" to the user.
+ */
+export async function cloneRecurringItemAsNextCycle(
+  tx: Tx,
+  original: Item,
+  nextDeadline: Date,
+  actorId: string,
+): Promise<Item> {
+  // Insert the clone first so we have its id for child-row inserts.
+  // Position inherits from the original so the clone sits in the same
+  // visual slot in /items (the original has moved to /done by now).
+  const now = new Date();
+  const [clone] = await tx
+    .insert(items)
+    .values({
+      chatId: original.chatId,
+      kind: original.kind,
+      parentItemId: original.parentItemId,
+      text: original.text,
+      description: original.description,
+      isCheckable: original.isCheckable,
+      isDone: false,
+      status: "open",
+      priority: original.priority,
+      tags: original.tags,
+      deadlineAt: nextDeadline,
+      pinnedAt: original.pinnedAt,
+      taskRecurrenceRule: original.taskRecurrenceRule,
+      position: original.position,
+      createdBy: actorId,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
+  if (!clone) throw new Error("cloneRecurringItemAsNextCycle: insert returned no row");
+
+  // Clone reminders. We read whatever's on the original (sent or not)
+  // so the new cycle reflects the user's intent ("remind me 30min
+  // before deadline" stays attached to each new cycle).
+  const reminderRows = await tx
+    .select()
+    .from(itemReminders)
+    .where(eq(itemReminders.itemId, original.id));
+  const nextDeadlineMs = nextDeadline.getTime();
+  for (const r of reminderRows) {
+    let newRemindAt: Date;
+    if (r.kind === "before_deadline" && r.offsetMinutes !== null) {
+      newRemindAt = new Date(
+        nextDeadlineMs - r.offsetMinutes * 60_000,
+      );
+    } else {
+      // Absolute reminders carry their own clock. Re-arm at the
+      // original wall time so the next cycle's ping fires again.
+      newRemindAt = r.remindAt;
+    }
+    await tx.insert(itemReminders).values({
+      itemId: clone.id,
+      kind: r.kind,
+      remindAt: newRemindAt,
+      offsetMinutes: r.offsetMinutes,
+      recurrenceRule: r.recurrenceRule,
+      sent: false,
+    });
+  }
+
+  // Drop any pending reminders on the original — it's done now; the
+  // dispatcher would otherwise keep pinging because it gates on
+  // archived_at, not is_done.
+  await tx
+    .delete(itemReminders)
+    .where(eq(itemReminders.itemId, original.id));
+
+  // Clone attachments. Telegram file_id is bot-scoped and stable
+  // across the bot's lifetime, so the new row references the same
+  // upload — no re-upload, no extra storage.
+  const attachmentRows = await tx
+    .select()
+    .from(itemAttachments)
+    .where(eq(itemAttachments.itemId, original.id));
+  for (const a of attachmentRows) {
+    await tx.insert(itemAttachments).values({
+      itemId: clone.id,
+      chatId: a.chatId,
+      kind: a.kind,
+      telegramFileId: a.telegramFileId,
+      telegramFileUniqueId: a.telegramFileUniqueId,
+      mimeType: a.mimeType,
+      fileSize: a.fileSize,
+      durationSeconds: a.durationSeconds,
+      width: a.width,
+      height: a.height,
+      thumbnailFileId: a.thumbnailFileId,
+      originalFilename: a.originalFilename,
+      uploadedByUserId: a.uploadedByUserId,
+    });
+  }
+
+  await tx.insert(activityLog).values({
+    chatId: original.chatId,
+    entityType: "item",
+    entityId: clone.id,
+    action: "item_created",
+    actorId,
+    payloadBefore: null,
+    payloadAfter: {
+      ...toItemSnapshot(clone),
+      recurrence_clone_of: original.id,
+    },
+  });
+
+  return clone;
 }
