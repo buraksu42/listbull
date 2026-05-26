@@ -1,12 +1,21 @@
-import { getOpsStats, type OpsStats } from "@/lib/db/queries/ops";
+import {
+  getOpsStats,
+  parseOpsWindow,
+  type OpsStats,
+  type OpsWindow,
+} from "@/lib/db/queries/ops";
 
 /**
  * Brand-owner ops dashboard. Server Component, no client JS.
  *
  * Access is gated by `src/middleware.ts` (HTTP basic-auth via
  * LISTBULL_OPS_USER + LISTBULL_OPS_PASSWORD). Data layer: a single
- * `getOpsStats()` call that's also exposed at `/api/ops/stats` —
+ * `getOpsStats(window)` call that's also exposed at `/api/ops/stats` —
  * keep both consumers using the same helper so they can't drift.
+ *
+ * Window switcher is a plain `<form method="get">` so a vanilla
+ * `<select>` triggers a server re-render with `?window=...` — zero
+ * client JS, plays nicely with `force-dynamic`.
  */
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -17,6 +26,21 @@ function n(v: number): string {
 }
 function pct(v: number): string {
   return `${Math.round(v * 100)}%`;
+}
+function ratio(numerator: number, denominator: number): string {
+  if (denominator <= 0) return "—";
+  return `${Math.round((numerator / denominator) * 100)}%`;
+}
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = bytes;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(v >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
 function Card({
@@ -71,8 +95,10 @@ function KV({ rows }: { rows: Array<{ k: string; v: string | number }> }) {
 
 function Sparkline({
   data,
+  windowDays,
 }: {
   data: Array<{ date: string; count: number }>;
+  windowDays: OpsWindow;
 }) {
   if (data.length === 0) return null;
   const max = Math.max(1, ...data.map((d) => d.count));
@@ -87,16 +113,19 @@ function Sparkline({
         height={height}
         className="overflow-visible"
         role="img"
-        aria-label="messages per day, last 14 days"
+        aria-label={`messages per day, last ${windowDays} days`}
       >
         {data.map((d, i) => {
           const h = (d.count / max) * (height - 4);
+          // 90-day window squeezes bars to ~3px — leave a 1px gap up
+          // to 30d, none at 90d so anything stays visible.
+          const gap = windowDays >= 90 ? 0 : 1;
           return (
             <rect
               key={d.date}
-              x={i * barWidth + 1}
+              x={i * barWidth + gap / 2}
               y={height - h}
-              width={barWidth - 2}
+              width={Math.max(0.5, barWidth - gap)}
               height={h}
               rx={1}
               className="fill-zinc-700"
@@ -121,17 +150,61 @@ function renderRecord(rec: Record<string, number>): string {
   return entries.map(([k, v]) => `${k} ${n(v)}`).join(" · ");
 }
 
-export default async function OpsPage() {
-  const stats: OpsStats = await getOpsStats();
+function WindowSwitcher({ current }: { current: OpsWindow }) {
+  // Plain GET form: <select> change reloads the page via JS via
+  // `onChange` would need a client component; instead the operator
+  // picks + clicks "Apply". Snappier than I expected on a fast LAN.
+  // (If this ever feels slow, lift to a tiny client component that
+  // calls router.push on change.)
+  return (
+    <form
+      method="get"
+      action="/ops"
+      className="flex items-center gap-2 text-xs text-zinc-500"
+    >
+      <label htmlFor="window" className="text-zinc-600">
+        Window
+      </label>
+      <select
+        id="window"
+        name="window"
+        defaultValue={String(current)}
+        className="rounded border border-zinc-300 bg-white px-2 py-1 text-zinc-800"
+      >
+        <option value="7">7 days</option>
+        <option value="30">30 days</option>
+        <option value="90">90 days</option>
+      </select>
+      <button
+        type="submit"
+        className="rounded border border-zinc-300 bg-zinc-50 px-2 py-1 text-zinc-700 hover:bg-zinc-100"
+      >
+        Apply
+      </button>
+    </form>
+  );
+}
+
+type PageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function OpsPage({ searchParams }: PageProps) {
+  const sp = (await searchParams) ?? {};
+  const window = parseOpsWindow(sp.window);
+  const stats: OpsStats = await getOpsStats(window);
   const generated = new Date(stats.generatedAt).toUTCString();
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
-      <header className="mb-6 flex items-baseline justify-between">
+      <header className="mb-6 flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-xl font-semibold tracking-tight">
           listbull · ops
         </h1>
-        <div className="text-xs text-zinc-500">generated {generated}</div>
+        <div className="flex items-center gap-4">
+          <WindowSwitcher current={stats.window} />
+          <div className="text-xs text-zinc-500">generated {generated}</div>
+        </div>
       </header>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -215,18 +288,124 @@ export default async function OpsPage() {
           </div>
         </Card>
 
-        <Card title="Throughput (14d)">
-          <Sparkline data={stats.throughput.messagesLast14d} />
+        <Card title={`Throughput (${stats.window}d)`}>
+          <Sparkline
+            data={stats.throughput.messagesByDay}
+            windowDays={stats.window}
+          />
           <div className="mt-3 text-xs text-zinc-500">
             messages/day across all chats
           </div>
         </Card>
 
-        <Card title="Activity (top 10, 7d)">
+        <Card title={`Velocity (${stats.window}d)`}>
+          <div className="grid grid-cols-3 gap-3">
+            <Stat
+              label="Created"
+              value={n(stats.velocity.createdInWindow)}
+            />
+            <Stat
+              label="Completed"
+              value={n(stats.velocity.completedInWindow)}
+            />
+            <Stat
+              label="Close rate"
+              value={ratio(
+                stats.velocity.completedInWindow,
+                stats.velocity.createdInWindow,
+              )}
+              hint={
+                stats.velocity.completedInWindow >
+                stats.velocity.createdInWindow
+                  ? "burning down"
+                  : stats.velocity.completedInWindow <
+                      stats.velocity.createdInWindow
+                    ? "backlog growing"
+                    : "steady"
+              }
+            />
+          </div>
+        </Card>
+
+        <Card title={`Tags (${stats.window}d, top 10)`}>
           <KV
             rows={
-              stats.activity.topActionsLast7d.length > 0
-                ? stats.activity.topActionsLast7d.map((a) => ({
+              stats.tags.topTags.length > 0
+                ? stats.tags.topTags.map((t) => ({
+                    k: `#${t.tag}`,
+                    v: n(t.count),
+                  }))
+                : [{ k: "—", v: "" }]
+            }
+          />
+          <div className="mt-3 text-[10px] text-zinc-400">
+            live items only (archived excluded)
+          </div>
+        </Card>
+
+        <Card title={`Retention (${stats.window}d)`}>
+          <div className="grid grid-cols-3 gap-3">
+            <Stat
+              label="Signups"
+              value={n(stats.retention.signedUpInWindow)}
+            />
+            <Stat
+              label="Active users"
+              value={n(stats.retention.activeInWindow)}
+            />
+            <Stat
+              label="Active share"
+              value={ratio(
+                stats.retention.activeInWindow,
+                stats.retention.totalUsers,
+              )}
+              hint={`/ ${n(stats.retention.totalUsers)} total`}
+            />
+          </div>
+        </Card>
+
+        <Card title="Items per chat">
+          <div className="grid grid-cols-4 gap-3">
+            <Stat label="p50" value={n(stats.itemsPerChat.p50)} />
+            <Stat label="p95" value={n(stats.itemsPerChat.p95)} />
+            <Stat label="max" value={n(stats.itemsPerChat.max)} />
+            <Stat
+              label="avg"
+              value={stats.itemsPerChat.avg.toFixed(1)}
+            />
+          </div>
+          <div className="mt-3 text-[10px] text-zinc-400">
+            live items per chat (archived excluded). p95-vs-max gap
+            flags power-user outliers.
+          </div>
+        </Card>
+
+        <Card title="Attachments">
+          <div className="grid grid-cols-3 gap-3">
+            <Stat
+              label="Total"
+              value={n(stats.attachments.totalCount)}
+            />
+            <Stat
+              label="Storage"
+              value={formatBytes(stats.attachments.totalBytes)}
+              hint="Telegram CDN proxy"
+            />
+            <Stat
+              label={`Added ${stats.window}d`}
+              value={n(stats.attachments.addedInWindow)}
+            />
+          </div>
+          <div className="mt-3 text-xs text-zinc-500">
+            By kind: {renderRecord(stats.attachments.byKind)}
+          </div>
+        </Card>
+
+        <Card title={`Activity (${stats.window}d, top 10)`}>
+          <KV
+            rows={
+              stats.activity.topActions.length > 0
+                ? stats.activity.topActions.map((a) => ({
                     k: a.action,
                     v: n(a.count),
                   }))
@@ -267,9 +446,9 @@ export default async function OpsPage() {
         JSON:{" "}
         <a
           className="underline decoration-dotted hover:text-zinc-600"
-          href="/api/ops/stats"
+          href={`/api/ops/stats?window=${stats.window}`}
         >
-          /api/ops/stats
+          /api/ops/stats?window={stats.window}
         </a>{" "}
         — same data, machine-readable
       </footer>

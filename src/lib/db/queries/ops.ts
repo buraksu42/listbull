@@ -9,6 +9,13 @@
  * Performance: at current scale (hundreds of users, thousands of items)
  * every query is index-covered. If usage grows past ~100k items, swap
  * the heavier counts for materialised views.
+ *
+ * Window parameter (7 | 30 | 90): time-window dropdown on the page,
+ * forwarded via `?window=` on /ops + /api/ops/stats. Default 7.
+ * Fixed-window stats (active7d/30d, fired 7d, created7d/completed7d)
+ * stay anchored so they keep their kalibration meaning regardless of
+ * which window the operator picked — only the new metrics (velocity,
+ * retention, tags, attachments) plus throughput + activity follow it.
  */
 import "server-only";
 
@@ -16,8 +23,18 @@ import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 
+export type OpsWindow = 7 | 30 | 90;
+
+export function parseOpsWindow(raw: string | string[] | undefined): OpsWindow {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (v === "30") return 30;
+  if (v === "90") return 90;
+  return 7;
+}
+
 export type OpsStats = {
   generatedAt: string;
+  window: OpsWindow;
   users: {
     total: number;
     activeLast7d: number;
@@ -49,10 +66,10 @@ export type OpsStats = {
     completedLast7d: number;
   };
   throughput: {
-    messagesLast14d: Array<{ date: string; count: number }>;
+    messagesByDay: Array<{ date: string; count: number }>;
   };
   activity: {
-    topActionsLast7d: Array<{ action: string; count: number }>;
+    topActions: Array<{ action: string; count: number }>;
   };
   models: {
     topModels: Array<{ model: string; count: number }>;
@@ -60,6 +77,30 @@ export type OpsStats = {
   reminders: {
     pendingNext24h: number;
     firedLast7d: number;
+  };
+  velocity: {
+    createdInWindow: number;
+    completedInWindow: number;
+  };
+  retention: {
+    signedUpInWindow: number;
+    activeInWindow: number;
+    totalUsers: number;
+  };
+  tags: {
+    topTags: Array<{ tag: string; count: number }>;
+  };
+  itemsPerChat: {
+    p50: number;
+    p95: number;
+    max: number;
+    avg: number;
+  };
+  attachments: {
+    totalCount: number;
+    byKind: Record<string, number>;
+    totalBytes: number;
+    addedInWindow: number;
   };
 };
 
@@ -240,14 +281,15 @@ async function selectItems() {
   };
 }
 
-async function selectThroughput() {
-  // 14-day window, day-bucketed. `generate_series` ensures empty days
-  // show up as 0 (vs missing) — important so the array length is
-  // always 14 and renders predictably.
+async function selectThroughput(windowDays: OpsWindow) {
+  // `generate_series` ensures empty days show up as 0 (vs missing) so
+  // the array length is always `windowDays` and renders predictably.
+  // `interval '1 day' * N` sends N as a bind parameter — safe even
+  // though the windowDays whitelist is already enforced upstream.
   const rows = await db.execute<{ day: Date; count: number }>(sql`
     WITH days AS (
       SELECT generate_series(
-        (NOW() AT TIME ZONE 'UTC')::date - interval '13 days',
+        (NOW() AT TIME ZONE 'UTC')::date - (interval '1 day' * ${windowDays - 1}),
         (NOW() AT TIME ZONE 'UTC')::date,
         interval '1 day'
       )::date AS day
@@ -262,24 +304,24 @@ async function selectThroughput() {
     ORDER BY d.day ASC
   `);
   return {
-    messagesLast14d: rows.map((r) => ({
+    messagesByDay: rows.map((r) => ({
       date: r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day),
       count: r.count,
     })),
   };
 }
 
-async function selectActivity() {
+async function selectActivity(windowDays: OpsWindow) {
   const rows = await db.execute<{ action: string; count: number }>(sql`
     SELECT action, count(*)::int AS count
     FROM activity_log
-    WHERE created_at >= NOW() - interval '7 days'
+    WHERE created_at >= NOW() - (interval '1 day' * ${windowDays})
     GROUP BY action
     ORDER BY count DESC
     LIMIT 10
   `);
   return {
-    topActionsLast7d: rows.map((r) => ({
+    topActions: rows.map((r) => ({
       action: r.action,
       count: r.count,
     })),
@@ -320,25 +362,151 @@ async function selectReminders() {
   };
 }
 
+async function selectVelocity(windowDays: OpsWindow) {
+  // Window-bound create-vs-complete counts. Operator reads the ratio
+  // (UI-side) as "what fraction of work flowing in is closing out".
+  // Sub-1 ratio = backlog growing.
+  const [row] = await db.execute<{
+    created: number;
+    completed: number;
+  }>(sql`
+    SELECT
+      count(*) FILTER (
+        WHERE created_at >= NOW() - (interval '1 day' * ${windowDays})
+      )::int AS created,
+      count(*) FILTER (
+        WHERE completed_at >= NOW() - (interval '1 day' * ${windowDays})
+      )::int AS completed
+    FROM items
+  `);
+  return {
+    createdInWindow: row?.created ?? 0,
+    completedInWindow: row?.completed ?? 0,
+  };
+}
+
+async function selectRetention(windowDays: OpsWindow) {
+  // Simple churn-ish signal. NOT a cohort matrix — we surface raw
+  // numerators + denominators and let the UI do the ratio. Future
+  // work upgrades this to a full signup-week × active-week grid.
+  const [row] = await db.execute<{
+    signed_up: number;
+    active: number;
+    total: number;
+  }>(sql`
+    SELECT
+      (SELECT count(*)::int FROM users
+        WHERE created_at >= NOW() - (interval '1 day' * ${windowDays})
+      ) AS signed_up,
+      (SELECT count(DISTINCT user_id)::int FROM messages
+        WHERE created_at >= NOW() - (interval '1 day' * ${windowDays})
+      ) AS active,
+      (SELECT count(*)::int FROM users) AS total
+  `);
+  return {
+    signedUpInWindow: row?.signed_up ?? 0,
+    activeInWindow: row?.active ?? 0,
+    totalUsers: row?.total ?? 0,
+  };
+}
+
+async function selectTags(windowDays: OpsWindow) {
+  // unnest the text[] column then count occurrences. Scoped to live
+  // items (archived_at IS NULL) so deleted lists don't pollute the
+  // signal; window'd on created_at so we see what's currently in
+  // play, not what's been there forever.
+  const rows = await db.execute<{ tag: string; count: number }>(sql`
+    SELECT tag, count(*)::int AS count
+    FROM items, unnest(tags) AS tag
+    WHERE archived_at IS NULL
+      AND created_at >= NOW() - (interval '1 day' * ${windowDays})
+    GROUP BY tag
+    ORDER BY count DESC
+    LIMIT 10
+  `);
+  return {
+    topTags: rows.map((r) => ({ tag: r.tag, count: r.count })),
+  };
+}
+
+async function selectItemsPerChat() {
+  // Point-in-time distribution (no window). Tells the operator
+  // whether one chat is a power-user outlier vs the bulk. p95/max
+  // gap is the noise-floor for "do we need pagination tuning?".
+  const [row] = await db.execute<{
+    p50: number;
+    p95: number;
+    max: number;
+    avg: number;
+  }>(sql`
+    WITH counts AS (
+      SELECT chat_id, count(*)::int AS n
+      FROM items
+      WHERE archived_at IS NULL
+      GROUP BY chat_id
+    )
+    SELECT
+      COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY n), 0)::int AS p50,
+      COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY n), 0)::int AS p95,
+      COALESCE(max(n), 0)::int AS max,
+      COALESCE(avg(n), 0)::float AS avg
+    FROM counts
+  `);
+  return {
+    p50: row?.p50 ?? 0,
+    p95: row?.p95 ?? 0,
+    max: row?.max ?? 0,
+    avg: row?.avg ?? 0,
+  };
+}
+
+async function selectAttachments(windowDays: OpsWindow) {
+  // Telegram file_id refs only — the bytes live on Telegram's CDN —
+  // but we still track `file_size` so the operator has a "how much
+  // user data would we need to re-host if Telegram ever ToS'd us"
+  // number. by_kind splits photo / video / document / etc.
+  const [totals, byKind] = await Promise.all([
+    db.execute<{
+      total: number;
+      total_bytes: number;
+      added: number;
+    }>(sql`
+      SELECT
+        count(*)::int AS total,
+        COALESCE(SUM(file_size), 0)::bigint AS total_bytes,
+        count(*) FILTER (
+          WHERE created_at >= NOW() - (interval '1 day' * ${windowDays})
+        )::int AS added
+      FROM item_attachments
+    `),
+    db.execute<{ kind: string; count: number }>(sql`
+      SELECT kind, count(*)::int AS count
+      FROM item_attachments
+      GROUP BY kind
+      ORDER BY count DESC
+    `),
+  ]);
+  const t = totals[0] ?? { total: 0, total_bytes: 0, added: 0 };
+  const byKindMap: Record<string, number> = {};
+  for (const row of byKind) byKindMap[row.kind] = row.count;
+  // total_bytes comes back as bigint string from postgres-js; Number
+  // is fine up to 9 PB which we'll never approach for a Telegram-CDN
+  // metadata store.
+  return {
+    totalCount: t.total,
+    totalBytes: Number(t.total_bytes ?? 0),
+    addedInWindow: t.added,
+    byKind: byKindMap,
+  };
+}
+
 /**
  * Fetches every dashboard metric in parallel. Read-only, no transaction
  * needed — counts are independent and a few seconds of drift between
  * them is acceptable for a dashboard refresh.
  */
-export async function getOpsStats(): Promise<OpsStats> {
-  const [users, chats, items, throughput, activity, models, reminders] =
-    await Promise.all([
-      selectUsers(),
-      selectChats(),
-      selectItems(),
-      selectThroughput(),
-      selectActivity(),
-      selectModels(),
-      selectReminders(),
-    ]);
-
-  return {
-    generatedAt: new Date().toISOString(),
+export async function getOpsStats(window: OpsWindow = 7): Promise<OpsStats> {
+  const [
     users,
     chats,
     items,
@@ -346,5 +514,40 @@ export async function getOpsStats(): Promise<OpsStats> {
     activity,
     models,
     reminders,
+    velocity,
+    retention,
+    tags,
+    itemsPerChat,
+    attachments,
+  ] = await Promise.all([
+    selectUsers(),
+    selectChats(),
+    selectItems(),
+    selectThroughput(window),
+    selectActivity(window),
+    selectModels(),
+    selectReminders(),
+    selectVelocity(window),
+    selectRetention(window),
+    selectTags(window),
+    selectItemsPerChat(),
+    selectAttachments(window),
+  ]);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    window,
+    users,
+    chats,
+    items,
+    throughput,
+    activity,
+    models,
+    reminders,
+    velocity,
+    retention,
+    tags,
+    itemsPerChat,
+    attachments,
   };
 }
