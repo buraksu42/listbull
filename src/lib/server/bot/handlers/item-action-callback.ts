@@ -32,10 +32,15 @@ import { buildSubItemsView } from "@/lib/server/bot/views/sub-items";
 import { insertBotActionContext } from "@/lib/db/queries/bot-action-contexts";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
-import { rollupParentDoneState, type RollupResult } from "@/lib/server/tools/_shared";
+import {
+  recomputeOffsetReminders,
+  rollupParentDoneState,
+  type RollupResult,
+} from "@/lib/server/tools/_shared";
 import { toItemSnapshot } from "@/lib/db/snapshots";
 import { executeUpdateItem } from "@/lib/server/tools/update-item";
 import {
+  nextOccurrence,
   RECURRENCE_PRESETS,
   recurrenceLabel,
 } from "@/lib/server/recurrence";
@@ -655,7 +660,10 @@ export async function handleItemActionCallback(
     // Wrapped in an object to defeat TS's narrowing of `let` written
     // only inside a closure (otherwise the post-tx access reads as
     // `never`).
-    const captured: { rollup: RollupResult | null } = { rollup: null };
+    const captured: { rollup: RollupResult | null; recurred: boolean } = {
+      rollup: null,
+      recurred: false,
+    };
     await db.transaction(async (tx) => {
       const [current] = await tx
         .select()
@@ -665,22 +673,47 @@ export async function handleItemActionCallback(
       if (!current) return;
       toggledParentId = current.parentItemId;
       const next = !current.isDone;
+      // Recurrence advance — mirrors complete-item executor. When the
+      // user taps the checkbox on a recurring item, keep it open and
+      // bump deadline_at to the next RRULE occurrence. Without this
+      // the button path silently sends the item to /done while the
+      // LLM path (complete_item executor) correctly cycles it.
+      //
+      // TODO: dedupe with executeCompleteItem — extract a shared
+      // toggleItemDone helper that both paths call.
+      const now = new Date();
+      let advancedDeadline: Date | null = null;
+      let effectiveDone = next;
+      if (next && current.taskRecurrenceRule) {
+        const anchor = current.deadlineAt ?? now;
+        const nextOcc = nextOccurrence(current.taskRecurrenceRule, anchor);
+        if (nextOcc) {
+          effectiveDone = false;
+          advancedDeadline = nextOcc;
+          captured.recurred = true;
+        }
+      }
       const [updated] = await tx
         .update(items)
         .set({
-          isDone: next,
-          status: next ? "done" : "open",
-          completedAt: next ? new Date() : null,
-          updatedAt: new Date(),
+          isDone: effectiveDone,
+          status: effectiveDone ? "done" : "open",
+          completedAt: effectiveDone ? now : null,
+          ...(advancedDeadline ? { deadlineAt: advancedDeadline } : {}),
+          updatedAt: now,
         })
         .where(eq(items.id, itemId))
         .returning();
       if (!updated) return;
+      // Re-anchor before_deadline reminders when the cycle advanced.
+      if (advancedDeadline) {
+        await recomputeOffsetReminders(tx, itemId, advancedDeadline);
+      }
       await tx.insert(activityLog).values({
         chatId,
         entityType: "item",
         entityId: itemId,
-        action: next ? "item_completed" : "item_uncompleted",
+        action: effectiveDone ? "item_completed" : "item_uncompleted",
         actorId: user.id,
         payloadBefore: toItemSnapshot(current),
         payloadAfter: toItemSnapshot(updated),
@@ -696,11 +729,15 @@ export async function handleItemActionCallback(
       );
     });
     const r = captured.rollup;
-    // Toast on rollup flip so the user sees the parent state change
-    // — the sub-items view header gains a ✅ on parent too, but a
-    // popup is unmissable.
-    const toast: string | undefined =
-      r && r.flipped && r.parentNowDone === true
+    // Toast priority: recurrence-advance message wins (it's the
+    // unusual case the user needs to see — "this didn't go to /done,
+    // it moved to tomorrow"). Otherwise fall back to checklist
+    // rollup toasts, then silent ack.
+    const toast: string | undefined = captured.recurred
+      ? locale === "tr"
+        ? "🔁 Tamamlandı — sonraki açıldı"
+        : "🔁 Done — next cycle opened"
+      : r && r.flipped && r.parentNowDone === true
         ? locale === "tr"
           ? "✅ Checklist tamamlandı"
           : "✅ Checklist done"
