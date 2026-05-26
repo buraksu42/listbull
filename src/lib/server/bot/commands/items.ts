@@ -20,6 +20,7 @@ import { db } from "@/lib/db/client";
 import { itemAttachments, itemReminders, items } from "@/lib/db/schema";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
+import { recurrenceLabel } from "@/lib/server/recurrence";
 
 // Page size kept small so each item's label + action row sit together
 // on screen — the screenshot bug (scrolled-off buttons being ambiguous)
@@ -205,6 +206,11 @@ export async function buildItemsView(
     }
     const text =
       it.text.length > 200 ? `${it.text.slice(0, 200)}…` : it.text;
+    // 🔁 marker for recurring tasks. Sits next to the deadline indicator
+    // because the two are conceptually linked (recurrence advances the
+    // deadline on completion). Single icon — the period (daily/weekly/…)
+    // shows on the action button label, keeping the list line scannable.
+    const recurrenceSuffix = it.taskRecurrenceRule ? " 🔁" : "";
     const attachCount = attachmentCounts.get(it.id) ?? 0;
     const attachSuffix = attachCount > 0 ? ` 📎${attachCount}` : "";
     const reminderCount = reminderCounts.get(it.id) ?? 0;
@@ -213,7 +219,7 @@ export async function buildItemsView(
     const childDone = childDoneCounts.get(it.id) ?? 0;
     const childSuffix = childTotal > 0 ? ` 📂${childDone}/${childTotal}` : "";
     lines.push(
-      `${num}. ${checkbox} ${priorityIcon}${statusIcon}${text}${deadlineSuffix}${reminderSuffix}${attachSuffix}${childSuffix}${tagSuffix}`,
+      `${num}. ${checkbox} ${priorityIcon}${statusIcon}${text}${deadlineSuffix}${recurrenceSuffix}${reminderSuffix}${attachSuffix}${childSuffix}${tagSuffix}`,
     );
     // Row A — wide numbered label, taps to toggle. Number prevents the
     // "which item does this button belong to?" ambiguity when the
@@ -246,6 +252,15 @@ export async function buildItemsView(
           ? `📂 Alt-itemlar (${childDone}/${childTotal})`
           : `📂 Sub-items (${childDone}/${childTotal})`;
       keyboard.text(label, `item:children:${it.id}`).row();
+    }
+    // Row D (conditional) — recurrence picker. Shown when the item
+    // either has a deadline (so we can anchor the cycle) or already
+    // has a rule set (so the user can change/clear it). Items with
+    // neither don't get the button — set a deadline first, by text
+    // ("yarın 22:00") or the 📅 button.
+    if (it.deadlineAt || it.taskRecurrenceRule) {
+      const label = `🔁 ${recurrenceLabel(it.taskRecurrenceRule, locale)}`;
+      keyboard.text(label, `item:recur:${it.id}`).row();
     }
   }
 

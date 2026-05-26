@@ -34,6 +34,11 @@ import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
 import { rollupParentDoneState, type RollupResult } from "@/lib/server/tools/_shared";
 import { toItemSnapshot } from "@/lib/db/snapshots";
+import { executeUpdateItem } from "@/lib/server/tools/update-item";
+import {
+  RECURRENCE_PRESETS,
+  recurrenceLabel,
+} from "@/lib/server/recurrence";
 
 export async function handleItemActionCallback(
   ctx: Context,
@@ -406,6 +411,151 @@ export async function handleItemActionCallback(
     await ctx.answerCallbackQuery();
     const view = await buildSubItemsView(parentId, chatId, locale, 0);
     await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+    return;
+  }
+
+  // ─── item:recur — recurrence picker ───────────────────────────────
+  //
+  // Two shapes:
+  //   item:recur:<uuid>           → open the picker sub-view
+  //   item:recur:<uuid>:<token>   → apply selection (d/w/m/y/x) or
+  //                                 navigate back (b)
+  //
+  // Single-letter tokens keep callback_data under Telegram's 64-byte
+  // cap: prefix(11) + uuid(36) + ":t"(2) = 49 chars.
+  if (data.startsWith("item:recur:")) {
+    const rest = data.slice("item:recur:".length);
+    const colonIdx = rest.indexOf(":");
+    const itemId = colonIdx === -1 ? rest : rest.slice(0, colonIdx);
+    const token = colonIdx === -1 ? null : rest.slice(colonIdx + 1);
+
+    const [item] = await db
+      .select({
+        id: items.id,
+        text: items.text,
+        deadlineAt: items.deadlineAt,
+        taskRecurrenceRule: items.taskRecurrenceRule,
+      })
+      .from(items)
+      .where(and(eq(items.id, itemId), eq(items.chatId, chatId)))
+      .limit(1);
+    if (!item) {
+      await ctx.answerCallbackQuery(
+        locale === "tr" ? "Bulunamadı." : "Not found.",
+      );
+      return;
+    }
+
+    // Back to /items view without mutating anything.
+    if (token === "b") {
+      await ctx.answerCallbackQuery();
+      const view = await buildItemsView(chatId, locale, 0);
+      await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+      return;
+    }
+
+    // Apply a preset (or clear). The picker enforces deadline-present
+    // when it opens — but a race (user opens picker before clearing
+    // deadline elsewhere) could still get here; update_item handles
+    // that gracefully (it'll set the rule; complete_item will simply
+    // not advance without a deadline).
+    if (
+      token === "d" ||
+      token === "w" ||
+      token === "m" ||
+      token === "y" ||
+      token === "x"
+    ) {
+      const tokenToRule: Record<string, string | null> = {
+        d: RECURRENCE_PRESETS.daily,
+        w: RECURRENCE_PRESETS.weekly,
+        m: RECURRENCE_PRESETS.monthly,
+        y: RECURRENCE_PRESETS.yearly,
+        x: null,
+      };
+      const newRule = tokenToRule[token] ?? null;
+      const res = await executeUpdateItem(
+        { item_id: itemId, task_recurrence_rule: newRule },
+        { userId: user.id, chatId },
+      );
+      if (!res.ok) {
+        await ctx.answerCallbackQuery(
+          locale === "tr"
+            ? "Kaydedilemedi."
+            : "Couldn't save.",
+        );
+        return;
+      }
+      const newLabel = recurrenceLabel(newRule, locale);
+      await ctx.answerCallbackQuery(
+        locale === "tr"
+          ? newRule
+            ? `✓ Tekrar: ${newLabel}`
+            : "✓ Tekrar kaldırıldı"
+          : newRule
+            ? `✓ Repeat: ${newLabel}`
+            : "✓ Repeat cleared",
+      );
+      const view = await buildItemsView(chatId, locale, 0);
+      try {
+        await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+      } catch {
+        // message-not-modified is fine (same content)
+      }
+      return;
+    }
+
+    // Open picker. Capped item title in the header so the message
+    // stays short on mobile.
+    const title =
+      item.text.length > 60 ? `${item.text.slice(0, 60)}…` : item.text;
+    const current = recurrenceLabel(item.taskRecurrenceRule, locale);
+    const lines =
+      locale === "tr"
+        ? [
+            "🔁 Tekrar sıklığı",
+            "",
+            `"${title}"`,
+            "",
+            `Şu an: ${current}`,
+            "",
+            !item.deadlineAt
+              ? "⚠️ Bu item'da deadline yok — tekrar için önce 📅 ile tarih kur."
+              : "Bir sıklık seç — tamamladığında bir sonraki occurrence otomatik açılır.",
+          ]
+        : [
+            "🔁 Repeat",
+            "",
+            `"${title}"`,
+            "",
+            `Current: ${current}`,
+            "",
+            !item.deadlineAt
+              ? "⚠️ No deadline yet — set one via 📅 first so the cycle has an anchor."
+              : "Pick a frequency — next occurrence opens automatically on completion.",
+          ];
+
+    const kb = new InlineKeyboard()
+      .text(locale === "tr" ? "Günlük" : "Daily", `item:recur:${itemId}:d`)
+      .text(locale === "tr" ? "Haftalık" : "Weekly", `item:recur:${itemId}:w`)
+      .row()
+      .text(locale === "tr" ? "Aylık" : "Monthly", `item:recur:${itemId}:m`)
+      .text(locale === "tr" ? "Yıllık" : "Yearly", `item:recur:${itemId}:y`)
+      .row();
+    if (item.taskRecurrenceRule) {
+      kb.text(
+        locale === "tr" ? "🗑️ Tekrarı kaldır" : "🗑️ Clear repeat",
+        `item:recur:${itemId}:x`,
+      ).row();
+    }
+    kb.text(locale === "tr" ? "← Geri" : "← Back", `item:recur:${itemId}:b`);
+
+    await ctx.answerCallbackQuery();
+    try {
+      await ctx.editMessageText(lines.join("\n"), { reply_markup: kb });
+    } catch {
+      // ignore "message not modified" / uneditable
+    }
     return;
   }
 

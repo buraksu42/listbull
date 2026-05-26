@@ -28,6 +28,7 @@ import {
   items,
   users,
 } from "@/lib/db/schema";
+import { nextOccurrence } from "@/lib/server/recurrence";
 import type { ItemReminderKind, ReminderJobItem } from "@/lib/types";
 import { getBot } from "@/lib/server/bot";
 import { pickLocale } from "@/lib/server/bot/i18n";
@@ -167,11 +168,37 @@ export async function dispatchReminders(): Promise<{
 
     try {
       await bot.api.sendMessage(targetTg, body);
-      await db.execute(sql`
-        UPDATE item_reminders
-           SET sent = true, sent_at = NOW()
-         WHERE id = ${r.reminderId}
-      `);
+      // Recurring reminders re-arm: compute the next occurrence
+      // relative to the just-fired remind_at and reset sent=false so
+      // the dispatcher picks the row up again on its next cycle. Drop
+      // back to permanent-sent ONLY when the rule has no further
+      // occurrence (UNTIL= past) so the row doesn't loop forever.
+      if (r.recurrenceRule) {
+        // r.remindAt is the ISO string already; nextOccurrence takes a
+        // Date for its rrule dtstart. Round-trip via new Date().
+        const nextAt = nextOccurrence(r.recurrenceRule, new Date(r.remindAt));
+        if (nextAt) {
+          await db.execute(sql`
+            UPDATE item_reminders
+               SET remind_at = ${nextAt.toISOString()}::timestamptz,
+                   sent = false,
+                   sent_at = NOW()
+             WHERE id = ${r.reminderId}
+          `);
+        } else {
+          await db.execute(sql`
+            UPDATE item_reminders
+               SET sent = true, sent_at = NOW()
+             WHERE id = ${r.reminderId}
+          `);
+        }
+      } else {
+        await db.execute(sql`
+          UPDATE item_reminders
+             SET sent = true, sent_at = NOW()
+           WHERE id = ${r.reminderId}
+        `);
+      }
       sent++;
     } catch (e) {
       console.error("[dispatch-reminders] send failed", {

@@ -2,8 +2,15 @@
  * Executor: `complete_item` (Phase 17 chat-only).
  *
  * Toggle is_done. When the item has a task_recurrence_rule AND is
- * being completed, we KEEP it open and surface a 'task_recurred'
- * warning so the LLM/caller can advance the deadline in a follow-up.
+ * being completed, we keep it open, ADVANCE deadline_at to the
+ * next RRULE occurrence, and recompute any before_deadline
+ * reminders so they re-arm for the new cycle. A 'task_recurred'
+ * warning is returned so callers know to surface "moved to
+ * <new deadline>" to the user.
+ *
+ * If the rule has no further occurrence (UNTIL= past) or the item
+ * has no deadline anchor, we fall back to normal completion — a
+ * recurring item with no deadline has no anchor to advance.
  */
 import "server-only";
 
@@ -15,7 +22,15 @@ import {
   completeItemInputSchema,
   type CompleteItemOutput,
 } from "@/lib/ai/tools";
-import { ERR, err, ok, rollupParentDoneState, toItemSnapshot } from "./_shared";
+import { nextOccurrence } from "@/lib/server/recurrence";
+import {
+  ERR,
+  err,
+  ok,
+  recomputeOffsetReminders,
+  rollupParentDoneState,
+  toItemSnapshot,
+} from "./_shared";
 
 import type { ExecResult } from "./_shared";
 
@@ -88,11 +103,27 @@ export async function executeCompleteItem(
       updatedAt: now,
     };
 
-    if (is_done && current.taskRecurrenceRule) {
-      patch.isDone = false;
-      patch.status = "open";
-      patch.completedAt = null;
-      warnings.push("task_recurred");
+    // Recurrence advance: compute next occurrence relative to the
+    // CURRENT deadline (not "now") so a delayed completion stays on
+    // the natural cadence — completing yesterday's missed pill today
+    // still advances to tomorrow's slot, not 24h from now.
+    let advancedDeadline: Date | null = null;
+    if (is_done && current.taskRecurrenceRule && current.deadlineAt) {
+      const next = nextOccurrence(
+        current.taskRecurrenceRule,
+        current.deadlineAt,
+      );
+      if (next) {
+        patch.isDone = false;
+        patch.status = "open";
+        patch.completedAt = null;
+        patch.deadlineAt = next;
+        advancedDeadline = next;
+        warnings.push("task_recurred");
+      }
+      // next === null → rule exhausted (UNTIL= past) or malformed.
+      // Fall through to normal completion so the user isn't stuck
+      // with an item that won't close.
     }
 
     const [updated] = await tx
@@ -101,6 +132,14 @@ export async function executeCompleteItem(
       .where(eq(items.id, item_id))
       .returning();
     if (!updated) throw new Error("complete-item: update returned no row");
+
+    // before_deadline reminders re-anchor off the new deadline. The
+    // helper also resets `sent=false` so the next cycle's ping fires.
+    // (absolute + recurrence_rule reminders advance separately in the
+    // cron dispatcher; absolute one-shots stay sent.)
+    if (advancedDeadline) {
+      await recomputeOffsetReminders(tx, item_id, advancedDeadline);
+    }
 
     await tx.insert(activityLog).values({
       chatId: ctx.chatId,
