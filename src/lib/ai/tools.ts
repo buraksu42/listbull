@@ -239,7 +239,16 @@ export const completeItemInputSchema = z.object({
 
 export const completeItemOutputSchema = z.object({
   item: itemSnapshotSchema,
-  /** When the item had task_recurrence_rule and we advanced instead of marking done. */
+  /**
+   * When `item.task_recurrence_rule` was set, the executor clones the
+   * item: `item` is the now-done original (lands in /done), `new_item`
+   * is the freshly-inserted next cycle (lives in /items) carrying the
+   * same text / description / reminders / attachments and a new
+   * deadline at the rule's next occurrence. Absent on non-recurring
+   * completions and on rule-exhausted (UNTIL= past) completions.
+   */
+  new_item: itemSnapshotSchema.optional(),
+  /** When the item had task_recurrence_rule and we cloned instead of marking done permanently. */
   warnings: z.array(z.string()).optional(),
 });
 
@@ -701,9 +710,12 @@ export const tools = [
     name: "complete_item",
     description:
       "Mark an item done (or undone with is_done=false). When the item has a task_recurrence_rule, " +
-      "completion ADVANCES the deadline to the rule's next occurrence and resets is_done=false / " +
-      "status='open' instead of permanently completing — the warnings array carries " +
-      "'task_recurred' so you can phrase the reply accordingly. Phrase confirmation as " +
+      "the executor CLONES it: the original is marked done (lands in /done as the audit row) and a " +
+      "fresh item is inserted in /items with the same text / description / priority / tags / " +
+      "reminders / attachments / recurrence rule and `deadline_at` set to the rule's next occurrence. " +
+      "The warnings array carries 'task_recurred' and the `new_item` field holds the cloned row — " +
+      "use it to phrase 'Tamamlandı — 🔁 yeni açıldı: <new_item.text> · <new_item.deadline>'. " +
+      "Phrase normal confirmation as " +
       "'✓ <text> tamam' (TR) / '✓ <text> done' (EN). " +
       "**Checklist gate**: when the target is a top-level parent with open sub-items, the " +
       "executor returns `gate_blocked` listing the open children. Surface them to the user — " +

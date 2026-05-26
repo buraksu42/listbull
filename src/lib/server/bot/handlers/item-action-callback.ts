@@ -32,8 +32,19 @@ import { buildSubItemsView } from "@/lib/server/bot/views/sub-items";
 import { insertBotActionContext } from "@/lib/db/queries/bot-action-contexts";
 import { getUserByTelegramId } from "@/lib/db/queries/users";
 import { pickLocale } from "@/lib/server/bot/i18n";
-import { rollupParentDoneState, type RollupResult } from "@/lib/server/tools/_shared";
+import {
+  cloneRecurringItemAsNextCycle,
+  rollupParentDoneState,
+  type RollupResult,
+} from "@/lib/server/tools/_shared";
 import { toItemSnapshot } from "@/lib/db/snapshots";
+import { executeUpdateItem } from "@/lib/server/tools/update-item";
+import {
+  nextOccurrence,
+  RECURRENCE_PRESETS,
+  recurrenceLabel,
+} from "@/lib/server/recurrence";
+import { formatDate } from "@/lib/utils/format-date";
 
 export async function handleItemActionCallback(
   ctx: Context,
@@ -409,6 +420,151 @@ export async function handleItemActionCallback(
     return;
   }
 
+  // ─── item:recur — recurrence picker ───────────────────────────────
+  //
+  // Two shapes:
+  //   item:recur:<uuid>           → open the picker sub-view
+  //   item:recur:<uuid>:<token>   → apply selection (d/w/m/y/x) or
+  //                                 navigate back (b)
+  //
+  // Single-letter tokens keep callback_data under Telegram's 64-byte
+  // cap: prefix(11) + uuid(36) + ":t"(2) = 49 chars.
+  if (data.startsWith("item:recur:")) {
+    const rest = data.slice("item:recur:".length);
+    const colonIdx = rest.indexOf(":");
+    const itemId = colonIdx === -1 ? rest : rest.slice(0, colonIdx);
+    const token = colonIdx === -1 ? null : rest.slice(colonIdx + 1);
+
+    const [item] = await db
+      .select({
+        id: items.id,
+        text: items.text,
+        deadlineAt: items.deadlineAt,
+        taskRecurrenceRule: items.taskRecurrenceRule,
+      })
+      .from(items)
+      .where(and(eq(items.id, itemId), eq(items.chatId, chatId)))
+      .limit(1);
+    if (!item) {
+      await ctx.answerCallbackQuery(
+        locale === "tr" ? "Bulunamadı." : "Not found.",
+      );
+      return;
+    }
+
+    // Back to /items view without mutating anything.
+    if (token === "b") {
+      await ctx.answerCallbackQuery();
+      const view = await buildItemsView(chatId, locale, 0);
+      await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+      return;
+    }
+
+    // Apply a preset (or clear). The picker enforces deadline-present
+    // when it opens — but a race (user opens picker before clearing
+    // deadline elsewhere) could still get here; update_item handles
+    // that gracefully (it'll set the rule; complete_item will simply
+    // not advance without a deadline).
+    if (
+      token === "d" ||
+      token === "w" ||
+      token === "m" ||
+      token === "y" ||
+      token === "x"
+    ) {
+      const tokenToRule: Record<string, string | null> = {
+        d: RECURRENCE_PRESETS.daily,
+        w: RECURRENCE_PRESETS.weekly,
+        m: RECURRENCE_PRESETS.monthly,
+        y: RECURRENCE_PRESETS.yearly,
+        x: null,
+      };
+      const newRule = tokenToRule[token] ?? null;
+      const res = await executeUpdateItem(
+        { item_id: itemId, task_recurrence_rule: newRule },
+        { userId: user.id, chatId },
+      );
+      if (!res.ok) {
+        await ctx.answerCallbackQuery(
+          locale === "tr"
+            ? "Kaydedilemedi."
+            : "Couldn't save.",
+        );
+        return;
+      }
+      const newLabel = recurrenceLabel(newRule, locale);
+      await ctx.answerCallbackQuery(
+        locale === "tr"
+          ? newRule
+            ? `✓ Tekrar: ${newLabel}`
+            : "✓ Tekrar kaldırıldı"
+          : newRule
+            ? `✓ Repeat: ${newLabel}`
+            : "✓ Repeat cleared",
+      );
+      const view = await buildItemsView(chatId, locale, 0);
+      try {
+        await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+      } catch {
+        // message-not-modified is fine (same content)
+      }
+      return;
+    }
+
+    // Open picker. Capped item title in the header so the message
+    // stays short on mobile.
+    const title =
+      item.text.length > 60 ? `${item.text.slice(0, 60)}…` : item.text;
+    const current = recurrenceLabel(item.taskRecurrenceRule, locale);
+    const lines =
+      locale === "tr"
+        ? [
+            "🔁 Tekrar sıklığı",
+            "",
+            `"${title}"`,
+            "",
+            `Şu an: ${current}`,
+            "",
+            !item.deadlineAt
+              ? "⚠️ Bu item'da deadline yok — tekrar için önce 📅 ile tarih kur."
+              : "Bir sıklık seç — tamamladığında bir sonraki occurrence otomatik açılır.",
+          ]
+        : [
+            "🔁 Repeat",
+            "",
+            `"${title}"`,
+            "",
+            `Current: ${current}`,
+            "",
+            !item.deadlineAt
+              ? "⚠️ No deadline yet — set one via 📅 first so the cycle has an anchor."
+              : "Pick a frequency — next occurrence opens automatically on completion.",
+          ];
+
+    const kb = new InlineKeyboard()
+      .text(locale === "tr" ? "Günlük" : "Daily", `item:recur:${itemId}:d`)
+      .text(locale === "tr" ? "Haftalık" : "Weekly", `item:recur:${itemId}:w`)
+      .row()
+      .text(locale === "tr" ? "Aylık" : "Monthly", `item:recur:${itemId}:m`)
+      .text(locale === "tr" ? "Yıllık" : "Yearly", `item:recur:${itemId}:y`)
+      .row();
+    if (item.taskRecurrenceRule) {
+      kb.text(
+        locale === "tr" ? "🗑️ Tekrarı kaldır" : "🗑️ Clear repeat",
+        `item:recur:${itemId}:x`,
+      ).row();
+    }
+    kb.text(locale === "tr" ? "← Geri" : "← Back", `item:recur:${itemId}:b`);
+
+    await ctx.answerCallbackQuery();
+    try {
+      await ctx.editMessageText(lines.join("\n"), { reply_markup: kb });
+    } catch {
+      // ignore "message not modified" / uneditable
+    }
+    return;
+  }
+
   if (data.startsWith("item:add_child:")) {
     const parentId = data.slice("item:add_child:".length);
     const [parent] = await db
@@ -505,7 +661,13 @@ export async function handleItemActionCallback(
     // Wrapped in an object to defeat TS's narrowing of `let` written
     // only inside a closure (otherwise the post-tx access reads as
     // `never`).
-    const captured: { rollup: RollupResult | null } = { rollup: null };
+    const captured: {
+      rollup: RollupResult | null;
+      clone: { text: string; deadlineAt: Date | null } | null;
+    } = {
+      rollup: null,
+      clone: null,
+    };
     await db.transaction(async (tx) => {
       const [current] = await tx
         .select()
@@ -515,17 +677,40 @@ export async function handleItemActionCallback(
       if (!current) return;
       toggledParentId = current.parentItemId;
       const next = !current.isDone;
+      // Recurrence clone — mirrors complete-item executor. When the
+      // user taps the checkbox on a recurring item, the original
+      // lands in /done and a fresh row is inserted in /items with
+      // the same text / reminders / attachments and a new deadline.
+      const now = new Date();
+      let nextCycleDeadline: Date | null = null;
+      if (next && current.taskRecurrenceRule) {
+        const anchor = current.deadlineAt ?? now;
+        const nextOcc = nextOccurrence(current.taskRecurrenceRule, anchor);
+        if (nextOcc) nextCycleDeadline = nextOcc;
+      }
       const [updated] = await tx
         .update(items)
         .set({
           isDone: next,
           status: next ? "done" : "open",
-          completedAt: next ? new Date() : null,
-          updatedAt: new Date(),
+          completedAt: next ? now : null,
+          updatedAt: now,
         })
         .where(eq(items.id, itemId))
         .returning();
       if (!updated) return;
+      if (nextCycleDeadline) {
+        const clone = await cloneRecurringItemAsNextCycle(
+          tx,
+          current,
+          nextCycleDeadline,
+          user.id,
+        );
+        captured.clone = {
+          text: clone.text,
+          deadlineAt: clone.deadlineAt,
+        };
+      }
       await tx.insert(activityLog).values({
         chatId,
         entityType: "item",
@@ -546,11 +731,15 @@ export async function handleItemActionCallback(
       );
     });
     const r = captured.rollup;
-    // Toast on rollup flip so the user sees the parent state change
-    // — the sub-items view header gains a ✅ on parent too, but a
-    // popup is unmissable.
-    const toast: string | undefined =
-      r && r.flipped && r.parentNowDone === true
+    // Toast priority: recurrence-clone message wins (it's the
+    // unusual case the user needs to see — "the original moved to
+    // /done, a fresh copy opened in /items"). Otherwise fall back to
+    // checklist rollup toasts, then silent ack.
+    const toast: string | undefined = captured.clone
+      ? locale === "tr"
+        ? "🔁 Tamamlandı — yeni açıldı"
+        : "🔁 Done — next cycle opened"
+      : r && r.flipped && r.parentNowDone === true
         ? locale === "tr"
           ? "✅ Checklist tamamlandı"
           : "✅ Checklist done"
@@ -572,6 +761,37 @@ export async function handleItemActionCallback(
     } else {
       const view = await buildItemsView(chatId, locale, 0);
       await ctx.editMessageText(view.text, { reply_markup: view.keyboard });
+    }
+    // Recurrence clone: surface the new cycle in chat history so the
+    // user gets a persistent "yeni açıldı" message (the callback
+    // toast disappears after a few seconds). Done AFTER the view
+    // re-render so the new item is already visible when this lands.
+    if (captured.clone) {
+      const deadline = captured.clone.deadlineAt;
+      const dueLabel = deadline
+        ? formatDate(deadline.toISOString(), {
+            timezone: user.timezone,
+            dateFormat: user.dateFormat as
+              | "DD.MM.YYYY"
+              | "MM/DD/YYYY"
+              | "YYYY-MM-DD",
+            timeFormat: user.timeFormat as "24h" | "12h",
+            locale,
+          })
+        : null;
+      const title =
+        captured.clone.text.length > 80
+          ? `${captured.clone.text.slice(0, 80)}…`
+          : captured.clone.text;
+      const body =
+        locale === "tr"
+          ? dueLabel
+            ? `🔁 Yeni açıldı: "${title}" · ${dueLabel}`
+            : `🔁 Yeni açıldı: "${title}"`
+          : dueLabel
+            ? `🔁 New cycle opened: "${title}" · ${dueLabel}`
+            : `🔁 New cycle opened: "${title}"`;
+      await ctx.api.sendMessage(chatId, body);
     }
     return;
   }
