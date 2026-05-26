@@ -12,7 +12,7 @@ const FLOWS: Flow[] = [
     steps: [
       {
         you: "/start",
-        bot: "Welcome + 🎯 Quick tour button. Tap for the 8-step walkthrough.",
+        bot: "Welcome + 🎯 Quick tour button. Tap for the 9-step walkthrough.",
       },
       {
         you: "buy milk",
@@ -25,6 +25,28 @@ const FLOWS: Flow[] = [
       {
         you: "remind me about the milk in 1 hour",
         bot: '🔔 reminder set. In 60 minutes, the bot DMs "⏰ buy milk".',
+      },
+    ],
+  },
+  {
+    title: "Recurring — clone on complete",
+    sub: "Daily / weekly / custom RRULE. /done keeps the audit trail; /items always shows the live cycle.",
+    steps: [
+      {
+        you: "every day 9am take vitamins",
+        bot: "✓ created with FREQ=DAILY, deadline tomorrow 9am. Row shows 🔁.",
+      },
+      {
+        you: "(tap ☐ on the row)",
+        bot: "Toast: 🔁 Done — next cycle opened. Original moves to /done.",
+      },
+      {
+        you: "/items",
+        bot: "Fresh \"take vitamins\" row, deadline tomorrow 9am, same reminders + attachments cloned.",
+      },
+      {
+        you: "/done",
+        bot: "Original \"take vitamins\" sits as the completed audit row with today's completion time.",
       },
     ],
   },
@@ -103,9 +125,9 @@ export function WorkedExamples() {
         <div className="section-head">
           <h2>What it actually looks like.</h2>
           <p className="lead">
-            Four worked flows — DM, checklists, password reveal, and
-            group ambient voice. Copy them, adapt them, send them to
-            the bot.
+            Five worked flows — DM, recurring tasks, checklists,
+            password reveal, and group ambient voice. Copy them, adapt
+            them, send them to the bot.
           </p>
         </div>
         {FLOWS.map((flow) => (

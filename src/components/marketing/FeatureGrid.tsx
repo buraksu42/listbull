@@ -87,8 +87,12 @@ const CATEGORIES: Category[] = [
         body: "Reminders set on a DM item ring in DM. Reminders set on a group item ring in the group — so the whole team sees it.",
       },
       {
-        title: "Multiple reminders per item + RRULE",
-        body: "Stack reminders (\"30 min before deadline\" + \"day-of 9am\"). RRULE recurring supported for daily / weekly / monthly patterns.",
+        title: "Multiple reminders per item",
+        body: "Stack reminders (\"30 min before deadline\" + \"day-of 9am\"). Each item carries its own independent list — no global digest noise.",
+      },
+      {
+        title: "Recurring tasks — clone on complete",
+        body: "Set daily / weekly / monthly / custom RRULE on any item via natural language (\"every day 9am vitamins\") or the 🔁 button next to ✏️. Completing a cycle archives the original to /done as the audit row and opens a fresh clone in /items — same text, reminders, attachments, with the deadline advanced to the next occurrence. No accidental loops, no manual recreate.",
       },
       {
         title: "Per-minute cron",
@@ -132,7 +136,7 @@ const CATEGORIES: Category[] = [
     features: [
       {
         title: "/onboarding — interactive walkthrough",
-        body: "8 steps, edits a single message in place. Covers to-dos, checklists, tags, reminders, /password, voice notes, /settings. Skip anytime.",
+        body: "9 steps, edits a single message in place. Covers to-dos, checklists, recurring tasks, tags, reminders, /password, voice notes, /settings. Skip anytime.",
       },
       {
         title: "/settings",

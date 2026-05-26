@@ -16,7 +16,7 @@ const COMMANDS: { cmd: string; desc: string }[] = [
     cmd: "/settings",
     desc: "Language, notifications, date formats, OpenRouter key.",
   },
-  { cmd: "/onboarding", desc: "Interactive 8-step walkthrough." },
+  { cmd: "/onboarding", desc: "Interactive 9-step walkthrough." },
   { cmd: "/help", desc: "Command reference." },
   { cmd: "/reset", desc: "Clear conversation history." },
 ];
