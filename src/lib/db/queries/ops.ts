@@ -102,6 +102,59 @@ export type OpsStats = {
     totalBytes: number;
     addedInWindow: number;
   };
+  groupEngagement: {
+    /** Total group/supergroup chats with at least one member row. */
+    groupChats: number;
+    /** Sum of distinct members across all group chats. */
+    totalMembers: number;
+    /** Members who posted ≥1 message in the window, across all groups. */
+    activeMembersInWindow: number;
+    /** Avg members per group (rounded). */
+    avgMembersPerGroup: number;
+    /** Active / total — engagement ratio. */
+    activeRatio: number;
+  };
+  cohortRetention: {
+    /**
+     * Signup-week × active-week grid. Each row = a signup ISO week
+     * (Monday-anchored, last 12 weeks); each cell tracks how many of
+     * that cohort were active in a later week (week 0 = signup week,
+     * week 1 = next week, …). The UI renders this as a heatmap.
+     */
+    rows: Array<{
+      cohort: string;
+      size: number;
+      weeks: number[];
+    }>;
+    /** Max bucket value for heatmap colour scaling. */
+    maxCount: number;
+  };
+  dowSeasonality: {
+    /** Mon=1 … Sun=7 message totals across the window. */
+    byDow: Array<{ dow: number; count: number }>;
+  };
+  chatLifespan: {
+    /**
+     * Distribution of archived chat lifespans (created → archived) in
+     * days. p50/p95/max/avg + archived count + currently-archived rate
+     * (archived / total).
+     */
+    archivedCount: number;
+    totalChats: number;
+    archivedRate: number;
+    p50Days: number;
+    p95Days: number;
+    maxDays: number;
+    avgDays: number;
+  };
+  remindersEfficacy: {
+    /** Reminders that fired (sent_at within window). */
+    firedInWindow: number;
+    /** Reminders currently pending whose remind_at fell INSIDE the window. */
+    overdueInWindow: number;
+    /** Fired / (fired + overdue) — quality of the cron loop. */
+    efficacy: number;
+  };
 };
 
 async function selectUsers() {
@@ -500,6 +553,227 @@ async function selectAttachments(windowDays: OpsWindow) {
   };
 }
 
+async function selectGroupEngagement(windowDays: OpsWindow) {
+  // Join chat_members against messages to surface group-chat engagement:
+  // how many members EACH group has, vs how many actually posted inside
+  // the window. `chat_members` was never queried before — Tier 3 fills
+  // that gap. Scope to group / supergroup chats only; DMs have a single
+  // member by definition and would skew the average.
+  const [totals, active] = await Promise.all([
+    db.execute<{
+      group_chats: number;
+      total_members: number;
+    }>(sql`
+      SELECT
+        count(DISTINCT cm.chat_id)::int AS group_chats,
+        count(*)::int AS total_members
+      FROM chat_members cm
+      INNER JOIN chats c
+        ON c.chat_id = cm.chat_id
+       AND c.type IN ('group', 'supergroup')
+       AND c.archived_at IS NULL
+    `),
+    db.execute<{ active_members: number }>(sql`
+      SELECT count(DISTINCT m.user_id)::int AS active_members
+      FROM messages m
+      INNER JOIN chats c
+        ON c.chat_id = m.chat_id
+       AND c.type IN ('group', 'supergroup')
+       AND c.archived_at IS NULL
+      WHERE m.created_at >= NOW() - (interval '1 day' * ${windowDays})
+    `),
+  ]);
+  const t = totals[0] ?? { group_chats: 0, total_members: 0 };
+  const a = active[0] ?? { active_members: 0 };
+  const avg = t.group_chats > 0 ? Math.round(t.total_members / t.group_chats) : 0;
+  const ratio = t.total_members > 0 ? a.active_members / t.total_members : 0;
+  return {
+    groupChats: t.group_chats,
+    totalMembers: t.total_members,
+    activeMembersInWindow: a.active_members,
+    avgMembersPerGroup: avg,
+    activeRatio: ratio,
+  };
+}
+
+async function selectCohortRetention() {
+  // Signup-week × active-week heatmap. Truncate signup timestamps to
+  // ISO Monday-anchored weeks (date_trunc('week', …)) and bucket each
+  // user's messages by weeks since signup. We cap at 12 cohorts × 12
+  // week offsets so the grid stays scannable on a card.
+  //
+  // No window param — cohorts are an all-time concept; the "last 12
+  // cohorts" cap already provides recency. If the user-base grows past
+  // 12 weeks of consistent signups this still shows the most recent
+  // 12, with older ones falling off naturally.
+  const rows = await db.execute<{
+    cohort: Date;
+    week_offset: number;
+    n: number;
+  }>(sql`
+    WITH cohorts AS (
+      SELECT
+        id AS user_id,
+        date_trunc('week', created_at)::date AS cohort_week
+      FROM users
+      WHERE created_at >= NOW() - interval '12 weeks'
+    ),
+    activity AS (
+      SELECT
+        c.cohort_week,
+        FLOOR(
+          EXTRACT(EPOCH FROM date_trunc('week', m.created_at) - c.cohort_week) / 604800
+        )::int AS week_offset,
+        m.user_id
+      FROM cohorts c
+      INNER JOIN messages m ON m.user_id = c.user_id
+      WHERE m.created_at >= c.cohort_week
+    )
+    SELECT
+      cohort_week AS cohort,
+      week_offset,
+      count(DISTINCT user_id)::int AS n
+    FROM activity
+    WHERE week_offset BETWEEN 0 AND 11
+    GROUP BY cohort_week, week_offset
+    ORDER BY cohort_week ASC, week_offset ASC
+  `);
+  const sizesRows = await db.execute<{ cohort: Date; size: number }>(sql`
+    SELECT
+      date_trunc('week', created_at)::date AS cohort,
+      count(*)::int AS size
+    FROM users
+    WHERE created_at >= NOW() - interval '12 weeks'
+    GROUP BY date_trunc('week', created_at)
+    ORDER BY cohort ASC
+  `);
+  // Pivot the (cohort, week_offset, n) rows into per-cohort week arrays.
+  const grid = new Map<string, number[]>();
+  for (const row of rows) {
+    const key =
+      row.cohort instanceof Date
+        ? row.cohort.toISOString().slice(0, 10)
+        : String(row.cohort);
+    let arr = grid.get(key);
+    if (!arr) {
+      arr = new Array<number>(12).fill(0);
+      grid.set(key, arr);
+    }
+    arr[row.week_offset] = row.n;
+  }
+  const cohorts: Array<{
+    cohort: string;
+    size: number;
+    weeks: number[];
+  }> = [];
+  let maxCount = 0;
+  for (const s of sizesRows) {
+    const key =
+      s.cohort instanceof Date
+        ? s.cohort.toISOString().slice(0, 10)
+        : String(s.cohort);
+    const weeks = grid.get(key) ?? new Array<number>(12).fill(0);
+    for (const v of weeks) if (v > maxCount) maxCount = v;
+    cohorts.push({ cohort: key, size: s.size, weeks });
+  }
+  return { rows: cohorts, maxCount };
+}
+
+async function selectDowSeasonality(windowDays: OpsWindow) {
+  // PostgreSQL EXTRACT(ISODOW) returns Mon=1 … Sun=7 (vs DOW which is
+  // Sun=0 … Sat=6). ISODOW lines up with how Turkish + European users
+  // think of "Monday first", so we use it. Fill missing days with 0.
+  const rows = await db.execute<{ dow: number; count: number }>(sql`
+    WITH base AS (
+      SELECT generate_series(1, 7) AS dow
+    )
+    SELECT
+      b.dow,
+      COALESCE(count(m.id), 0)::int AS count
+    FROM base b
+    LEFT JOIN messages m
+      ON EXTRACT(ISODOW FROM m.created_at)::int = b.dow
+     AND m.created_at >= NOW() - (interval '1 day' * ${windowDays})
+    GROUP BY b.dow
+    ORDER BY b.dow ASC
+  `);
+  return {
+    byDow: rows.map((r) => ({ dow: r.dow, count: r.count })),
+  };
+}
+
+async function selectChatLifespan() {
+  // Days between created_at and archived_at for chats that ARE
+  // archived. Point-in-time, no window — archived chats are a
+  // historical population. percentile_cont needs FLOAT8 not integer
+  // days; COALESCE the empty-set case to 0.
+  const [row] = await db.execute<{
+    total: number;
+    archived: number;
+    p50: number;
+    p95: number;
+    max: number;
+    avg: number;
+  }>(sql`
+    WITH lifespans AS (
+      SELECT EXTRACT(EPOCH FROM (archived_at - created_at)) / 86400.0 AS days
+      FROM chats
+      WHERE archived_at IS NOT NULL
+    )
+    SELECT
+      (SELECT count(*)::int FROM chats) AS total,
+      (SELECT count(*)::int FROM chats WHERE archived_at IS NOT NULL) AS archived,
+      COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY days), 0)::float AS p50,
+      COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY days), 0)::float AS p95,
+      COALESCE(max(days), 0)::float AS max,
+      COALESCE(avg(days), 0)::float AS avg
+    FROM lifespans
+  `);
+  const t = row?.total ?? 0;
+  const a = row?.archived ?? 0;
+  return {
+    archivedCount: a,
+    totalChats: t,
+    archivedRate: t > 0 ? a / t : 0,
+    p50Days: Math.round(row?.p50 ?? 0),
+    p95Days: Math.round(row?.p95 ?? 0),
+    maxDays: Math.round(row?.max ?? 0),
+    avgDays: Number(((row?.avg ?? 0) as number).toFixed(1)),
+  };
+}
+
+async function selectRemindersEfficacy(windowDays: OpsWindow) {
+  // Cron quality metric:
+  //   fired   = reminders whose sent_at fell inside the window
+  //   overdue = reminders whose remind_at fell inside the window but
+  //             never got marked sent (cron skipped them)
+  // efficacy = fired / (fired + overdue). 1.0 means every due reminder
+  // actually went out. Sub-0.99 in production = investigate the cron.
+  const [row] = await db.execute<{
+    fired: number;
+    overdue: number;
+  }>(sql`
+    SELECT
+      count(*) FILTER (
+        WHERE sent_at >= NOW() - (interval '1 day' * ${windowDays})
+      )::int AS fired,
+      count(*) FILTER (
+        WHERE sent = false
+          AND remind_at >= NOW() - (interval '1 day' * ${windowDays})
+          AND remind_at < NOW()
+      )::int AS overdue
+    FROM item_reminders
+  `);
+  const f = row?.fired ?? 0;
+  const o = row?.overdue ?? 0;
+  const denom = f + o;
+  return {
+    firedInWindow: f,
+    overdueInWindow: o,
+    efficacy: denom > 0 ? f / denom : 1,
+  };
+}
+
 /**
  * Fetches every dashboard metric in parallel. Read-only, no transaction
  * needed — counts are independent and a few seconds of drift between
@@ -519,6 +793,11 @@ export async function getOpsStats(window: OpsWindow = 7): Promise<OpsStats> {
     tags,
     itemsPerChat,
     attachments,
+    groupEngagement,
+    cohortRetention,
+    dowSeasonality,
+    chatLifespan,
+    remindersEfficacy,
   ] = await Promise.all([
     selectUsers(),
     selectChats(),
@@ -532,6 +811,11 @@ export async function getOpsStats(window: OpsWindow = 7): Promise<OpsStats> {
     selectTags(window),
     selectItemsPerChat(),
     selectAttachments(window),
+    selectGroupEngagement(window),
+    selectCohortRetention(),
+    selectDowSeasonality(window),
+    selectChatLifespan(),
+    selectRemindersEfficacy(window),
   ]);
 
   return {
@@ -549,5 +833,10 @@ export async function getOpsStats(window: OpsWindow = 7): Promise<OpsStats> {
     tags,
     itemsPerChat,
     attachments,
+    groupEngagement,
+    cohortRetention,
+    dowSeasonality,
+    chatLifespan,
+    remindersEfficacy,
   };
 }
