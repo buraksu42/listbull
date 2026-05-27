@@ -150,6 +150,154 @@ function renderRecord(rec: Record<string, number>): string {
   return entries.map(([k, v]) => `${k} ${n(v)}`).join(" · ");
 }
 
+function CohortHeatmap({
+  rows,
+  maxCount,
+}: {
+  rows: Array<{ cohort: string; size: number; weeks: number[] }>;
+  maxCount: number;
+}) {
+  if (rows.length === 0) {
+    return (
+      <div className="text-xs text-zinc-500">No signup cohorts yet.</div>
+    );
+  }
+  // Each cell: zinc-200 (0) → zinc-900 (maxCount). Tailwind doesn't
+  // give us dynamic class names, so resolve to a discrete 5-step bucket.
+  const cellBucket = (v: number): string => {
+    if (v === 0 || maxCount === 0) return "fill-zinc-100";
+    const ratio = v / maxCount;
+    if (ratio < 0.2) return "fill-zinc-200";
+    if (ratio < 0.4) return "fill-zinc-400";
+    if (ratio < 0.6) return "fill-zinc-600";
+    if (ratio < 0.8) return "fill-zinc-700";
+    return "fill-zinc-900";
+  };
+  const cellW = 16;
+  const cellH = 14;
+  const gap = 2;
+  const labelW = 70;
+  const sizeW = 28;
+  const cols = 12;
+  const width = labelW + sizeW + cols * (cellW + gap);
+  const height = rows.length * (cellH + gap);
+  return (
+    <div>
+      <svg
+        viewBox={`0 0 ${width} ${height + 16}`}
+        width="100%"
+        className="overflow-visible"
+        role="img"
+        aria-label="signup-week × active-week retention heatmap"
+      >
+        {/* column header: week offsets */}
+        {Array.from({ length: cols }, (_, i) => (
+          <text
+            key={`h-${i}`}
+            x={labelW + sizeW + i * (cellW + gap) + cellW / 2}
+            y={10}
+            textAnchor="middle"
+            className="fill-zinc-400 text-[9px]"
+          >
+            W{i}
+          </text>
+        ))}
+        {rows.map((row, ri) => (
+          <g key={row.cohort} transform={`translate(0, ${16 + ri * (cellH + gap)})`}>
+            <text
+              x={0}
+              y={cellH - 3}
+              className="fill-zinc-600 text-[10px] tabular-nums"
+            >
+              {row.cohort}
+            </text>
+            <text
+              x={labelW + sizeW - 4}
+              y={cellH - 3}
+              textAnchor="end"
+              className="fill-zinc-500 text-[10px] tabular-nums"
+            >
+              {n(row.size)}
+            </text>
+            {row.weeks.map((v, ci) => (
+              <rect
+                key={ci}
+                x={labelW + sizeW + ci * (cellW + gap)}
+                y={0}
+                width={cellW}
+                height={cellH}
+                rx={2}
+                className={cellBucket(v)}
+              >
+                <title>{`${row.cohort} → W${ci}: ${v} active`}</title>
+              </rect>
+            ))}
+          </g>
+        ))}
+      </svg>
+      <div className="mt-2 flex items-center gap-2 text-[10px] text-zinc-400">
+        <span>less</span>
+        <span className="inline-block h-2 w-3 rounded-sm bg-zinc-100" />
+        <span className="inline-block h-2 w-3 rounded-sm bg-zinc-200" />
+        <span className="inline-block h-2 w-3 rounded-sm bg-zinc-400" />
+        <span className="inline-block h-2 w-3 rounded-sm bg-zinc-600" />
+        <span className="inline-block h-2 w-3 rounded-sm bg-zinc-700" />
+        <span className="inline-block h-2 w-3 rounded-sm bg-zinc-900" />
+        <span>more</span>
+        <span className="ml-auto">peak {n(maxCount)}</span>
+      </div>
+    </div>
+  );
+}
+
+function DowBars({ data }: { data: Array<{ dow: number; count: number }> }) {
+  const names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const max = Math.max(1, ...data.map((d) => d.count));
+  const width = 280;
+  const height = 60;
+  const barWidth = width / data.length;
+  return (
+    <div>
+      <svg
+        viewBox={`0 0 ${width} ${height + 14}`}
+        width="100%"
+        className="overflow-visible"
+        role="img"
+        aria-label="messages by day of week"
+      >
+        {data.map((d, i) => {
+          const h = (d.count / max) * (height - 4);
+          return (
+            <g key={d.dow}>
+              <rect
+                x={i * barWidth + 2}
+                y={height - h}
+                width={barWidth - 4}
+                height={h}
+                rx={1}
+                className="fill-zinc-700"
+              >
+                <title>{`${names[d.dow - 1]}: ${d.count}`}</title>
+              </rect>
+              <text
+                x={i * barWidth + barWidth / 2}
+                y={height + 10}
+                textAnchor="middle"
+                className="fill-zinc-400 text-[9px]"
+              >
+                {names[d.dow - 1]}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="mt-1 text-[10px] text-zinc-400">
+        peak {n(max)}
+      </div>
+    </div>
+  );
+}
+
 function WindowSwitcher({ current }: { current: OpsWindow }) {
   // Plain GET form: <select> change reloads the page via JS via
   // `onChange` would need a client component; instead the operator
@@ -398,6 +546,97 @@ export default async function OpsPage({ searchParams }: PageProps) {
           </div>
           <div className="mt-3 text-xs text-zinc-500">
             By kind: {renderRecord(stats.attachments.byKind)}
+          </div>
+        </Card>
+
+        <Card title={`Group engagement (${stats.window}d)`}>
+          <div className="grid grid-cols-3 gap-3">
+            <Stat
+              label="Groups"
+              value={n(stats.groupEngagement.groupChats)}
+              hint="archived excluded"
+            />
+            <Stat
+              label="Total members"
+              value={n(stats.groupEngagement.totalMembers)}
+              hint={`avg ${n(stats.groupEngagement.avgMembersPerGroup)}/group`}
+            />
+            <Stat
+              label="Active share"
+              value={pct(stats.groupEngagement.activeRatio)}
+              hint={`${n(stats.groupEngagement.activeMembersInWindow)} active`}
+            />
+          </div>
+          <div className="mt-3 text-[10px] text-zinc-400">
+            active = posted ≥1 message in window. DMs excluded.
+          </div>
+        </Card>
+
+        <Card title="Cohort retention (12-week)">
+          <CohortHeatmap
+            rows={stats.cohortRetention.rows}
+            maxCount={stats.cohortRetention.maxCount}
+          />
+          <div className="mt-3 text-[10px] text-zinc-400">
+            row = signup ISO-week · column = weeks since signup (W0–W11)
+          </div>
+        </Card>
+
+        <Card title={`Day-of-week seasonality (${stats.window}d)`}>
+          <DowBars data={stats.dowSeasonality.byDow} />
+          <div className="mt-2 text-xs text-zinc-500">
+            messages per ISO weekday across all chats
+          </div>
+        </Card>
+
+        <Card title="Chat lifespan">
+          <div className="grid grid-cols-4 gap-3">
+            <Stat
+              label="Archived"
+              value={n(stats.chatLifespan.archivedCount)}
+              hint={`${pct(stats.chatLifespan.archivedRate)} of ${n(stats.chatLifespan.totalChats)}`}
+            />
+            <Stat
+              label="p50 days"
+              value={n(stats.chatLifespan.p50Days)}
+            />
+            <Stat
+              label="p95 days"
+              value={n(stats.chatLifespan.p95Days)}
+            />
+            <Stat
+              label="max days"
+              value={n(stats.chatLifespan.maxDays)}
+            />
+          </div>
+          <div className="mt-3 text-[10px] text-zinc-400">
+            time between chat creation and archive. avg{" "}
+            {stats.chatLifespan.avgDays.toFixed(1)} days.
+          </div>
+        </Card>
+
+        <Card title={`Reminders efficacy (${stats.window}d)`}>
+          <div className="grid grid-cols-3 gap-3">
+            <Stat
+              label="Fired"
+              value={n(stats.remindersEfficacy.firedInWindow)}
+            />
+            <Stat
+              label="Overdue"
+              value={n(stats.remindersEfficacy.overdueInWindow)}
+              hint="due in window, still unsent"
+            />
+            <Stat
+              label="Efficacy"
+              value={pct(stats.remindersEfficacy.efficacy)}
+              hint={
+                stats.remindersEfficacy.efficacy >= 0.99
+                  ? "cron healthy"
+                  : stats.remindersEfficacy.efficacy >= 0.9
+                    ? "minor drift"
+                    : "investigate cron"
+              }
+            />
           </div>
         </Card>
 
