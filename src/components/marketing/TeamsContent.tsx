@@ -8,12 +8,16 @@ const SETUP_STEPS: SetupStep[] = [
       <>
         Telegram bots default to <em>privacy on</em> — meaning the bot
         only sees @mentions, slash commands, and replies. listbull
-        needs this OFF so it can transcribe group voice notes.
-        It still won&rsquo;t spend tokens on every group message
-        (there&rsquo;s a code-side filter), but the OFF setting is the
-        switch that lets voice through.
+        needs this OFF so it can transcribe group voice notes and catch
+        plain typed mentions. It still won&rsquo;t spend tokens on every
+        group message (there&rsquo;s a code-side filter), but the OFF
+        setting is the switch that lets voice through.
         <br />
         <code>@BotFather → /setprivacy → Disable</code>
+        <br />
+        Do this <em>before</em> adding the bot to a group. If it&rsquo;s
+        already in one, remove and re-add it — Telegram caches privacy
+        per-membership, so the change only takes effect on a fresh join.
       </>
     ),
   },

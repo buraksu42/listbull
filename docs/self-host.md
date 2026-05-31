@@ -46,6 +46,26 @@ BotFather'da botunu seç → **Bot Settings**:
 > ⚠️ Bunları **gruba eklemeden önce** yap. Sonra yapılırsa ilk
 > kullanım sırasında ses notları sessizce çalışmaz + bazı @-mention'lar
 > bot'a ulaşmaz. Sırayı doğru kurmak debug saatleri kazandırır.
+>
+> ⚠️ **Bot zaten bir gruptaysa ve privacy'yi sonradan kapattıysan:**
+> Telegram privacy ayarını **üyelik bazında cache'ler** — değişiklik
+> yalnız değişiklikten *sonra* katıldığı gruplara uygulanır. Mevcut
+> gruplarda etkili olması için **bot'u gruptan çıkar ve tekrar ekle.**
+> Aksi halde privacy OFF görünür ama o grupta hâlâ düz @-mention'lar ve
+> ses notları sessizce düşmeye devam eder.
+
+**Doğrula (BotFather gerekmez):** `getMe` privacy flag'ini açar —
+
+```bash
+curl -s "https://api.telegram.org/bot<TOKEN>/getMe" \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["can_read_all_group_messages"])'
+# true  → privacy OFF (doğru)
+# false → privacy ON (bozuk — grup ses + düz @-mention sessizce düşer)
+```
+
+`scripts/setup-bot.ts` aynı kontrolü yapar; `ASSERT_PRIVACY_OFF=1` ile
+çalıştırırsan privacy ON ise non-zero exit verir (CI / deploy sonrası
+drift tripwire).
 
 ---
 
@@ -320,7 +340,8 @@ koşmuyor. Yoksa container log'da spesifik hatayı ara.
 Bot'u bir Telegram grubuna ekleyebilirsin:
 
 1. Bot ayarlarında: `/setjoingroups Enable`, `/setprivacy Disable`
-   (adım 9b).
+   (adım 9b). Privacy'yi gruba eklemeden ÖNCE kapat; sonradan
+   kapattıysan bot'u gruptan çıkar/tekrar ekle (per-membership cache).
 2. Bot'u gruba ekle.
 3. Grup içinde bot'a yaz: `@listbull_bot süt yumurta peynir` →
    grup'un to-do listesine 3 item eklenir.
@@ -328,6 +349,9 @@ Bot'u bir Telegram grubuna ekleyebilirsin:
 Bot grup'ta:
 - Yalnız mention edilince (`@bot ...`) veya bot mesajına reply
   atılınca LLM'e gider (kod-içi filter, token israfı yok).
+  > 💡 Mention'ı `@` autocomplete'ten **seç** — elle yazılan `@bot`
+  > metni `mention` entity'si oluşturmaz, privacy ON'da Telegram bota
+  > hiç iletmez. Privacy OFF ise düz metin de yakalanır.
 - Ses notlarını **ambient** dinler — içinde to-do varsa düşer, yoksa
   sessiz kalır.
 - Hatırlatıcılar gruba düşer (DM'e değil).
