@@ -49,13 +49,11 @@ const STEPS: Step[] = [
         Doing both of these <em>before</em> users invite the bot to a
         group avoids a confusing first-run where voice silently fails.
         <br />
-        <strong>Already added the bot to a group?</strong> Telegram caches
-        the privacy setting per-membership, so flipping it later only
-        applies to groups joined <em>after</em> the change —{" "}
-        <strong>remove and re-add the bot</strong> to each existing group.
-        Verify any time with{" "}
-        <code>ASSERT_PRIVACY_OFF=1 npm run setup:bot</code> (exits non-zero
-        while privacy is still ON).
+        <strong>Group messages getting no reply</strong> (while{" "}
+        <code>/items</code> still works)? That&rsquo;s privacy still ON —
+        the only fix is <code>/setprivacy → Disable</code>. Verify any
+        time with <code>ASSERT_PRIVACY_OFF=1 npm run setup:bot</code>{" "}
+        (exits non-zero while privacy is still ON).
       </>
     ),
   },
