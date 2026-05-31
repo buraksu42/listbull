@@ -87,6 +87,10 @@ APP_BASE_URL="https://your-host.tld" \
   npm run setup:bot
 
 # Then in BotFather: /setjoingroups Enable, /setprivacy Disable.
+# Privacy OFF is required for group voice + plain @-text mentions.
+# If the bot is already in a group, remove + re-add it after the
+# change (Telegram caches privacy per-membership). Verify with:
+#   ASSERT_PRIVACY_OFF=1 npm run setup:bot   # non-zero if still ON
 # Open Telegram → /start your bot. You're live.
 ```
 

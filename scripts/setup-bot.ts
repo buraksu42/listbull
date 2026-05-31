@@ -20,6 +20,15 @@
  *   BOT_USERNAME=listbull_bot    # only used to render the BotFather
  *                                # instructions at the end. If missing,
  *                                # the script reads it from getMe.
+ *   ASSERT_PRIVACY_OFF=1         # exit non-zero if Telegram privacy mode
+ *                                # is still ON (getMe.can_read_all_group_
+ *                                # messages === false). Use as a drift
+ *                                # tripwire in CI / post-deploy checks —
+ *                                # privacy ON silently drops group voice
+ *                                # notes and plain @-text mentions (the
+ *                                # exact regression seen 2026-05-31).
+ *                                # Leave unset on first setup, since the
+ *                                # /setprivacy BotFather step runs after.
  */
 import process from "node:process";
 
@@ -55,9 +64,31 @@ async function tg<T extends Json>(method: string, body: Json): Promise<T> {
 
 async function main(): Promise<void> {
   console.log("→ getMe");
-  const me = await tg<{ username: string; first_name: string }>("getMe", {});
+  const me = await tg<{
+    username: string;
+    first_name: string;
+    can_read_all_group_messages?: boolean;
+  }>("getMe", {});
   console.log(`  ok: @${me.username} (${me.first_name})`);
   const botUsername = process.env.BOT_USERNAME ?? me.username;
+
+  // Privacy-mode evidence layer. `can_read_all_group_messages === true`
+  // means BotFather privacy is OFF — the required state. Privacy ON
+  // silently drops group voice notes and hand-typed @-text mentions
+  // (no `mention` entity → Telegram never delivers them). Build success
+  // ≠ delivery; this is the only check that catches the drift.
+  const privacyOff = me.can_read_all_group_messages === true;
+  console.log(
+    `  privacy: ${privacyOff ? "OFF ✅ (can_read_all_group_messages=true)" : "ON ⚠️  (can_read_all_group_messages=false)"}`,
+  );
+  if (!privacyOff) {
+    console.warn(
+      "  ⚠️  Privacy is ON — group voice + plain @-text mentions will be\n" +
+        "      silently dropped. Disable it via BotFather (see step 3 below),\n" +
+        "      then REMOVE + RE-ADD the bot to existing groups (Telegram\n" +
+        "      caches privacy per-membership).",
+    );
+  }
 
   console.log("→ setWebhook");
   await tg("setWebhook", {
@@ -133,7 +164,22 @@ async function main(): Promise<void> {
   console.log(`                        the webhook. The bot's own code still`);
   console.log(`                        only acts on @mentions, replies, and`);
   console.log(`                        voice — no token waste on chatter.)`);
+  console.log(`  4. After disabling privacy, REMOVE + RE-ADD the bot to any`);
+  console.log(`     existing groups — Telegram caches the privacy setting`);
+  console.log(`     per-membership, so the toggle only applies to groups`);
+  console.log(`     joined AFTER the change. Then re-run with`);
+  console.log(`     ASSERT_PRIVACY_OFF=1 to confirm.`);
   console.log("");
+
+  // Drift tripwire. Opt-in so first-time setup (run before the BotFather
+  // /setprivacy step) doesn't fail; CI / post-deploy checks set the flag
+  // to turn privacy-ON into a hard failure.
+  if (!privacyOff && process.env.ASSERT_PRIVACY_OFF) {
+    console.error(
+      "✗ ASSERT_PRIVACY_OFF: privacy mode is ON (getMe.can_read_all_group_messages=false).",
+    );
+    process.exit(1);
+  }
 }
 
 main().catch((err: unknown) => {
