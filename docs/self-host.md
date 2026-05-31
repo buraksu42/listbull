@@ -47,12 +47,10 @@ BotFather'da botunu seç → **Bot Settings**:
 > kullanım sırasında ses notları sessizce çalışmaz + bazı @-mention'lar
 > bot'a ulaşmaz. Sırayı doğru kurmak debug saatleri kazandırır.
 >
-> ⚠️ **Bot zaten bir gruptaysa ve privacy'yi sonradan kapattıysan:**
-> Telegram privacy ayarını **üyelik bazında cache'ler** — değişiklik
-> yalnız değişiklikten *sonra* katıldığı gruplara uygulanır. Mevcut
-> gruplarda etkili olması için **bot'u gruptan çıkar ve tekrar ekle.**
-> Aksi halde privacy OFF görünür ama o grupta hâlâ düz @-mention'lar ve
-> ses notları sessizce düşmeye devam eder.
+> ⚠️ **Grup mesajları sessizce düşüyorsa** (`/items` çalışıyor ama düz
+> mesaj/@-mention'a cevap yok) sebep neredeyse her zaman **privacy ON**.
+> Düzeltme tek şey: **BotFather → `/setprivacy` → Disable.** Ayar
+> kapanır kapanmaz grup mesajları bota ulaşmaya başlar.
 
 **Doğrula (BotFather gerekmez):** `getMe` privacy flag'ini açar —
 
@@ -340,8 +338,8 @@ koşmuyor. Yoksa container log'da spesifik hatayı ara.
 Bot'u bir Telegram grubuna ekleyebilirsin:
 
 1. Bot ayarlarında: `/setjoingroups Enable`, `/setprivacy Disable`
-   (adım 9b). Privacy'yi gruba eklemeden ÖNCE kapat; sonradan
-   kapattıysan bot'u gruptan çıkar/tekrar ekle (per-membership cache).
+   (adım 9b). Privacy ON kalırsa grup düz mesajları + ses notları bota
+   ulaşmaz; tek düzeltme `/setprivacy → Disable`.
 2. Bot'u gruba ekle.
 3. Grup içinde bot'a yaz: `@listbull_bot süt yumurta peynir` →
    grup'un to-do listesine 3 item eklenir.

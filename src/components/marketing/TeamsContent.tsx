@@ -15,9 +15,8 @@ const SETUP_STEPS: SetupStep[] = [
         <br />
         <code>@BotFather → /setprivacy → Disable</code>
         <br />
-        Do this <em>before</em> adding the bot to a group. If it&rsquo;s
-        already in one, remove and re-add it — Telegram caches privacy
-        per-membership, so the change only takes effect on a fresh join.
+        While privacy stays ON, plain group messages and voice notes are
+        silently dropped — toggling this setting is the fix.
       </>
     ),
   },
