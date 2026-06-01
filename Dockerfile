@@ -16,6 +16,10 @@ ARG NODE_VERSION=22
 FROM node:${NODE_VERSION}-alpine AS builder
 WORKDIR /app
 
+# git: used only to stamp the build commit into the image (see the
+# .commit capture below). Early, stable layer so it stays cached.
+RUN apk add --no-cache git
+
 # Build-time public env. These MUST be passed via Dokploy's
 # `buildArgs` (or `--build-arg` locally) to be inlined into the
 # client bundle. Empty strings are fine — they just disable the
@@ -59,6 +63,23 @@ COPY drizzle ./drizzle
 
 RUN npm run build
 
+# Build provenance for the /api/health evidence layer. Dokploy marks a
+# deploy "done" without guaranteeing the running container actually
+# swapped (observed 2026-06-01: a "done" deploy left the old container
+# running). Baking the commit + build time lets a post-deploy check
+# compare the LIVE health commit against origin/main HEAD and catch a
+# ghost/stale deploy. Placed after the build so it never busts build
+# cache. `GIT_COMMIT` arg wins if passed; else resolve from .git;
+# else "unknown". Done last in the builder — .git is discarded here,
+# only the two tiny files cross into the runner.
+ARG GIT_COMMIT=
+COPY .git ./.git
+RUN if [ -n "$GIT_COMMIT" ]; then printf '%s' "$GIT_COMMIT" > /app/.commit; \
+    elif git rev-parse HEAD > /app/.commit 2>/dev/null; then :; \
+    else printf 'unknown' > /app/.commit; fi; \
+    date -u +%Y-%m-%dT%H:%M:%SZ > /app/.buildtime; \
+    rm -rf /app/.git
+
 # ─── 2. Runner ────────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-alpine AS runner
 WORKDIR /app
@@ -80,6 +101,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/messages ./messages
+# Build provenance (commit + build time) for /api/health.
+COPY --from=builder --chown=nextjs:nodejs /app/.commit ./.commit
+COPY --from=builder --chown=nextjs:nodejs /app/.buildtime ./.buildtime
 
 USER nextjs
 

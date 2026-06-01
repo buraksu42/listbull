@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
@@ -10,6 +13,22 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type SubsystemStatus = "ok" | "error" | "skipped";
+
+// Build provenance, baked into the image by the Dockerfile (.commit /
+// .buildtime). Read once at module load. Lets a post-deploy check
+// compare the LIVE commit against origin/main HEAD and catch a Dokploy
+// "done" deploy that never swapped the container. Falls back to
+// "unknown" in dev / when the files are absent.
+function readBuildMeta(name: string): string {
+  try {
+    return readFileSync(join(process.cwd(), name), "utf8").trim() || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+const COMMIT = process.env.GIT_COMMIT?.trim() || readBuildMeta(".commit");
+const BUILD_TIME = readBuildMeta(".buildtime");
 
 /**
  * Public health endpoint. UptimeRobot keyword check matches
@@ -34,6 +53,8 @@ export async function GET() {
     db: dbStatus,
     bot: botStatus,
     redis: redisStatus,
+    commit: COMMIT,
+    buildTime: BUILD_TIME,
     ts: Date.now(),
   } as const;
 

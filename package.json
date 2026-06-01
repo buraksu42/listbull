@@ -14,6 +14,7 @@
     "db:studio": "drizzle-kit studio",
     "cron": "tsx --tsconfig tsconfig.cron.json src/lib/cron/dispatch-reminders.ts",
     "setup:bot": "tsx --tsconfig tsconfig.cron.json scripts/setup-bot.ts",
+    "verify:deploy": "bash scripts/verify-deploy.sh",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "e2e": "playwright test",
