@@ -225,17 +225,30 @@ export async function handleMessage(ctx: Context): Promise<void> {
     return;
   }
 
+  const chatType = message.chat.type as ChatType;
+  const chatId = message.chat.id;
+  const isGroupContext = chatType === "group" || chatType === "supergroup";
+
   const user = await getUserByTelegramId(from.id);
   if (!user) {
-    await ctx.reply("Run /start first.");
+    // Only nudge when the message is actually aimed at the bot. With
+    // privacy mode OFF we receive every group message, so replying
+    // "Run /start first." unconditionally would spam the group on each
+    // post from any unregistered member (the group privacy filter that
+    // gates this for known users runs much later). DMs are always
+    // directed; in groups require an @-mention or a reply to the bot.
+    const directedAtBot =
+      !isGroupContext ||
+      effectiveText.includes(`@${ctx.me.username}`) ||
+      message.reply_to_message?.from?.id === ctx.me.id;
+    if (directedAtBot) {
+      await ctx.reply("Run /start first.");
+    }
     return;
   }
 
   const locale = pickLocale(user.locale);
   const copy = COPY[locale];
-  const chatType = message.chat.type as ChatType;
-  const chatId = message.chat.id;
-  const isGroupContext = chatType === "group" || chatType === "supergroup";
 
   // Chat row resolution.
   //
