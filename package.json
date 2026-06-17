@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
-    "@sentry/nextjs": "^10.52.0",
+    "@sentry/nextjs": "^10.58.0",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
     "drizzle-orm": "^0.45.2",
