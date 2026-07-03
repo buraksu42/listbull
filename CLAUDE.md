@@ -85,6 +85,7 @@ Agent ownership boundaries (enforced via folder, never cross):
 - Design tokens: `handoff/tokens/`
 
 ## Agent Handoff Protokolü
+> Yeni proje scaffold edilirken `HANDOFF.md` ve `docs/decisions.md` bu protokolle otomatik oluşturulur.
 - Session başında önce `HANDOFF.md` oku. Yarım iş varsa oradan devam et,
   sıfırdan yorumlama.
 - Session bitiminde veya iş devrederken `HANDOFF.md` güncelle: ne bitti,
