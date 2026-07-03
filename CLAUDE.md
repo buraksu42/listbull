@@ -83,3 +83,14 @@ Agent ownership boundaries (enforced via folder, never cross):
 - Prod: https://prod.listbull.org
 - Brand assets: `handoff/brand/` (logo SVG + PNG)
 - Design tokens: `handoff/tokens/`
+
+## Agent Handoff Protokolü
+- Session başında önce `HANDOFF.md` oku. Yarım iş varsa oradan devam et,
+  sıfırdan yorumlama.
+- Session bitiminde veya iş devrederken `HANDOFF.md` güncelle: ne bitti,
+  ne yarım, sıradaki adım ne.
+- Mimari/tasarım kararlarını `docs/decisions.md`'ye tek satır gerekçeyle ekle.
+  Karar dosyada yoksa karar verilmemiş say.
+- Devretmeden önce commit at. Uncommitted iş devredilmez.
+- HANDOFF.md'deki plana katılmıyorsan değiştirmeden önce itirazını
+  HANDOFF.md'ye yaz.
