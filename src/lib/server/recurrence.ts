@@ -20,7 +20,12 @@
  */
 import "server-only";
 
-import { rrulestr } from "rrule";
+// rrule@2.x ships CJS; a named ESM import (`{ rrulestr }`) fails under tsx/Node
+// ESM ("no export named 'rrulestr'"), which silently killed the cron container.
+// Import the default (module.exports) and destructure — works in both the
+// Next.js (webpack) build and the tsx cron runtime (esModuleInterop is on).
+import rrulePkg from "rrule";
+const { rrulestr } = rrulePkg;
 
 /**
  * Next occurrence strictly after `from` according to `rruleStr`.
