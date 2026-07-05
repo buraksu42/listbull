@@ -20,12 +20,15 @@
  */
 import "server-only";
 
-// rrule@2.x ships CJS; a named ESM import (`{ rrulestr }`) fails under tsx/Node
-// ESM ("no export named 'rrulestr'"), which silently killed the cron container.
-// Import the default (module.exports) and destructure — works in both the
-// Next.js (webpack) build and the tsx cron runtime (esModuleInterop is on).
-import rrulePkg from "rrule";
-const { rrulestr } = rrulePkg;
+// rrule@2.8 has no `exports` map, so the two runtimes resolve it differently:
+// Next/Turbopack picks its ESM build (named exports, no default), while the tsx
+// cron runtime loads the CJS build where the named export is only reachable via
+// the interop `default`. A single named- OR default-import breaks one side, so
+// resolve from whichever shape the current bundler/runtime produced.
+import * as rruleNs from "rrule";
+type RruleShape = typeof import("rrule");
+const rrule = (rruleNs as { default?: RruleShape }).default ?? (rruleNs as RruleShape);
+const { rrulestr } = rrule;
 
 /**
  * Next occurrence strictly after `from` according to `rruleStr`.
