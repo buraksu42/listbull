@@ -1,6 +1,5 @@
 import {
   ArrowRightIcon,
-  TelegramIcon,
 } from "@/components/marketing/BrandMark";
 import { FeatureGrid } from "@/components/marketing/FeatureGrid";
 import { PageHero } from "@/components/marketing/PageHero";
@@ -26,21 +25,10 @@ export default function FeaturesPage() {
           title="Everything the bot does, today."
           lead="No 'coming soon', no waitlist, no roadmap-only headers. Six capabilities, live on the bot right now."
           ctas={
-            <>
-              <a
-                className="btn btn-primary"
-                href="https://t.me/listbull_bot"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <TelegramIcon />
-                Try @listbull_bot
-              </a>
-              <a className="text-link" href="/commands">
-                See commands
-                <ArrowRightIcon />
-              </a>
-            </>
+            <a className="text-link" href="/commands">
+              See commands
+              <ArrowRightIcon />
+            </a>
           }
         />
         <FeatureGrid />

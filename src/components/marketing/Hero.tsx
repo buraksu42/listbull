@@ -3,7 +3,6 @@ import Link from "next/link";
 import {
   ArrowRightIcon,
   GitHubIcon,
-  TelegramIcon,
 } from "@/components/marketing/BrandMark";
 import pkg from "../../../package.json" with { type: "json" };
 
@@ -26,15 +25,6 @@ export function Hero() {
         <div className="hero-ctas">
           <a
             className="btn btn-primary"
-            href="https://t.me/listbull_bot"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <TelegramIcon />
-            Try @listbull_bot
-          </a>
-          <a
-            className="btn btn-secondary"
             href="https://github.com/buraksu42/listbull"
             target="_blank"
             rel="noopener noreferrer"

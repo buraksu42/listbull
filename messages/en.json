@@ -112,7 +112,7 @@
     "feature6Body": "Optimistic UI on every action. 5-second polling on shared lists. Snappy regardless of network.",
     "howHeading": "How it works",
     "how1Title": "Open the bot",
-    "how1Body": "Start a chat with @listbull_bot. The bot creates your Inbox automatically.",
+    "how1Body": "Start a chat with your own bot. The bot creates your Inbox automatically.",
     "how2Title": "Talk or tap",
     "how2Body": "Type \"süt al\" or open the Mini App and tap. Both stay in sync within 5 seconds.",
     "how3Title": "Share when you want",
