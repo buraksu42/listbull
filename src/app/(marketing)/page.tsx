@@ -7,7 +7,7 @@ import { SiteHeader } from "@/components/marketing/SiteHeader";
 export const metadata = {
   title: "listbull — Telegram-native AI to-do bot",
   description:
-    "A Telegram bot for your to-dos. Bring your own OpenRouter key, or use the operator's free tier. Open source, MIT-licensed, self-hostable.",
+    "A Telegram bot for your to-dos. Bring your own OpenRouter key, or use the operator's free tier. Open source, MIT-licensed.",
 };
 
 export default function MarketingHome() {

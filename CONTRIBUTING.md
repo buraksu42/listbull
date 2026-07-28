@@ -1,6 +1,6 @@
 # Contributing to listbull
 
-Thanks for taking a look. listbull is OSS, self-host-friendly, and
+Thanks for taking a look. listbull is OSS, MIT-licensed, and
 solo-maintained — contributions are welcome but the project has a
 specific shape worth understanding before you open a PR.
 
@@ -14,7 +14,7 @@ with:
 - What you expected
 - What actually happened
 - Repro steps if you can isolate them
-- Your environment (self-host or hosted, Postgres version, Node
+- Your environment (own instance or hosted, Postgres version, Node
   version if running outside Docker, browser if it's a Mini App bug)
 
 For security issues, **don't open a public issue** — DM
@@ -35,7 +35,7 @@ an Architect-pass review first.
 
 ## Dev setup
 
-Follow the [Quickstart in README.md](README.md#quickstart-self-host)
+Follow the [Quickstart in README.md](README.md#quickstart)
 to bring up Docker. For local dev WITHOUT Docker:
 
 ```bash

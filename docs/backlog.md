@@ -64,7 +64,7 @@ a recurring reminder explicitly — natural language gets routed to
 task recurrence instead. Surface area: prompt tweak + add_reminder
 tool description + maybe a 🔁 toggle on the ⏰ flow.
 
-## Self-host quality of life
+## Install quality of life
 
 - **First-boot wizard** — interactive script that walks through env
   vars (DATABASE_URL, ENV_KEY, TELEGRAM_BOT_TOKEN, …), creates the
@@ -72,7 +72,7 @@ tool description + maybe a 🔁 toggle on the ⏰ flow.
   the README install steps from ~15 to ~3.
 - **Backup runbook** — currently the hosted prod uses Hetzner Object
   Storage + B2 dual-upload (managed elsewhere). A `pg_dump`-driven
-  helper script + restore drill doc would help self-hosters.
+  helper script + restore drill doc would help instance operators.
 
 ## Promotion checklist (when picking up)
 

@@ -18,14 +18,14 @@ labels: bug
 
 ## Environment
 
-- **Deployment**: SaaS (prod.listbull.org) / self-host
+- **Deployment**: hosted (prod.listbull.org) / own instance
 - **Phase / version**: <!-- e.g. Phase 7, commit 22663af -->
 - **Browser / Mini App / bot**: <!-- where the bug surfaced -->
 - **Locale**: <!-- tr / en -->
 
 ## Logs
 
-<!-- If self-host: relevant docker logs lines. Redact secrets. -->
+<!-- If running your own instance: relevant docker logs lines. Redact secrets. -->
 
 ```
 ```

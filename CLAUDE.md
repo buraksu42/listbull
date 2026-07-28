@@ -6,7 +6,7 @@
 ## What it is
 
 Telegram-native AI list assistant — chatty bot only, no Mini App.
-Bring-your-own-key (BYOK) AI via OpenRouter. Open source, self-hostable.
+Bring-your-own-key (BYOK) AI via OpenRouter. Open source (MIT).
 
 Primary persona: power Telegram user (Turkish/English, mobile-first).
 
@@ -16,7 +16,7 @@ Primary persona: power Telegram user (Turkish/English, mobile-first).
 - **Project home (apex)**: `https://listbull.org` — open-source project info / install docs (separate static site, not in this codebase; built from a sibling repo or simple GitHub Pages)
 - **Production app**: `https://prod.listbull.org` — canonical hosted instance of the listbull bot + marketing site
 - **Test/staging**: `https://test.listbull.org`
-- **Tenant pattern**: `https://<tenant>.listbull.org` — additional self-host instances on the same infra (e.g. `loyetta.listbull.org`). Same code, env-driven `NEXT_PUBLIC_APP_URL` + dedicated `DATABASE_URL` per tenant.
+- **Tenant pattern**: `https://<tenant>.listbull.org` — additional instances on the same infra (e.g. `loyetta.listbull.org`). Same code, env-driven `NEXT_PUBLIC_APP_URL` + dedicated `DATABASE_URL` per tenant.
 - **Bot**: `@listbull_bot` for prod (fallback `@listbull_app_bot`); separate test bot for `test.` (e.g. `@listbull_test_bot`); per-tenant bots for tenant deployments.
 - DNS: pending (post-deploy).
 

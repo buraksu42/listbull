@@ -15,7 +15,7 @@
   any mutation; the webhook authenticates via a constant-time secret
   comparison.
 - **No telemetry by default**: Sentry + Umami are opt-in via env vars.
-- **No managed dependencies**: self-host on a single VPS with
+- **No managed dependencies**: runs on a single VPS with
   Postgres; you own the data.
 
 ## 1. Encryption at rest

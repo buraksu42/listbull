@@ -100,7 +100,7 @@ function parseServer(): ServerEnv {
   // Production without Upstash silently disables two protections —
   // webhook replay protection (markUpdateSeen no-ops) and the bot's
   // per-user hourly limit (enforceRateLimit no-ops). Both are safe
-  // defaults for dev / self-host, but operators running a public
+  // defaults for dev / single-instance, but operators running a public
   // bot need to know they're flying without a net. Log loud.
   if (
     cachedServer.NODE_ENV === "production" &&

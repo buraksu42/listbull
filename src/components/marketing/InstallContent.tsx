@@ -1,5 +1,5 @@
 /**
- * /install page content — step-by-step self-host runbook. Order
+ * /install page content — step-by-step install runbook. Order
  * matters: the BotFather privacy + groups settings come BEFORE
  * "add the bot to a group" so users don't end up with broken
  * voice/mentions on first try.
@@ -273,11 +273,11 @@ export function InstallContent() {
             <p style={{ marginTop: 8, fontSize: 13, color: "var(--lb-muted-fg)" }}>
               Deeper reference (in Turkish) lives in{" "}
               <a
-                href="https://github.com/buraksu42/listbull/blob/main/docs/self-host.md"
+                href="https://github.com/buraksu42/listbull/blob/main/docs/install.md"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                docs/self-host.md
+                docs/install.md
               </a>
               .
             </p>

@@ -15,8 +15,7 @@ export function SiteFooter() {
             </Link>
             <p>
               A Telegram bot for your to-dos. Bring your own key, or
-              use the operator&rsquo;s free tier. Open source,
-              self-hostable.
+              use the operator&rsquo;s free tier. Open source (MIT).
             </p>
           </div>
           <div className="footer-col">
@@ -135,8 +134,8 @@ export function SiteFooter() {
           <span>© {new Date().getUTCFullYear()} listbull. MIT licensed.</span>
           <span>
             prod.listbull.org: cookieless analytics (Umami,
-            self-hosted) + crash reports (Sentry). Self-host setups
-            are telemetry-free by default.
+            self-hosted) + crash reports (Sentry). Source installs
+            are telemetry-free unless you opt in.
           </span>
           <span className="pill">v{pkg.version}</span>
         </div>
