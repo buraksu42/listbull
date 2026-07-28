@@ -6,9 +6,9 @@
 
 > **Telegram-native AI to-do bot. Every chat is its own list.**
 > Bring your own OpenRouter key — or use the operator's free tier.
-> Open source, self-hostable on a 5€ VPS.
+> Open source (MIT). Clone the repo and run your own instance.
 
-[`prod.listbull.org`](https://prod.listbull.org) · [`@listbull_bot`](https://t.me/listbull_bot) · [Security](SECURITY.md) · [Self-host](docs/self-host.md)
+[`prod.listbull.org`](https://prod.listbull.org) · [`@listbull_bot`](https://t.me/listbull_bot) · [Security](SECURITY.md) · [Install](docs/install.md)
 
 ---
 
@@ -16,7 +16,7 @@ listbull lives where you already chat. Send a message ("süt al",
 "tomorrow 9am go to the gym"), forward a recipe, drop a voice note —
 the bot extracts items, sets reminders, and keeps a tidy list per
 chat. No Mini App, no third-party telemetry: the bot is the surface;
-self-host the Postgres, the data stays yours.
+your Postgres keeps the data.
 
 ## What it does
 
@@ -63,9 +63,9 @@ Order matches the Telegram menu (`setMyCommands` in
 | `/help`         | Command reference                                    |
 | `/reset`        | Clear conversation history                           |
 
-## Quickstart (self-host)
+## Quickstart
 
-Full guide: [`docs/self-host.md`](docs/self-host.md). TL;DR:
+Full guide: [`docs/install.md`](docs/install.md). TL;DR:
 
 ```bash
 git clone https://github.com/buraksu42/listbull.git && cd listbull
@@ -126,7 +126,7 @@ Full audit with source permalinks: [`SECURITY.md`](SECURITY.md).
   duration of a single operation.
 - **No telemetry by default**: Sentry + Umami are opt-in via build
   args. Without those, no events leave the host.
-- **Self-host operators are the GDPR data controller**. The bot
+- **Instance operators are the GDPR data controller**. The bot
   provides tooling (export, audit log); the operator owns the
   policy.
 
@@ -166,7 +166,7 @@ src/
     validators/         # zod schemas
 docs/
   features.md           # feature reference
-  self-host.md          # install runbook
+  install.md            # install runbook
   SMOKE_TEST.md         # e2e test matrix
   project-state.md      # what ships today
   archive/              # pre-Phase-17 historical docs (do not trust)

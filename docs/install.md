@@ -1,8 +1,7 @@
-# Self-host listbull — adım adım
+# listbull kurulumu
 
-Telegram-native AI to-do botunu kendi sunucunda çalıştırmak için
-bu dokümanı baştan sona uygula. Tahmini süre: 20-30 dakika
-(DNS propagation + ilk Docker build dahil).
+listbull'u kendi ortamında çalıştırmak için bu dokümanı baştan sona
+uygula. Tahmini süre: 20-30 dakika (DNS propagation + ilk Docker build dahil).
 
 > Phase 17 chat-only mimari: tek surface bot. Mini App / workspace
 > / multi-list mimarisi yok. Bir Telegram chat = bir to-do context.
@@ -11,7 +10,7 @@ bu dokümanı baştan sona uygula. Tahmini süre: 20-30 dakika
 
 ## Önkoşullar
 
-- **Bir sunucu** (ör. Hetzner CPX21 5€/ay yeterli). Docker +
+- **Bir sunucu** (ör. Hetzner CPX21 düzeyinde bir VPS yeterli). Docker +
   Docker Compose kurulu. SSH erişimin olsun.
 - **Bir domain** (subdomain olur, ör. `listbull.mydomain.com`).
   DNS yönetimine erişimin olsun.

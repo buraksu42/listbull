@@ -1,4 +1,4 @@
-# listbull — self-host docker-compose stack.
+# listbull — docker-compose stack (postgres + app + cron).
 #
 # Three services:
 #   - postgres:  Postgres 16 alpine, persistent named volume.

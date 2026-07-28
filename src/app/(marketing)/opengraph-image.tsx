@@ -85,7 +85,7 @@ export default function OgImage() {
             textAlign: "center",
           }}
         >
-          AI lists, on your Telegram, on your server.
+          AI lists, right inside Telegram.
         </div>
 
         <div
@@ -96,7 +96,7 @@ export default function OgImage() {
             marginTop: 24,
           }}
         >
-          Open source · self-hostable · BYOK
+          Open source · MIT · BYOK
         </div>
       </div>
     ),

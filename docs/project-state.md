@@ -12,7 +12,7 @@ secrets, activity log are all scoped to that chat.
 
 - **Telegram bot** — primary surface; webhook-driven, grammY-based.
 - **Marketing landing** at `https://prod.listbull.org` — public
-  product info, command reference, self-host pointer.
+  product info, command reference, install pointer.
 - **Security page** at `https://prod.listbull.org/security` —
   encryption + isolation guarantees with source permalinks.
 
@@ -79,7 +79,7 @@ every 60s.
 ## Active docs
 
 - [`features.md`](./features.md) — feature reference
-- [`self-host.md`](./self-host.md) — install runbook
+- [`install.md`](./install.md) — install runbook
 - [`SMOKE_TEST.md`](./SMOKE_TEST.md) — e2e test matrix
 - [`backlog.md`](./backlog.md) — future work
 

@@ -293,10 +293,9 @@ export function TeamsContent() {
               your OpenRouter bill is the only line item.
             </p>
             <p style={{ fontSize: 14, color: "var(--lb-muted-fg)", lineHeight: 1.6 }}>
-              <strong>If you self-host:</strong> add your VPS
-              (~5€/month on Hetzner) to the OpenRouter bill above.
-              Bot lives where you put it; nobody else sees your
-              data.
+              <strong>Running your own instance?</strong> The bot
+              itself is free (MIT) — your OpenRouter bill is still
+              the only usage-based line item.
             </p>
           </div>
         </div>

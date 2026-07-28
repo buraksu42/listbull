@@ -20,8 +20,8 @@ export function Hero() {
         <h1>Telegram-native AI to-do bot.</h1>
         <p className="lead">
           Every chat is its own list. Bring your own OpenRouter key —
-          or use the operator&rsquo;s free tier. Open source,
-          self-hostable on a 5€ VPS.
+          or use the operator&rsquo;s free tier. Open source (MIT) —
+          clone the repo and run your own instance.
         </p>
         <div className="hero-ctas">
           <a
@@ -40,7 +40,7 @@ export function Hero() {
             rel="noopener noreferrer"
           >
             <GitHubIcon />
-            Self-host on GitHub
+            View on GitHub
           </a>
           <Link href="/commands" className="text-link">
             See commands
@@ -52,7 +52,7 @@ export function Hero() {
             <span className="dot" /> Live on Telegram
           </span>
           <span>MIT licensed</span>
-          <span>Self-host: zero telemetry</span>
+          <span>Telemetry opt-in</span>
           <span>v{pkg.version}</span>
         </div>
       </div>

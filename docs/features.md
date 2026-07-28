@@ -132,11 +132,11 @@ or memory).
   secret). Every executor wraps in a single Drizzle transaction +
   writes an `activity_log` row.
 
-## Self-host posture
+## Install posture
 
 - Single Docker compose stack: `postgres` + `app` + `cron`.
 - BYOK by default; optional operator shared free-tier key.
 - No telemetry by default — Sentry + Umami are opt-in via build args.
-- No managed dependencies. Self-host on a 5€ VPS works.
+- No managed dependencies. A single VPS suffices.
 - Per-user hourly message cap (`LISTBULL_PER_USER_HOURLY_MSG_LIMIT`)
   for runaway-cost protection.

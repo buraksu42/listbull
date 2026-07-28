@@ -9,7 +9,7 @@ const isProd = process.env.NEXT_PUBLIC_ENV === "production";
 export const metadata: Metadata = {
   title: "listbull",
   description:
-    "Telegram-native AI list assistant with persistent shared list memory. Open source, self-hostable, BYOK.",
+    "Telegram-native AI list assistant with persistent shared list memory. Open source (MIT), BYOK.",
   applicationName: "listbull",
   metadataBase:
     process.env.NEXT_PUBLIC_APP_URL && process.env.NEXT_PUBLIC_APP_URL.length > 0

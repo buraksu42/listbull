@@ -170,13 +170,13 @@ const CATEGORIES: Category[] = [
       },
       {
         title: "Per-user hourly cap",
-        body: "Self-host operators set LISTBULL_PER_USER_HOURLY_MSG_LIMIT to prevent runaway spend from a noisy user. Hosted prod runs 100/hour on free tier.",
+        body: "Instance operators set LISTBULL_PER_USER_HOURLY_MSG_LIMIT to prevent runaway spend from a noisy user. Hosted prod runs 100/hour on free tier.",
       },
     ],
   },
   {
-    heading: "Self-host posture",
-    lead: "Runs on a 5€ VPS. Yours to operate.",
+    heading: "Open source",
+    lead: "MIT-licensed. Clone the repo, run your own instance.",
     features: [
       {
         title: "One Docker compose stack",
@@ -188,7 +188,7 @@ const CATEGORIES: Category[] = [
       },
       {
         title: "Telemetry off by default",
-        body: "Self-host setups don't ship a single byte to third parties. Sentry + Umami are opt-in via build args. Hosted prod.listbull.org runs both (cookieless Umami + Sentry crashes).",
+        body: "Source installs don't ship a single byte to third parties. Sentry + Umami are opt-in via build args. Hosted prod.listbull.org runs both (cookieless Umami + Sentry crashes).",
       },
       {
         title: "Attachments live on Telegram CDN",
