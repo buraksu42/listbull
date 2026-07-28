@@ -33,15 +33,6 @@ export function SiteFooter() {
               <li>
                 <Link href="/install">Install</Link>
               </li>
-              <li>
-                <a
-                  href="https://t.me/listbull_bot"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  @listbull_bot ↗
-                </a>
-              </li>
             </ul>
           </div>
           <div className="footer-col">

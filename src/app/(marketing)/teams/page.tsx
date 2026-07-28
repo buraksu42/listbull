@@ -1,6 +1,5 @@
 import {
   ArrowRightIcon,
-  TelegramIcon,
 } from "@/components/marketing/BrandMark";
 import { PageHero } from "@/components/marketing/PageHero";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
@@ -26,21 +25,10 @@ export default function TeamsPage() {
           title="A to-do app for small teams. Lives in your group chat."
           lead="Pin @listbull_bot to the Telegram group your team already uses. Items, reminders, voice notes, and a shared password vault — all chat-scoped. No new login, no browser tab, no per-user permissions to babysit."
           ctas={
-            <>
-              <a
-                className="btn btn-primary"
-                href="https://t.me/listbull_bot"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <TelegramIcon />
-                Try @listbull_bot
-              </a>
-              <a className="text-link" href="/commands">
-                See commands
-                <ArrowRightIcon />
-              </a>
-            </>
+            <a className="text-link" href="/commands">
+              See commands
+              <ArrowRightIcon />
+            </a>
           }
         />
         <TeamsContent />

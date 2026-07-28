@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { BrandMark, TelegramIcon } from "@/components/marketing/BrandMark";
+import { BrandMark } from "@/components/marketing/BrandMark";
 
 const NAV = [
   { href: "/features", label: "Features" },
@@ -65,15 +65,6 @@ export function SiteHeader() {
             GitHub ↗
           </a>
         </nav>
-        <a
-          className="header-cta"
-          href="https://t.me/listbull_bot"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <TelegramIcon />
-          Try @listbull_bot
-        </a>
       </div>
     </header>
   );

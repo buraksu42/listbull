@@ -8,7 +8,7 @@
 > Bring your own OpenRouter key — or use the operator's free tier.
 > Open source (MIT). Clone the repo and run your own instance.
 
-[`prod.listbull.org`](https://prod.listbull.org) · [`@listbull_bot`](https://t.me/listbull_bot) · [Security](SECURITY.md) · [Install](docs/install.md)
+[`prod.listbull.org`](https://prod.listbull.org) · [Security](SECURITY.md) · [Install](docs/install.md)
 
 ---
 
