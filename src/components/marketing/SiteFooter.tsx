@@ -124,9 +124,9 @@ export function SiteFooter() {
         <div className="footer-meta">
           <span>© {new Date().getUTCFullYear()} listbull. MIT licensed.</span>
           <span>
-            prod.listbull.org: cookieless analytics (Umami,
-            self-hosted) + crash reports (Sentry). Source installs
-            are telemetry-free unless you opt in.
+            prod.listbull.org: cookieless analytics (Umami) +
+            crash reports (Sentry). Source installs are
+            telemetry-free unless you opt in.
           </span>
           <span className="pill">v{pkg.version}</span>
         </div>
